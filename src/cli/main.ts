@@ -44,7 +44,7 @@ export async function main(
   program
     .name("perfect")
     .description("Evidence-driven local coding-agent orchestration on Pi SDK")
-    .version("0.1.0")
+    .version("0.2.0")
     .option("--home <directory>", "Local state and account directory")
     .option(
       "--workspace <directory>",

@@ -22,8 +22,8 @@ export async function doctor(
   const checks: DoctorCheck[] = [];
   checks.push({
     name: "node",
-    status: process.versions.node.split(".")[0] === "24" ? "PASS" : "BLOCKED",
-    detail: `Node ${process.versions.node}; supported runtime is Node 24 LTS`,
+    status: process.versions.node.split(".")[0] === "26" && Number(process.versions.node.split(".")[1]) >= 4 ? "PASS" : "BLOCKED",
+    detail: `Node ${process.versions.node}; supported runtime is Node 26.4+ (26.x), pinned for OpenTUI FFI`,
   });
   checks.push({
     name: "platform",
