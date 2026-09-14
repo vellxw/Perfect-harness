@@ -15,10 +15,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api repos/vellxw/Perfect-harness/actions/jobs/104151590665/logs > /tmp/perfect-validation.log
+          gh api --allow-escape-sequences repos/vellxw/Perfect-harness/actions/jobs/104151590665/logs > /tmp/perfect-validation.log
           python3 - <<'PY'
           import re,json
           text=open('/tmp/perfect-validation.log',encoding='utf-8-sig').read()
+          text=re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]','',text)
           lines=text.splitlines()
           failures=[]
           for i,line in enumerate(lines):
