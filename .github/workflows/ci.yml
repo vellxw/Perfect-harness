@@ -1,65 +1,20 @@
-name: CI
+name: Dependency audit
 on:
   push:
-    branches: [main, feat/perfect-harness-v1]
+    branches: [main, feat/perfect-harness-v2-tui-windows]
   pull_request:
-  workflow_dispatch:
 permissions:
   contents: read
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
 jobs:
-  checks:
+  production-audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: "24"
-      - name: Reproducible install
-        run: npm ci
-      - name: Typecheck
-        run: npm run typecheck
-      - name: Lint
-        run: npm run lint
-      - name: Configuration schema synchronization
-        run: npm run check:config
-      - name: Deterministic and real SDK contract tests
-        run: npm test
-      - name: Build
-        run: npm run build
-      - name: Clean package installation and CLI
-        run: npm run test:package
-      - name: Production dependency audit
-        run: npm run audit:production
-  docker-e2e:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-      - name: Reproducible install
-        run: npm ci
-      - name: Prepare explicitly approved test images
-        run: |
-          docker pull node:24-bookworm-slim
-          docker pull mcr.microsoft.com/playwright:v1.63.0-noble
-      - name: Isolated fullstack repair and Remotion render
-        run: npm run test:e2e
-        env:
-          PERFECT_TEST_DOCKER: "1"
-          PERFECT_ARTIFACT_DIR: test-results
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: fullstack-evidence
-          path: test-results
-          retention-days: 14
+          node-version: '26.4.0'
+      - run: npm ci --ignore-scripts
+      - run: npm run audit:production

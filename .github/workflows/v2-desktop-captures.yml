@@ -1,0 +1,30 @@
+name: Terminal desktop capture
+on:
+  push:
+    branches: [feat/perfect-harness-v2-tui-windows]
+    paths: [.github/workflows/v2-desktop-captures.yml, scripts/capture-xterm.sh]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  xterm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - run: npm run build
+      - name: Install explicit capture dependencies
+        run: sudo apt-get update && sudo apt-get install -y xvfb xterm xdotool imagemagick fonts-dejavu-core
+      - run: xvfb-run -a -s '-screen 0 1440x1000x24' bash scripts/capture-xterm.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-terminal-desktop
+          path: test-results/linux-desktop
+          retention-days: 14

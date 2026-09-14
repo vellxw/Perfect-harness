@@ -1,7 +1,7 @@
 name: Windows package
 on:
   push:
-    branches: [feat/perfect-harness-v2-tui-windows]
+    branches: [main, feat/perfect-harness-v2-tui-windows]
   workflow_dispatch:
 permissions:
   contents: read
@@ -31,6 +31,15 @@ jobs:
       - name: Test native executable, profile, installation and removal
         shell: pwsh
         run: ./scripts/smoke-windows.ps1 -Installer
+      - name: Capture a real Terminal window when the runner provides an interactive desktop
+        shell: pwsh
+        run: ./scripts/capture-windows.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-terminal-desktop
+          path: test-results/windows-desktop
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         if: always()
         with:
