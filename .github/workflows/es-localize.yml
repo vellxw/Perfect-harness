@@ -2,13 +2,7 @@ name: Validar localización española (temporal)
 on:
   push:
     branches: [feat/perfect-harness-v2-tui-windows]
-    paths:
-      - .github/workflows/es-localize.yml
-      - scripts/localize-es.mjs
-      - scripts/finish-es.mjs
-      - src/i18n/**
-      - src/cli/spanish.ts
-      - tests/**/spanish.test.*
+    paths: [.github/workflows/es-localize.yml, scripts/localize-es.mjs, scripts/finish-es.mjs, src/i18n/**, src/cli/spanish.ts, tests/**/spanish.test.*]
 permissions:
   contents: write
 concurrency:
@@ -31,17 +25,24 @@ jobs:
         run: |
           node --input-type=module <<'JS'
           import fs from 'node:fs';
-          // Recopilar TODAS las anclas ausentes antes de fallar; jamás publicar una migración incompleta.
           for(const name of ['localize-es','finish-es']){
             let source=fs.readFileSync('scripts/'+name+'.mjs','utf8');
+            if(name==='localize-es'){
+              const duplicate="patch(app,'>Device code: ','>Código del dispositivo: ');";
+              if(!source.includes(duplicate))throw Error('Ancla duplicada no encontrada');
+              source=source.replace(duplicate,"if(!fs.readFileSync(app,'utf8').includes('Código del dispositivo:'))throw Error('Traducción de código de dispositivo ausente');");
+              source=source.replace("'src/ui/tui/demo.ts','src/windows/Perfect.cs'","'src/windows/Perfect.cs'");
+            }
             source='const missingAnchors=[];\n'+source;
             source=source.replace(/if\(required\)throw Error\((`[^`]+`)\);return;/g,'if(required){missingAnchors.push($1);console.error($1);}return;');
             source+='\nif(missingAnchors.length)throw Error("Anclas ausentes: "+missingAnchors.length);\n';
             fs.writeFileSync('scripts/.'+name+'-audit.mjs',source);
           }
           JS
-          node scripts/.localize-es-audit.mjs
-          node scripts/.finish-es-audit.mjs
+          result=0
+          node scripts/.localize-es-audit.mjs || result=1
+          node scripts/.finish-es-audit.mjs || result=1
+          exit "$result"
       - name: Ordenar imports de los archivos modificados
         run: |
           node --input-type=module <<'JS'
