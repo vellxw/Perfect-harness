@@ -1,0 +1,56 @@
+name: Windows IPC diagnosis (temporary)
+on:
+  push:
+    branches: [feat/perfect-harness-v2-tui-windows]
+    paths: [.github/workflows/v2-ipc-diagnostics.yml]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - run: npm run build
+      - name: Compare compiled and source worker lifecycle
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import {spawn} from 'node:child_process';
+          import {mkdtemp,mkdir,writeFile,readFile} from 'node:fs/promises';
+          import {tmpdir} from 'node:os';
+          import {join,resolve} from 'node:path';
+          import {pathToFileURL} from 'node:url';
+          const root=await mkdtemp(join(tmpdir(),'perfect-ipc-diagnostic-')),results=[];
+          for(const kind of ['compiled','source','test-context','visible','direct']){
+            const base=join(root,kind),workspace=join(base,'source'),home=join(base,'home');await mkdir(workspace,{recursive:true});await mkdir(home);
+            const env={...process.env};delete env.NODE_TEST_CONTEXT;delete env.NODE_OPTIONS;if(kind==='test-context')env.NODE_TEST_CONTEXT='child-v8';
+            const prefs={ui:{motion:'off',contrast:'normal',transparent:true,onboarded:true}};
+            let args=kind==='source'?['--import','tsx',resolve('src/presentation/worker.ts')]:[resolve('dist/presentation/worker.js')];
+            if(kind==='direct')args=['--input-type=module','-e',`const {PresentationEngine}=await import(${JSON.stringify(pathToFileURL(resolve('dist/presentation/engine.js')).href)});const e=await PresentationEngine.create(${JSON.stringify({home,workspace})},m=>console.log(JSON.stringify(m)));await e.dispatch('preferences',${JSON.stringify({type:'preferences',preferences:prefs})});await e.dispose();`];
+            const result={kind,exit:null,signal:null,stderr:'',stdout:'',events:[],preferences:null,timedOut:false};
+            await new Promise(resolveRun=>{
+              const child=spawn(process.execPath,args,{env,windowsHide:kind!=='visible',stdio:['ignore','pipe','pipe','ipc']});let sent=false;
+              const timer=setTimeout(()=>{result.timedOut=true;child.kill();},10000);
+              child.stderr.on('data',b=>{result.stderr=(result.stderr+b).slice(-24000)});child.stdout.on('data',b=>{result.stdout=(result.stdout+b).slice(-24000)});
+              child.on('message',m=>{result.events.push(m);if(m.type==='snapshot'&&!sent){sent=true;child.send({type:'action',requestId:'prefs',action:{type:'preferences',preferences:prefs}})}if(m.type==='snapshot'&&m.snapshot?.preferences?.ui?.motion==='off')child.send({type:'shutdown'});});
+              child.on('error',e=>{result.stderr+=String(e);clearTimeout(timer);resolveRun()});child.on('exit',(code,signal)=>{result.exit=code;result.signal=signal;clearTimeout(timer);resolveRun()});
+              if(kind!=='direct')child.send({type:'initialize',options:{home,workspace}});
+            });
+            try{result.preferences=JSON.parse(await readFile(join(home,'ui.json'),'utf8'))}catch{}
+            results.push(result);console.log(JSON.stringify(result));
+          }
+          await mkdir('test-results/ipc-diagnostics',{recursive:true});await writeFile('test-results/ipc-diagnostics/report.json',JSON.stringify({node:process.version,results},null,2));
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ipc-diagnostics
+          path: test-results/ipc-diagnostics
+          retention-days: 3
