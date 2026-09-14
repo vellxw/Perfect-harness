@@ -1,0 +1,40 @@
+name: Inventario de localización (temporal)
+on:
+  push:
+    branches: [feat/perfect-harness-v2-tui-windows]
+    paths: [.github/workflows/es-inventory.yml]
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - name: Textos de interfaz y diagnósticos
+        run: |
+          node --input-type=module <<'JS'
+          import ts from 'typescript';import fs from 'node:fs';import path from 'node:path';
+          function walk(p){return fs.readdirSync(p,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(p,e.name)):[path.join(p,e.name)]);}
+          for(const p of walk('src').filter(p=>/\.[cm]?[jt]sx?$/.test(p))){
+            const text=fs.readFileSync(p,'utf8');const source=ts.createSourceFile(p,text,ts.ScriptTarget.Latest,true);let lines=[];
+            function visit(n){
+              if(ts.isStringLiteral(n)||ts.isNoSubstitutionTemplateLiteral(n)||ts.isTemplateExpression(n)||ts.isJsxText(n)){
+                const value=ts.isTemplateExpression(n)?n.getText(source):n.text;
+                if(/[A-Za-z]{2,}[ \t][A-Za-z]{2,}/.test(value)&&value.length<15000)lines.push((source.getLineAndCharacterOfPosition(n.getStart(source)).line+1)+': '+JSON.stringify(value));
+                if(ts.isTemplateExpression(n))return;
+              }ts.forEachChild(n,visit);
+            }visit(source);if(lines.length)console.log('\nFILE '+p+'\n'+lines.join('\n'));
+          }
+          JS
+      - name: Contratos reales de Commander y herramientas de publicación
+        run: |
+          sed -n '1,240p' node_modules/commander/lib/help.js
+          cat scripts/package-windows.ps1 scripts/test-windows-package.ps1 build/windows/perfect.iss 2>/dev/null || true
+          find src scripts docs tests/tui -maxdepth 3 -type f | sort
