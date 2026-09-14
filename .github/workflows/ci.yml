@@ -23,13 +23,39 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
       - name: Lint
-        run: npx eslint src tests
-      - name: Tests
+        run: npm run lint
+      - name: Deterministic tests
         run: npm test
       - name: Build
         run: npm run build
+      - name: Production dependency audit
+        run: npm run audit:production
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: package-lock
           path: package-lock.json
+  docker-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install
+        run: if test -f package-lock.json; then npm ci; else npm install; fi
+      - name: Prepare explicitly approved test images
+        run: |
+          docker pull node:24-bookworm-slim
+          docker pull mcr.microsoft.com/playwright:v1.63.0-noble
+      - name: Real isolated fullstack and browser verification
+        run: npm run test:e2e
+        env:
+          PERFECT_TEST_DOCKER: '1'
+          PERFECT_ARTIFACT_DIR: test-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fullstack-evidence
+          path: test-results
