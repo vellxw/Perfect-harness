@@ -1,5 +1,7 @@
 import type { AgentRun, Approval, Attempt, ContextPackage, Event, Evidence, Failure, FileOwnership, Goal, OperationIntent, Plan, Review, Task, Usage, VerificationResult } from '../domain/model.js';
-export interface EntityMap {goals:Goal;plans:Plan;tasks:Task;runs:AgentRun;contexts:ContextPackage;evidence:Evidence;verifications:VerificationResult;failures:Failure;usage:Usage;ownership:FileOwnership;reviews:Review;approvals:Approval;intents:OperationIntent;attempts:Attempt}
+export interface BudgetReservation {id:string;goalId:string;runId:string;tokens:number;estimatedCost?:number;status:'held'|'settled'|'unknown';createdAt:string}
+export interface DependencyImage {id:string;goalId:string;manifestHash:string;baseImage:string;tag:string;imageId:string;createdAt:string}
+export interface EntityMap {goals:Goal;plans:Plan;tasks:Task;runs:AgentRun;contexts:ContextPackage;evidence:Evidence;verifications:VerificationResult;failures:Failure;usage:Usage;ownership:FileOwnership;reviews:Review;approvals:Approval;intents:OperationIntent;attempts:Attempt;reservations:BudgetReservation;dependencyImages:DependencyImage}
 export type Collection=keyof EntityMap;
 export interface StateStore {
   get<K extends Collection>(kind:K,id:string):EntityMap[K]|undefined;
