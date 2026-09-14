@@ -1,0 +1,46 @@
+name: Materialize V2 cancellation polish (temporary)
+on:
+  push:
+    branches: [feat/perfect-harness-v2-tui-windows]
+    paths: [.github/workflows/v2-polish-source.yml]
+permissions:
+  contents: write
+jobs:
+  polish:
+    if: github.repository == 'vellxw/Perfect-harness' && github.ref == 'refs/heads/feat/perfect-harness-v2-tui-windows'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - run: |
+          node scripts/v2-repair-02.mjs
+          npx --no-install prettier --write src/presentation src/ui src/adapters/sandbox/docker.ts src/adapters/sandbox/dependencies.ts
+          npm run typecheck
+          npm run lint
+          npm test
+          npm run build
+          node --experimental-ffi scripts/benchmark-tui.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-performance
+          path: test-results/performance
+      - name: Publish only validated source changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git add -- src/presentation src/ui src/adapters/sandbox/docker.ts src/adapters/sandbox/dependencies.ts
+          git diff --cached --check
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name 'Perfect Harness Publisher'
+          git config user.email 'perfect-harness@users.noreply.github.com'
+          git commit -m 'fix(v2): serialize user actions, cancel manual work and accept safe Windows drive mounts'
+          AUTH_HEADER=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$AUTH_HEADER"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $AUTH_HEADER" push origin HEAD:refs/heads/feat/perfect-harness-v2-tui-windows
