@@ -1,0 +1,42 @@
+name: Windows package
+on:
+  push:
+    branches: [feat/perfect-harness-v2-tui-windows]
+    paths: [.github/workflows/v2-windows-package.yml, src/windows/**, build/windows/**, scripts/package-windows.ps1, scripts/smoke-windows.ps1]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - run: node scripts/v2-repair-01.mjs
+      - name: Build complete installer with bundled Node runtime
+        shell: pwsh
+        run: |
+          if (-not (Get-ChildItem "${env:ProgramFiles(x86)}/Inno Setup*/ISCC.exe" -ErrorAction SilentlyContinue)) {
+            choco install innosetup --version=6.7.0 --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
+          }
+          ./scripts/package-windows.ps1 -Installer
+      - name: Test native executable, profile, installation and removal
+        shell: pwsh
+        run: ./scripts/smoke-windows.ps1 -Installer
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Perfect-Harness-Windows-x64
+          path: |
+            release/*.zip
+            release/*Setup*.exe
+            release/SHA256SUMS.txt
+            release/Perfect-Harness-Windows-x64/package-integrity.json
+          retention-days: 14

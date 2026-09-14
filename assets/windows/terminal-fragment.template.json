@@ -1,0 +1,36 @@
+{
+  "profiles": [
+    {
+      "guid": "{35455046-4543-4454-a822-5f92b3030200}",
+      "name": "Perfect Harness",
+      "commandline": "__COMMAND__",
+      "startingDirectory": "__WORKSPACE__",
+      "icon": "__ICON__",
+      "tabTitle": "Perfect Harness",
+      "suppressApplicationTitle": true,
+      "hidden": false,
+      "colorScheme": "Perfect Obsidian",
+      "background": "#050507",
+      "foreground": "#F5F5F7",
+      "cursorColor": "#D4DCFF",
+      "selectionBackground": "#354263",
+      "cursorShape": "bar",
+      "font": {"face": "Cascadia Mono", "size": 11.5},
+      "padding": "16,12,16,12",
+      "opacity": 88,
+      "useAcrylic": true,
+      "backgroundImage": "__BACKGROUND__",
+      "backgroundImageOpacity": 0.08,
+      "backgroundImageStretchMode": "uniformToFill",
+      "backgroundImageAlignment": "center"
+    }
+  ],
+  "schemes": [
+    {
+      "name": "Perfect Obsidian",
+      "background": "#050507", "foreground": "#F5F5F7", "cursorColor": "#D4DCFF", "selectionBackground": "#354263",
+      "black": "#0B0E14", "red": "#FF91A0", "green": "#8CDBAF", "yellow": "#EAC487", "blue": "#93BBFF", "purple": "#BAA9FF", "cyan": "#A7DCCC", "white": "#ADB6CA",
+      "brightBlack": "#7C879F", "brightRed": "#FFB7C0", "brightGreen": "#B6EACB", "brightYellow": "#F3DCB4", "brightBlue": "#BAD3FF", "brightPurple": "#D4C9FF", "brightCyan": "#C9EBDD", "brightWhite": "#F5F5F7"
+    }
+  ]
+}
