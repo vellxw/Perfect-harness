@@ -1,0 +1,29 @@
+name: Diagnóstico breve de validación V3 (temporal)
+on:
+  push:
+    branches: [feat/perfect-harness-v3-integraciones]
+    paths: [.github/workflows/v3-final-diagnostics.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Extraer fallos y cierre del trabajo de validación
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/vellxw/Perfect-harness/actions/jobs/104151590665/logs > /tmp/perfect-validation.log
+          python3 - <<'PY'
+          import re,json
+          text=open('/tmp/perfect-validation.log',encoding='utf-8-sig').read()
+          lines=text.splitlines()
+          failures=[]
+          for i,line in enumerate(lines):
+            if re.search(r'✖|not ok |ERR_ASSERTION|##\[error\]|npm error|AssertionError',line):
+              failures.extend(lines[max(0,i-2):min(len(lines),i+12)])
+          print('VALIDATION_DIAGNOSTIC_JSON')
+          print(json.dumps({'failures':failures[-100:],'tail':lines[-35:]},ensure_ascii=False,indent=2))
+          PY
