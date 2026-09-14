@@ -1,0 +1,36 @@
+ ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮ 
+ │                                                                                                                    │ 
+ │ ◈ Perfect / ShopFront                                                        ◆ paused  0 active · checks 4/5  DEMO │ 
+ │                                                                                                                    │ 
+ │  CURRENT GOAL                                                                                                      │ 
+ │                                                                                                                    │ 
+ │  Build the checkout and verify it visually                                                                         │ 
+ │                                                                                                                    │ 
+ │  Iteration 4 / 10 · public · f14a86d2                                                          Verification 4 / 5  │ 
+ │                                                                                                                    │ 
+ │  Docker is unavailable. Your checkpoint is safe; start Docker and resume.                                          │ 
+ │                                                                                                                    │ 
+ │  Synthetic display data · no accounts, code changes or inference calls                                             │ 
+ │                                                                                                                    │ 
+ │  ✓ Planner   ○ Frontend   ✓ Backend   ○ Oracle                                                                     │ 
+ │                                                                                                                    │ 
+ │  ACTIVITY                                                                                          Tab to inspect  │ 
+ │                                                                                                                    │ 
+ │   ! visual · Mobile overflow detected                                                                              │ 
+ │    390 × 844 · screenshot attached to repair                                                                       │ 
+ │                                                                                                                    │ 
+ │   ◌ frontend · Repairing the responsive layout                                                                     │ 
+ │    Current candidate remains unverified until checks pass again                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  │ 
+ │  │ › Ask Perfect what to build…  / for actions                                                                  │  │ 
+ │  │                                                                                                              │  │ 
+ │  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  │ 
+ │  /agents /plan /verify /diff    Ctrl+K actions                                                    PRIVATE · 0.2.0  │ 
+ │                                                                                                                    │ 
+ ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ 

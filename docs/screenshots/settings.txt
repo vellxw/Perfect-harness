@@ -1,0 +1,36 @@
+ ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮ 
+ │                                                                                                                    │ 
+ │ ◈ Perfect / ShopFront                                                          ○ idle  0 active · checks 0/0  DEMO │ 
+ │╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  │ 
+ ││                                                                                                                │  │ 
+ ││  Settings                                                                                           Esc close  │  │ 
+ ││                                                                                                                │  │ 
+ ││  › Motion                                                                                                      │  │ 
+ ││   off                                                                                                          │  │ 
+ ││  ○ High contrast                                                                                               │  │ 
+ ││   normal                                                                                                       │  │ 
+ ││  ○ Terminal background                                                                                         │  │ 
+ ││   transparent                                                                                                  │  │ 
+ ││  ○ Connect xAI                                                                                                 │  │ 
+ ││   Subscription OAuth                                                                                           │  │ 
+ ││  ○ Connect ChatGPT / Codex                                                                                     │  │ 
+ ││   Subscription OAuth                                                                                           │  │ 
+ ││  ○ Connect OpenCode                                                                                            │  │ 
+ ││   Muse Contributor API key                                                                                     │  │ 
+ ││  ○ Contributor privacy                                                                                         │  │ 
+ ││   Consent is per workspace, never automatic                                                                    │  │ 
+ ││  ○ Check this computer                                                                                         │  │ 
+ ││   No inference is sent                                                                                         │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││  ↑↓ select · Enter details · Esc close                                                                         │  │ 
+ ││                                                                                                                │  │ 
+ │╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  │ 
+ │  /agents /plan /verify /diff    Ctrl+K actions                                                    PRIVATE · 0.2.0  │ 
+ │                                                                                                                    │ 
+ ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ 

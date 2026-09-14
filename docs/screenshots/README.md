@@ -1,22 +1,21 @@
-# Actual UI captures
+# Actual Perfect UI captures
 
-The PNG/TXT pairs in this directory are generated from the **real OpenTUI renderer and actual React application** by `scripts/capture-tui.mjs`. Their data is a deterministic, visibly marked DEMO fixture. They are not generative mockups, not evidence of real model inference, and not OS window screenshots. The PNG rasterizer uses captured native cells/colors rather than recreating a different UI.
+These are captures of Perfect Harness, not screenshots of the reservation fixture it builds.
 
-| Capture | Scene |
-|---|---|
-| [idle](idle.png) | Composer-first empty state |
-| [running](running.png) | Current goal and agents |
-| [concurrent](concurrent.png) | Concurrent specialist display fixture |
-| [repair](repair.png) | Visual failure and assigned repair |
-| [compact](compact.png) | 80×24 layout |
-| [agents](agents.png) | Agent details overlay |
-| [plan](plan.png) | Task dependencies |
-| [verification](verification.png) | Current-candidate checks |
-| [paused](paused.png) | Blocking environment condition |
-| [done](done.png) | Evidence Judge completion display |
-| [routing](routing.png) | Explicit model identities |
-| [settings](settings.png) | Local UI/provider controls |
+## Native renderer frames
 
-`provenance.json` records runtime, platform and dimensions. A separate `linux-desktop/` or `windows-desktop/` directory, when present, contains actual OS terminal captures and its own provenance. A Windows capture blocked by a noninteractive runner is reported as BLOCKED; no mockup is substituted.
+`idle`, `running`, `concurrent`, `repair`, `compact`, `agents`, `plan`, `verification`, `routing`, `paused`, `done` and `settings` are produced by the real OpenTUI/React app. `captureSpans()` supplies cells, colors and text; the capture script rasterizes those spans to PNG. The `.txt` files retain the exact character grid. Data is synthetic and visibly marked DEMO. They are not OS screenshots and do not prove that Grok, Muse or Astra ran.
 
-Regenerate native snapshots with `npm run build && node --experimental-ffi scripts/capture-tui.mjs docs/screenshots`. Actual terminal capture scripts are `capture-xterm.sh` and `capture-windows.ps1`.
+Four reviewed character frames (running, compact, agents, done) are golden-test baselines. CI compares current output before generating new capture artifacts; tests do not overwrite their own expected output.
+
+## Operating-system captures
+
+- `windows-desktop/windows-terminal-idle.png`
+- `windows-desktop/windows-terminal-running.png`
+- `linux-desktop/xterm-repair.png`
+
+These are real pixel captures of host terminal windows running the packaged/executed app with synthetic display fixtures. The Windows capture uses the real bundled `Perfect.exe` launch route and Microsoft Windows Terminal. The hosted OS is **Windows Server 2025 build 26100**, not a Windows 11 desktop certification. Each folder records the OS, dimensions and method in `provenance.json`.
+
+`commit-provenance.json` records the exact source commit, Actions run and artifact hash of the committed capture set. Later animation-only changes may not change the motion-off character grids; current CI produces a fresh artifact for each commit rather than silently rewriting the historical provenance.
+
+The actual conceptual reference is in `../design/perfect-v2-direction.webp`. It is a generative direction image, explicitly not an implementation screenshot. Terminal cells cannot reproduce arbitrary pixel glass refraction.

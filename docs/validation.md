@@ -1,21 +1,30 @@
-# Validación de V1
+# Validation — core, TUI and Windows distribution
 
-## Tres niveles distintos
+## Independent layers
 
-1. Tests deterministas: estados, DAG, scheduling, ownership, budgets, escalado, Judge, recuperación y errores.
-2. Contratos del SDK: Pi real contra un servidor SSE falso con tool calls, selección explícita, cancelación, metadata y fallos. No son inferencias reales de Grok/Astra/Muse.
-3. E2E Docker: código real, Git, API, SQLite, navegador, repair visual, frames y video. Solo los providers/reviews del ejemplo fullstack están guionados.
+1. Deterministic core tests: states, DAG, scheduling, ownership, budgets, retries, Judge, recovery and errors.
+2. SDK contracts: actual Pi sessions against controlled SSE transport, with tools, explicit routing, cancellation and reported metadata. Not personal-provider inference.
+3. Presentation tests: actual private IPC child lifecycle, persisted preferences, post-commit events, cross-workspace action rejection, and a real UI goal action entering the core and pausing without accounts. No network request is substituted for authentication.
+4. Native TUI tests: OpenTUI renderer, keyboard, compositor layout, palettes, all detail views, masked secrets, resize, typed abort, long plan approvals and four reviewed golden character frames.
+5. Docker E2E: real Git/code/API/SQLite/browser, failure/repair/Judge, plus Remotion frames and H.264 video. Only provider decisions/reviews are scripted.
+6. Windows package smoke: launcher metadata/icon, version without external Node, Terminal fragment, clean per-user installation, PATH and uninstall. Actual Terminal screenshots are a separate provenance-bearing output.
 
-El job `checks` ejecuta instalación reproducible, typecheck, lint, contratos/tests, build, schema sync y empaquetado en directorio limpio. El job `docker-e2e` activa las pruebas que `npm test` omite si no hay Docker. Nunca se declara todo probado a partir de un job que omitió esos tests.
+`npm test` contains 118 cases after the final regression additions: 116 execute without Docker and two skip explicitly. The Linux Docker workflow runs those two rather than treating skips as success. The native matrix runs the same tests on Linux and Windows; do not double-count the same cases as distinct coverage. This is suite composition, not a claim that an unobserved Actions run passed.
 
-## Regresiones cubiertas
+## CI outputs and interpretation
 
-Routing exacto y no-clamp; metadata absent vs zero; modelo/esfuerzo equivocado en SSE; fragmentación de transporte; cancelación; DAG cíclico/dependencias inválidas; paralelismo con superficie excluyente; leases expirados no reasignados; replan que conserva indebidamente productor fallido; linajes de repair; no-progress; auth preflight sin consumir intento; consentimiento/clasificación; DNS privado; symlinks/hardlinks; evidencia de otro runner/revisión; review diagnóstica usada como aprobación; dirty source; candidato alterado tras revisar; base SQLite futura; binding inmutable; reservas concurrentes y usage negativo; pausa/abort/resume.
+The native workflow performs reproducible install, typecheck, lint, config-schema synchronization, tests, build and clean package installation. It publishes native UI captures and performance observations separately per OS. The Docker workflow publishes fullstack and Remotion evidence. The Windows package workflow publishes the installer, full-folder ZIP, checksum manifest and desktop capture provenance.
 
-## Evidencia que produce CI
+Verify the **exact HEAD commit** of the intended branch/PR. Old green checks cannot validate new code. A Windows Server 2025 runner is not a Windows 11 user-session test. DEMO/synthetic screenshots are not authenticated model runs. A capture status of BLOCKED is not a screenshot.
 
-`fullstack-evidence`: capturas de fallo y corrección, traces, logs y fullstack-summary.json con modo/roles, iteraciones y resultados.
+## Performance measurement
 
-El mismo artifact incluye el subdirectorio `remotion` cuando el E2E de render termina: frames, MP4 y metadata. La CI usa solo datos sintéticos. La aprobación visual de providers falsos es plumbing, no calidad de juicio de un modelo real.
+`scripts/benchmark-tui.mjs` measures keyboard dispatch to an explicitly requested native-renderer frame. It is not end-to-end keyboard-to-screen/OS latency. The startup field includes a deliberate 100ms settling wait after module imports; it is **not cold-launch timing**. Idle CPU is sampled over one second. The stress case creates 20,000 display events, 500 tasks, 1,000 coalesced updates and repeated resizes. Heap delta during that allocation-heavy run is not proof of either a memory leak or leak-freedom.
 
-Para afirmar CI verde, comprobar el run del **commit exacto** de la rama/PR. Un run anterior no valida cambios nuevos. Las pruebas de las cuentas OAuth personales quedan para `perfect smoke` local; no son suplidas por la CI.
+Committed observations in `docs/validation/native-benchmark.json` belong to their recorded source capture set; newer platform observations are in the exact CI run artifacts. The 16ms/50ms targets are goals, not fabricated certifications.
+
+## Security and known boundaries
+
+The UI cannot set DONE, rewrite bindings or auto-approve criteria. Terminal escape sequences are treated as data. Artifact opening validates scope/hash/type. Consent and privacy cannot silently downgrade. There is no shell-host fallback. Unsigned executable checksums show integrity, not publisher identity. No OAuth, API keys, signing certificate or private key is present in CI or release source.
+
+Real account smoke is local. Windows 11 visual/keyboard/Docker acceptance remains a manual prerequisite for broad Windows certification. Pixel-level refraction from the design image is not implemented by terminal cells; Acrylic belongs to Windows Terminal. Inline image protocols are optional and the V2 uses verified external media opening as its dependable fallback.

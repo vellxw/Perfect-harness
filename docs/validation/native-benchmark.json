@@ -1,0 +1,28 @@
+{
+  "platform": "linux",
+  "node": "v26.4.0",
+  "opentui": "0.5.9",
+  "data": "synthetic fixture; real native renderer",
+  "measurement": "test renderer input dispatch → explicitly rendered frame, not OS photon/input latency",
+  "inputMs": {
+    "median": 2.0116140000000087,
+    "p95": 4.38163499999996,
+    "max": 4.683395000000019
+  },
+  "startupMs": {
+    "including100msSettling": 108.73706500000003
+  },
+  "idle": {
+    "intervalMs": 1000,
+    "cpuMs": 0.843
+  },
+  "stress": {
+    "events": 20000,
+    "tasks": 500,
+    "updates": 1000,
+    "coalescedUpdateMs": 58.00336500000003,
+    "dagMs": 1.924279000000297,
+    "heapDeltaBytes": 24205576
+  },
+  "targets": "16ms input / 50ms state-to-screen are design targets; these numbers are observations, not certified end-to-end guarantees"
+}

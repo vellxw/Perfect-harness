@@ -6,16 +6,22 @@ import type {
   Motion,
 } from "../../presentation/protocol.js";
 import { glass as g, roles, stateColor, stateIcon } from "./theme/tokens.js";
-import { useSpinner, motionEnabled, useEntrance } from "./motion.js";
+import {
+  useSpinner,
+  motionEnabled,
+  useEntrance,
+  interpolateColor,
+} from "./motion.js";
 import { wrapLines } from "./views.js";
 
 export function Status({ state, motion }: { state: string; motion: Motion }) {
   const live = /running|EXECUTE|REPAIR|VERIFY|PLAN|DISCOVER|REVIEW|JUDGE/.test(
       state,
     ),
-    spinner = useSpinner(live, motionEnabled(motion));
+    spinner = useSpinner(live, motionEnabled(motion)),
+    transition = useEntrance(state, motionEnabled(motion), 160);
   return (
-    <text fg={stateColor(state)}>
+    <text fg={interpolateColor(g.muted, stateColor(state), transition)}>
       {live ? spinner : stateIcon(state)} {state.toLowerCase()}
     </text>
   );
@@ -27,6 +33,11 @@ export function TopBar({
   snapshot: UiSnapshot;
   compact: boolean;
 }) {
+  const entrance = useEntrance(
+    "perfect-brand",
+    motionEnabled(s.preferences.ui.motion),
+    350,
+  );
   return (
     <box
       height={3}
@@ -37,7 +48,7 @@ export function TopBar({
       flexShrink={0}
     >
       <text fg={g.text}>
-        <span fg={g.highlight}>◈ </span>
+        <span fg={interpolateColor(g.border, g.highlight, entrance)}>◈ </span>
         <strong>Perfect</strong>
         <span fg={g.muted}> / </span>
         <span fg={g.secondary}>
@@ -202,7 +213,8 @@ export function Plate({
       height={Math.max(8, height - 6)}
       border
       borderStyle="rounded"
-      borderColor={alpha < 0.65 ? g.border : g.edge}
+      borderColor={interpolateColor(g.border, g.edge, alpha)}
+      opacity={0.88 + alpha * 0.12}
       backgroundColor={g.raised}
       paddingX={2}
       paddingY={1}

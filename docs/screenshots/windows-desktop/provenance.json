@@ -1,0 +1,26 @@
+{
+  "captures": [
+    {
+      "width": 1000,
+      "height": 696,
+      "file": "windows-terminal-idle.png",
+      "inspection": "Pixel capture; inspect the PNG to confirm layout and readability",
+      "processVerified": true,
+      "scene": "idle"
+    },
+    {
+      "width": 1000,
+      "height": 696,
+      "file": "windows-terminal-running.png",
+      "inspection": "Pixel capture; inspect the PNG to confirm layout and readability",
+      "processVerified": true,
+      "scene": "running"
+    }
+  ],
+  "error": null,
+  "status": "CAPTURED",
+  "build": "26100",
+  "mode": "real Windows Terminal window; synthetic app fixture, no OAuth",
+  "os": "Microsoft Windows Server 2025 Datacenter",
+  "terminal": "1.24.11911.0"
+}

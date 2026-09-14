@@ -1,0 +1,24 @@
+╭──────────────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│ ◈ Perfect / ShopFront                                         ◌ repair  DEMO │
+│                                                                              │
+│  CURRENT GOAL                                                                │
+│  Build the checkout and verify it visually                                   │
+│  Iteration 4 / 10 · public · f14a86d2                    Verification 4 / 5  │
+│  Synthetic display data · no accounts, code changes or inference calls       │
+│                                                                              │
+│  ACTIVITY                                                    Tab to inspect  │
+│                                                                              │
+│   ◌ frontend · Building the responsive checkout                              │
+│    src/app/checkout.tsx · isolated working copy                              │
+│   ! visual · Mobile overflow detected                                        │
+│    390 × 844 · screenshot attached to repair                                 │
+│   ◌ frontend · Repairing the responsive layout                               │
+│    Current candidate remains unverified until checks pass again              │
+│                                                                              │
+│  ╭────────────────────────────────────────────────────────────────────────╮  │
+│  │ › Ask Perfect what to build…  / for actions                            │  │
+│  ╰────────────────────────────────────────────────────────────────────────╯  │
+│  /agents /plan /verify /diff                                PRIVATE · 0.2.0  │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯

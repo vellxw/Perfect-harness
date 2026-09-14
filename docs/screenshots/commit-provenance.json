@@ -1,0 +1,20 @@
+{
+  "sourceCommit": "412e4e3cc6c4e40260ebc4394d89ad2a075ee4ff",
+  "osArtifacts": [
+    {
+      "osJob": "windows",
+      "runId": "34866266057",
+      "artifactId": 10356858091,
+      "head": "412e4e3cc6c4e40260ebc4394d89ad2a075ee4ff",
+      "archiveSha256": "a35dab055754e753a0cfea6749d6896f59cfe40715de8d6c43166eef5229a9ca"
+    },
+    {
+      "osJob": "xterm",
+      "runId": "34866266250",
+      "artifactId": 10356474444,
+      "head": "412e4e3cc6c4e40260ebc4394d89ad2a075ee4ff",
+      "archiveSha256": "738204f184f19a595d377a3764f9c4911dca017b038ee08b5ad36740c9ac9d5c"
+    }
+  ],
+  "nativeData": "DEMO fixtures; no personal provider inference"
+}

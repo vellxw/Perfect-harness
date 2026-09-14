@@ -19,7 +19,7 @@ export function useEntrance(
   enabled: boolean,
   duration = 140,
 ): number {
-  const [value, setValue] = useState(1);
+  const [value, setValue] = useState(enabled ? 0 : 1);
   useEffect(() => {
     if (!enabled) {
       setValue(1);
@@ -48,4 +48,27 @@ export function useSpinner(active: boolean, enabled: boolean): string {
       ? ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"][frame]!
       : "◌"
     : "○";
+}
+
+/** Terminal colors interpolate; no pixel shader or desktop blur is implied. */
+export function interpolateColor(
+  from: string,
+  to: string,
+  progress: number,
+): string {
+  if (!/^#[0-9a-f]{6}$/i.test(from) || !/^#[0-9a-f]{6}$/i.test(to))
+    throw new Error("Expected six-digit color tokens");
+  const t = Number.isFinite(progress) ? Math.max(0, Math.min(1, progress)) : 0;
+  return (
+    "#" +
+    [1, 3, 5]
+      .map((i) => {
+        const a = parseInt(from.slice(i, i + 2), 16);
+        const b = parseInt(to.slice(i, i + 2), 16);
+        return Math.round(a + (b - a) * t)
+          .toString(16)
+          .padStart(2, "0");
+      })
+      .join("")
+  );
 }
