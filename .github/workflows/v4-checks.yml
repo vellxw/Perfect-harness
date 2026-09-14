@@ -1,0 +1,59 @@
+name: Perfect V4
+on:
+  push:
+    branches: [feat/perfect-harness-v4-skills-studios]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: v4-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run check:config
+      - run: npm run build
+      - run: npm test
+      - run: npm run test:package
+      - run: npm run audit:production
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - run: npm run build
+      - run: |
+          docker pull node:24-bookworm-slim
+          docker pull mcr.microsoft.com/playwright:v1.63.0-noble
+      - run: npm run test:e2e
+        env:
+          PERFECT_TEST_DOCKER: '1'
+          PERFECT_ARTIFACT_DIR: test-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v4-e2e-evidence
+          path: test-results
+          retention-days: 14

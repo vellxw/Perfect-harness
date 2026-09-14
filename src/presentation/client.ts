@@ -10,7 +10,7 @@ import {
 export function emptySnapshot(workspace = ""): UiSnapshot {
   return {
     protocol: 1,
-    version: "0.2.1",
+    version: "0.3.0",
     sequence: 0,
     workspace,
     workspaceName: workspace.split(/[\\/]/).at(-1) || "Carpeta de trabajo",

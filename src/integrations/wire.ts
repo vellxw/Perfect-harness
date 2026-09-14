@@ -14,6 +14,7 @@ import { Blocked, hash, now } from "../domain/util.js";
 import { text } from "../presentation/protocol.js";
 import { imageMime } from "../tools/evidence.js";
 import { secretContent } from "../tools/paths.js";
+import { integrationFailure } from "./errors.js";
 import {
   MCP_SDK_VERSION,
   toolName,
@@ -301,6 +302,10 @@ export function confinedFetch(
       signal,
       redirect: "error",
     });
+    if ([401, 403, 429, 500, 502, 503, 504].includes(response.status)) {
+      await response.body?.cancel();
+      throw integrationFailure({ status: response.status });
+    }
     if (response.status >= 300 && response.status < 400) {
       await response.body?.cancel();
       throw new Blocked(
@@ -415,10 +420,20 @@ export class McpConnection {
       return connection;
     } catch (error) {
       await connection.close();
-      throw error;
+      throw integrationFailure(error, signal);
     }
   }
   async catalog(signal: AbortSignal, timeout = 30000): Promise<Catalog> {
+    try {
+      return await this.readCatalog(signal, timeout);
+    } catch (error) {
+      throw integrationFailure(error, signal);
+    }
+  }
+  private async readCatalog(
+    signal: AbortSignal,
+    timeout: number,
+  ): Promise<Catalog> {
     const tools: CatalogTool[] = [],
       seen = new Set<string>(),
       cursors = new Set<string>();
@@ -491,10 +506,11 @@ export class McpConnection {
     timeout: number,
   ): Promise<IntegrationResult> {
     validateInput(tool, args);
-    const result = await this.client.callTool(
-      { name: tool.name, arguments: args },
-      { signal, timeout },
-    );
+    const result = await this.client
+      .callTool({ name: tool.name, arguments: args }, { signal, timeout })
+      .catch((error) => {
+        throw integrationFailure(error, signal);
+      });
     return boundedResult(result);
   }
   async resources(

@@ -51,7 +51,7 @@ export async function main(
     .description(
       "Orquestación local de agentes de programación con evidencia y Pi SDK",
     )
-    .version("0.2.1")
+    .version("0.3.0")
     .option("--home <directory>", "Carpeta local de estado y cuentas")
     .option(
       "--workspace <directory>",

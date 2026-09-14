@@ -416,7 +416,18 @@ export class AgentIntegrations implements RunIntegrations {
       }
     });
   }
+  private countRead(server: string): void {
+    const record = this.record(server),
+      count = (this.calls.get(server) ?? 0) + 1;
+    this.calls.set(server, count);
+    if (count > record.config.maxCallsPerRun)
+      throw new Blocked(
+        "MCP_CALL_LIMIT",
+        "Límite de lecturas de integración agotado",
+      );
+  }
   async resources(server: string, cursor?: string): Promise<unknown> {
+    this.countRead(server);
     const r = this.record(server);
     if (r.config.kind !== "mcp" || !r.config.resourcePrefixes.length)
       throw new Blocked(
@@ -430,15 +441,26 @@ export class AgentIntegrations implements RunIntegrations {
     );
   }
   async readResource(server: string, uri: string): Promise<IntegrationResult> {
+    this.countRead(server);
     const r = this.record(server);
     if (r.config.kind !== "mcp" || !r.config.resourcePrefixes.length)
       throw new Blocked(
         "MCP_RESOURCE_DENIED",
         "No se autorizaron recursos de este servidor",
       );
+    const started = performance.now();
     const result = await (
       await this.wire(r)
     ).readResource(uri, r.config.resourcePrefixes, this.signal);
+    this.record(server);
+    await this.request.observeIntegration?.({
+      server,
+      tool: "resources/read",
+      operationId: "resource-" + hash({ uri, run: this.scope.runId }),
+      argumentHash: hash({ uri }),
+      elapsedMs: performance.now() - started,
+      response: result,
+    });
     this.request.event("integration.resource_read", {
       server,
       uriHash: hash(uri),
@@ -451,8 +473,22 @@ export class AgentIntegrations implements RunIntegrations {
     this.watcher?.close();
     this.abort.abort();
     await Promise.allSettled([...this.wires.values()].map((c) => c.close()));
-    await Promise.allSettled([...this.browsers.values()].map((c) => c.close()));
-    await Promise.allSettled([...this.desktops.values()].map((c) => c.close()));
+    const cleanup = await Promise.allSettled(
+      [...this.browsers.values(), ...this.desktops.values()].map((c) =>
+        c.close(),
+      ),
+    );
+    if (cleanup.some((result) => result.status === "rejected")) {
+      this.registry.event(this.scope.workspace, "integration.cleanup_pending", {
+        runId: this.scope.runId,
+        goalId: this.scope.goalId,
+      });
+      this.request.event("integration.cleanup_pending", {
+        runId: this.scope.runId,
+        message:
+          "Hay recursos nativos pendientes de reconciliar; no se declaró una limpieza correcta.",
+      });
+    }
     await this.queue.catch(() => {});
     this.registry.interruptRun(this.scope.runId);
     this.registry.close();

@@ -24,6 +24,7 @@ import {
   type WindowGrant,
 } from "../types.js";
 import { boundedResult, cleanEnvironment } from "../wire.js";
+import { literalDesktopCommand, scopedWindowsArguments } from "./arguments.js";
 import { assertNonPasswordControl } from "./password.js";
 
 const target = {
@@ -444,7 +445,7 @@ export class DesktopSession {
     const { winapp } = await desktopBinaries();
     const result = await nativeProcess(
       winapp,
-      ["ui", ...args, "-w", this.grant.handle, "--json"],
+      scopedWindowsArguments(this.grant.handle, args),
       this.work,
       this.signal,
     );
@@ -598,17 +599,17 @@ export class DesktopSession {
     if (tool === "desktop_invoke") command = ["invoke", element.selector];
     else if (tool === "desktop_click") command = ["click", element.selector];
     else if (tool === "desktop_set_value")
-      command = ["set-value", element.selector, String(args.value)];
-    else if (tool === "desktop_type")
-      command = [
-        "send-keys",
-        String(args.value),
-        "--verbatim",
-        "--target",
+      command = literalDesktopCommand(
+        "desktop_set_value",
         element.selector,
-        "--via",
-        "send-input",
-      ];
+        String(args.value),
+      );
+    else if (tool === "desktop_type")
+      command = literalDesktopCommand(
+        "desktop_type",
+        element.selector,
+        String(args.value),
+      );
     else if (tool === "desktop_key")
       command = [
         "send-keys",

@@ -4,21 +4,27 @@
 
 Agentes de programación locales sobre Pi SDK, con una interfaz de terminal reactiva, diseñada para el teclado y con estética de vidrio negro. Describí un objetivo, revisá el plan, observá el trabajo de los especialistas y aceptá el resultado solo después de aprobar las verificaciones.
 
-## Versión 0.2.1 · Español
+## Versión 0.3.0 · Integraciones en español
+
+Cliente MCP por stdio y Streamable HTTP, servidor oficial de GitHub, navegador interactivo aislado y control temporal de una ventana Windows. Abrí **/integraciones** para conectar, revisar catálogos y aprobar operaciones externas. Las credenciales son locales; las escrituras requieren permiso exacto y el evaluador del núcleo mantiene la autoridad de DONE. [Guía completa de integraciones](docs/integraciones.md).
+
+El navegador integrado explora la aplicación de la tarea dentro de Docker, no tu perfil de Chrome ni sitios externos. Windows se controla mediante una ventana autorizada, con UI Automation, comprobación de identidad, límites y parada global **Ctrl+Alt+F10**. No se exponen PowerShell, el registro, ventanas elevadas ni atajos del sistema. GitHub empieza en lectura, limitado a un repositorio.
+
+### Interfaz en español
 
 La interfaz, la ayuda, las acciones, las confirmaciones y el instalador se presentan en español. Los comandos originales siguen funcionando. Los nombres de modelos y proveedores, niveles de razonamiento, claves JSON, identificadores, código, rutas y evidencia original no se traducen ni se sustituyen.
 
 ![Perfect en español: renderizador OpenTUI real con datos de demostración](docs/screenshots/es/running.png)
 
-Esta imagen proviene del renderizador real de la aplicación, con datos deterministas identificados como **DEMO**. No es una imagen generada ni demuestra actividad de cuentas personales. El concepto de vidrio es una referencia de diseño: las celdas de una terminal no pueden dibujar refracciones arbitrarias de píxeles. Las capturas históricas de la versión anterior se conservan por separado con su procedencia.
+Esta captura histórica de la V2 española proviene del renderizador real de la aplicación, con datos deterministas identificados como **DEMO**. No es una imagen generada ni demuestra actividad de cuentas personales. El concepto de vidrio es una referencia de diseño: las celdas de una terminal no pueden dibujar refracciones arbitrarias de píxeles. Las capturas históricas de la versión anterior se conservan por separado con su procedencia.
 
 ## Instalación
 
-La V2 está en `feat/perfect-harness-v2-tui-windows`. Se conservan la V1 y su solicitud de revisión independiente.
+La V3 está en `feat/perfect-harness-v3-integraciones`, basada en la V2 española sin fusionar sus solicitudes de cambios. Se conservan la V1 y su solicitud de revisión independiente.
 
 ### Windows 11 x64
 
-Descargá el archivo de instalación de una ejecución exitosa del flujo **Windows package**, verificando el commit y la versión elegidos. El paquete contiene `Perfect-Harness-Setup-x64.exe`, un ZIP portable completo y las sumas de verificación SHA256. La versión 0.2.1 usa el instalador en español.
+Descargá el archivo de instalación de una ejecución exitosa del flujo **V3 Windows: paquete e instalación**, verificando el commit y la versión elegidos. El paquete contiene `Perfect-Harness-Setup-x64.exe`, un ZIP portable completo y las sumas de verificación SHA256. La versión 0.3.0 mantiene el instalador en español e incorpora el módulo nativo de escritorio.
 
 La instalación es por usuario, sin privilegios de administrador. Incluye icono, acceso en Inicio, acceso opcional al escritorio y un perfil independiente de Windows Terminal. La integración con el PATH es opcional y reversible. Node está incluido: no hace falta instalarlo globalmente. Extraé el ZIP completo; `Perfect.exe` es un iniciador nativo pequeño y necesita los archivos que lo acompañan.
 
@@ -29,7 +35,7 @@ Windows Terminal es necesario para abrir la ventana visual dedicada. Git y un mo
 Usá Node **26.4.0** de la serie 26.x y Git:
 
 ```sh
-git clone --branch feat/perfect-harness-v2-tui-windows https://github.com/vellxw/Perfect-harness.git
+git clone --branch feat/perfect-harness-v3-integraciones https://github.com/vellxw/Perfect-harness.git
 cd Perfect-harness
 npm ci
 npm run build
@@ -80,6 +86,17 @@ perfect prueba --permitir-contributor
 Las claves API y autorizaciones OAuth se introducen localmente. Nunca deben copiarse a GitHub. Contributor exige consentimiento explícito por carpeta y contenido público; los mensajes y respuestas pueden utilizarse para entrenamiento. `/contribuir` lo explica antes de pedir autorización. `/publico` solo afecta al próximo objetivo y no autoriza por sí mismo a compartirlo. `/contribuir revocar` revoca el consentimiento para futuras solicitudes; no retira información ya enviada.
 
 No hay cambios silenciosos de modelo ni de modalidad de cobro. Consultá [autenticación](docs/authentication.md) y [compatibilidad de proveedores](docs/provider-compatibility.md). Las instrucciones o errores externos que un proveedor emita sin traducción se conservan para no ocultar información relevante.
+
+## Conectar herramientas
+
+```text
+/github propietario/repositorio
+/navegador
+/escritorio
+/integraciones
+```
+
+GitHub usa un token local con permisos mínimos; no hereda la cuenta conectada a ChatGPT. Probá la conexión, revisá el catálogo y autorizá su huella. Una conexión MCP local ejecuta un programa que vos revisaste: no es un sandbox del sistema operativo. [Permisos, ejemplos, credenciales y recuperación](docs/integraciones.md).
 
 ## Controles de la terminal
 

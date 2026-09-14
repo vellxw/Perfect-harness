@@ -31,6 +31,6 @@
  ││  ↑↓ tareas · Enter detalle · A aprobar el plan                                                                 │  │ 
  ││                                                                                                                │  │ 
  │╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  │ 
- │  /agentes /plan /verificar /cambios    Ctrl+K acciones                                            PRIVADO · 0.2.1  │ 
+ │  /agentes /plan /verificar /cambios    Ctrl+K acciones                                            PRIVADO · 0.3.0  │ 
  │                                                                                                                    │ 
  ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ 

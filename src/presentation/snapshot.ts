@@ -173,7 +173,7 @@ export function snapshot(
   );
   return {
     protocol: 1,
-    version: "0.2.1",
+    version: "0.3.0",
     sequence: goal ? store.lastSequence(goal.id) : 0,
     workspace,
     workspaceName: basename(workspace),

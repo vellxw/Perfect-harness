@@ -11,9 +11,9 @@ using System.Windows.Forms;
 [assembly: AssemblyCompany("Perfect Harness")]
 [assembly: AssemblyProduct("Perfect Harness")]
 [assembly: AssemblyCopyright("Perfect Harness contributors")]
-[assembly: AssemblyVersion("0.2.1.0")]
-[assembly: AssemblyFileVersion("0.2.1.0")]
-[assembly: AssemblyInformationalVersion("0.2.1")]
+[assembly: AssemblyVersion("0.3.0.0")]
+[assembly: AssemblyFileVersion("0.3.0.0")]
+[assembly: AssemblyInformationalVersion("0.3.0")]
 
 internal static class Perfect {
  [DllImport("kernel32.dll")] static extern uint GetConsoleProcessList(uint[] list,uint count);

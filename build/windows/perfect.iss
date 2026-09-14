@@ -7,7 +7,7 @@
 [Setup]
 AppId={{F4D924BE-7843-4CF7-BA6D-7B207D000200}
 AppName=Perfect Harness
-AppVersion=0.2.1
+AppVersion=0.3.0
 AppPublisher=Perfect Harness
 AppPublisherURL=https://github.com/vellxw/Perfect-harness
 DefaultDirName={localappdata}\Programs\PerfectHarness
