@@ -2,7 +2,7 @@ name: Preparar entrega V3 comprobada (temporal)
 on:
   push:
     branches: [feat/perfect-harness-v3-integraciones]
-    paths: [.github/workflows/v3-finalize.yml, scripts/v3-finalize.mjs]
+    paths: [.github/workflows/v3-finalize.yml, scripts/v3-finalize.mjs, scripts/v3-finalize-safe.mjs]
 permissions:
   contents: write
 jobs:
@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: '26.4.0'
       - run: npm ci
-      - run: node scripts/v3-finalize.mjs
+      - run: node scripts/v3-finalize-safe.mjs
       - name: Ordenar imports y formatear el código nuevo
         run: |
           node --input-type=module <<'JS'
@@ -39,7 +39,7 @@ jobs:
           npm run test:package
           npm run audit:production
           git diff --check
-      - name: Preparar árbol exacto de archivos validados; no modificar refs
+      - name: Preparar árbol exacto validado sin modificar ramas
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

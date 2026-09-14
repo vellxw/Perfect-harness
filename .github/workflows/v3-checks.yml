@@ -12,8 +12,12 @@ concurrency:
   cancel-in-progress: true
 jobs:
   checks:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,14 +27,17 @@ jobs:
           node-version: '26.4.0'
       - run: npm ci
       - run: npm run typecheck
-      - run: npm test
+      - run: npm run lint
+      - run: npm run check:config
       - run: npm run build
+      - run: npm test
+      - run: npm run test:package
       - run: npm run audit:production
-      - name: Informar vulnerabilidades sin cambiar versiones automáticamente
-        if: always()
-        run: npm audit --omit=dev --json > audit.json || true
+      - name: Capturar paneles reales de integración con datos sintéticos
+        run: node --experimental-ffi scripts/capture-integrations.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: v3-audit
-          path: audit.json
+          name: V3-Interfaz-${{ matrix.os }}
+          path: test-results/integrations-ui
+          retention-days: 30
