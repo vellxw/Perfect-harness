@@ -53,6 +53,8 @@ export class PresentationEngine {
   private closing = false;
   private active?: Promise<void>;
   private activeGoal?: string;
+  private activeKind?: "goal" | "verification" | "preparation";
+  private actionQueue: Promise<void> = Promise.resolve();
   private activeAbort?: AbortController;
   private authAbort?: AbortController;
   private answers = new Map<string, (value: string) => void>();
@@ -152,6 +154,7 @@ export class PresentationEngine {
     this.idle();
     this.selected = goal.id;
     this.activeGoal = goal.id;
+    this.activeKind = "goal";
     this.activeAbort = new AbortController();
     const config = goalConfig(goal),
       orchestrator = new Orchestrator(
@@ -186,7 +189,12 @@ export class PresentationEngine {
       });
     this.publish();
   }
-  async dispatch(requestId: string, raw: unknown): Promise<void> {
+  dispatch(requestId: string, raw: unknown): Promise<void> {
+    const next = this.actionQueue.then(() => this.perform(requestId, raw));
+    this.actionQueue = next.catch(() => {});
+    return next;
+  }
+  private async perform(requestId: string, raw: unknown): Promise<void> {
     let action: UiAction;
     try {
       action = UiActionSchema.parse(raw);
@@ -234,6 +242,8 @@ export class PresentationEngine {
           break;
         case "pause":
         case "abort":
+          if (this.activeGoal === action.goalId && this.activeKind !== "goal")
+            this.activeAbort?.abort(new Error("User stopped manual operation"));
           await controlGoal(ctx, ctx.goal(action.goalId), action.type);
           message = "Request recorded; waiting for confirmed termination.";
           break;
@@ -338,6 +348,7 @@ export class PresentationEngine {
           this.store.lock(goal.workspaceId, owner, process.pid);
           this.activeAbort = new AbortController();
           this.activeGoal = goal.id;
+          this.activeKind = "verification";
           this.active = (async () => {
             try {
               if ((await workspace.revision()) !== goal.candidateRevision)
@@ -424,16 +435,42 @@ export class PresentationEngine {
         case "prepare": {
           this.idle();
           const goal = ctx.goal(action.goalId);
-          await prepareDependencies({
+          this.activeAbort = new AbortController();
+          this.activeGoal = goal.id;
+          this.activeKind = "preparation";
+          const signal = AbortSignal.any([
+            this.activeAbort.signal,
+            AbortSignal.timeout(goalConfig(goal).limits.timeoutPerTask),
+          ]);
+          this.active = prepareDependencies({
             goal,
             config: goalConfig(goal),
             store: this.store,
             home: this.home,
             allowNetwork: true,
             render: action.render,
-            signal: AbortSignal.timeout(goalConfig(goal).limits.timeoutPerTask),
-          });
-          message = "Approved dependency image prepared";
+            signal,
+          })
+            .then(() => {
+              this.send({
+                type: "result",
+                requestId,
+                ok: true,
+                message: "Approved dependency image prepared",
+              });
+            })
+            .catch((error) => {
+              this.send({ type: "fault", message: text(error) });
+            })
+            .finally(() => {
+              this.active = undefined;
+              this.activeGoal = undefined;
+              this.activeKind = undefined;
+              this.activeAbort = undefined;
+              this.publish();
+            });
+          message =
+            "Preparing the approved dependency image; Pause cancels safely";
           break;
         }
         case "refresh":
@@ -538,7 +575,10 @@ export class PresentationEngine {
   }
   async dispose(): Promise<void> {
     if (this.closing) return;
+    await this.actionQueue;
     this.authAbort?.abort();
+    if (this.activeKind && this.activeKind !== "goal")
+      this.activeAbort?.abort(new Error("UI closed"));
     if (this.active && this.activeGoal) {
       await controlGoal(
         this.context(),

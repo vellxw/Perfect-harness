@@ -481,7 +481,16 @@ export function App({
     showDocument(row.title, row.body);
   };
   useKeyboard((key) => {
-    if (confirmation || auth?.promptId) return;
+    if (confirmation) return;
+    if (auth?.promptId) {
+      if (key.name === "escape" || (key.ctrl && key.name === "c")) {
+        key.preventDefault();
+        mutate({ type: "auth-cancel" });
+        setAuth(undefined);
+        navigate("home");
+      }
+      return;
+    }
     if (key.ctrl && key.name === "c") {
       key.preventDefault();
       if (!closing) {

@@ -199,7 +199,10 @@ export class DockerRunner implements ExecutionRunner {
   ) {
     await mkdir(this.runtimeDir, { recursive: true, mode: 0o700 });
     const dir = await mkdtemp(join(this.runtimeDir, "run-"));
-    if (/[:,\n]/.test(dir) || /[:,\n]/.test(request.artifactsDir))
+    if (
+      /[:,\n]/.test(dir.replace(/^[A-Za-z]:/, "")) ||
+      /[:,\n]/.test(request.artifactsDir.replace(/^[A-Za-z]:/, ""))
+    )
       throw new Blocked("MOUNT_PATH", "Unsupported Docker mount path");
     await mkdir(request.artifactsDir, { recursive: true, mode: 0o700 });
     if (includeSource)

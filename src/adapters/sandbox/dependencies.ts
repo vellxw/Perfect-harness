@@ -233,7 +233,7 @@ export async function prepareDependencies(input: {
       mode: 0o700,
     });
     const dir = await mkdtemp(join(input.home, "preparations", "npm-"));
-    if (/[:,\n]/.test(dir))
+    if (/[:,\n]/.test(dir.replace(/^[A-Za-z]:/, "")))
       throw new Blocked("MOUNT_PATH", "Unsupported Docker mount path");
     await writeFile(join(dir, "manifest.json"), descriptor.packageText, {
       mode: 0o644,
