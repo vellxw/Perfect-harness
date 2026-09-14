@@ -1,0 +1,94 @@
+name: Stage inspected V2 release visuals (temporary)
+on:
+  push:
+    branches: [feat/perfect-harness-v2-tui-windows]
+    paths: [.github/workflows/v2-stage-visuals.yml]
+permissions:
+  contents: write
+  actions: read
+  checks: read
+jobs:
+  stage:
+    if: github.repository == 'vellxw/Perfect-harness' && github.ref == 'refs/heads/feat/perfect-harness-v2-tui-windows'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - run: npm run build
+      - name: Generate reproducible assets and native UI captures
+        run: |
+          node scripts/build-brand.mjs
+          node --experimental-ffi scripts/capture-tui.mjs docs/screenshots
+          node --experimental-ffi scripts/benchmark-tui.mjs docs/validation
+      - name: Stage only artifacts from this commit and fixed source generators
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import os,json,time,base64,hashlib,pathlib,subprocess,urllib.request,zipfile,io
+          repo='vellxw/Perfect-harness';head=os.environ['GITHUB_SHA']
+          def api(path,body=None,binary=False):
+            url='https://api.github.com/repos/'+repo+'/'+path
+            data=None if body is None else json.dumps(body).encode()
+            req=urllib.request.Request(url,data=data,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json'})
+            with urllib.request.urlopen(req,timeout=60) as response:result=response.read()
+            return result if binary else json.loads(result)
+          records=[];deadline=time.monotonic()+720
+          for job,folder,names in [
+            ('windows','windows-desktop',{'windows-terminal-idle.png','windows-terminal-running.png','provenance.json'}),
+            ('xterm','linux-desktop',{'xterm-repair.png','provenance.json','window.txt'})
+          ]:
+            while True:
+              runs=api('commits/'+head+'/check-runs')['check_runs']
+              check=next((c for c in runs if c['name']==job),None)
+              if check and check['status']=='completed':break
+              if time.monotonic()>deadline:raise RuntimeError('Timed out waiting for '+job+' evidence')
+              time.sleep(15)
+            assert check['conclusion']=='success',(job,check['conclusion'])
+            runid=check['details_url'].split('/runs/')[1].split('/')[0]
+            artifacts=api('actions/runs/'+runid+'/artifacts')['artifacts']
+            name='windows-terminal-desktop' if job=='windows' else 'linux-terminal-desktop'
+            artifact=next(a for a in artifacts if a['name']==name)
+            archive=api('actions/artifacts/'+str(artifact['id'])+'/zip',binary=True)
+            if artifact.get('digest'):assert 'sha256:'+hashlib.sha256(archive).hexdigest()==artifact['digest']
+            dest=pathlib.Path('docs/screenshots')/folder;dest.mkdir(parents=True,exist_ok=True)
+            with zipfile.ZipFile(io.BytesIO(archive)) as z:
+              for info in z.infolist():
+                if info.filename in names and not info.is_dir():
+                  assert info.file_size<5_000_000
+                  (dest/info.filename).write_bytes(z.read(info))
+            records.append({'osJob':job,'runId':runid,'artifactId':artifact['id'],'head':head,'archiveSha256':hashlib.sha256(archive).hexdigest()})
+          pathlib.Path('docs/screenshots/commit-provenance.json').write_text(json.dumps({'sourceCommit':head,'osArtifacts':records,'nativeData':'DEMO fixtures; no personal provider inference'},indent=2)+'\n')
+          allowed=[]
+          for root in ['assets/brand','docs/screenshots','docs/validation']:
+            for path in sorted(pathlib.Path(root).rglob('*')):
+              if path.is_file() and not path.is_symlink() and path.suffix in {'.png','.ico','.svg','.json','.txt'}:
+                assert path.stat().st_size<5_000_000
+                allowed.append(path)
+          base=subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip()
+          entries=[]
+          for path in allowed:
+            content=path.read_bytes()
+            sha=api('git/blobs',{'encoding':'base64','content':base64.b64encode(content).decode()})['sha']
+            entries.append({'path':path.as_posix(),'mode':'100644','type':'blob','sha':sha})
+          tree=api('git/trees',{'base_tree':base,'tree':entries})['sha']
+          pathlib.Path('test-results').mkdir(exist_ok=True)
+          pathlib.Path('test-results/staged-visual-tree.json').write_text(json.dumps({'tree':tree,'parent':head,'files':len(entries),'note':'Objects staged only. Branch/ref not modified. A separately authorized connector commit publishes this tree.'},indent=2))
+          print('Staged visual tree:',tree,'parent:',head,'files:',len(entries))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: staged-v2-visuals
+          path: |
+            test-results/staged-visual-tree.json
+            docs/screenshots
+            docs/validation
+            assets/brand
+          retention-days: 14

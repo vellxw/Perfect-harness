@@ -59,7 +59,7 @@ for (const [name, scene, screen, cols, rows] of [
         y = pad + label + row * cellH,
         fg = color(span.fg),
         bg = color(span.bg);
-      drawing += `<rect x="${x}" y="${y}" width="${span.width * cellW}" height="${cellH}" fill="${bg}"/><text x="${x}" y="${y + 15}" fill="${fg}" font-family="DejaVu Sans Mono,Cascadia Mono,Consolas,monospace" font-size="16" textLength="${Math.max(1, span.width * cellW)}" lengthAdjust="spacingAndGlyphs">${escape(span.text)}</text>`;
+      drawing += `<rect x="${x}" y="${y}" width="${span.width * cellW}" height="${cellH}" fill="${bg}"/><text xml:space="preserve" x="${x}" y="${y + 15}" fill="${fg}" font-weight="${(span.attributes & 1) !== 0 ? 700 : 400}" font-family="DejaVu Sans Mono,Cascadia Mono,Consolas,monospace" font-size="16" textLength="${Math.max(1, span.width * cellW)}" lengthAdjust="spacingAndGlyphs">${escape(span.text)}</text>`;
       col += span.width;
     }
   }
