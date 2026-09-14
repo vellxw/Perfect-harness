@@ -43,6 +43,41 @@ jobs:
           node scripts/.localize-es-audit.mjs || result=1
           node scripts/.finish-es-audit.mjs || result=1
           exit "$result"
+      - name: Afinar traducción y conservar controles de integridad
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          function patch(path,before,after){let source=fs.readFileSync(path,'utf8');if(!source.includes(before))throw Error('Falta ancla en '+path+': '+before);fs.writeFileSync(path,source.replaceAll(before,after));}
+          patch('tests/tui/presentation.test.ts',String.raw`/unknown \(not exposed\)/`,String.raw`/desconocido \(el proveedor no lo expone\)/`);
+          patch('tests/tui/presentation.test.ts','/PROVENANCE  mock/','/PROCEDENCIA mock/');
+          patch('src/presentation/client.ts','version: "0.2.0"','version: "0.2.1"');
+          patch('src/presentation/client.ts','|| "Workspace"','|| "Carpeta de trabajo"');
+          patch('src/ui/tui/app.tsx','if (name === "status") name = "home";','if (name === "status" || name === "home") { navigate("home"); setFocus("composer"); return; }');
+          patch('src/ui/tui/components.tsx','} activos ·','} {s.agents.filter((a) => a.status === "running").length === 1 ? "activo" : "activos"} ·');
+          patch('src/cli/spanish.ts','return name === cmd.name() ? term : term.replace(`${cmd.name()}|${name}`, `${name}|${cmd.name()}`);','return cmd.name() === "help" ? term.replace(/^help\\b/, "ayuda|help") : name === cmd.name() ? term : term.replace(`${cmd.name()}|${name}`, `${name}|${cmd.name()}`);');
+          patch('src/cli/spanish.ts','return lines.join("\\n");',String.raw`return lines.join("\n").replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "").replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");`);
+          fs.appendFileSync('tests/unit/spanish.test.ts',String.raw`
+          test("la salida humana no ejecuta secuencias de control de la terminal", () => {
+            const value = { title: "\x1b]52;c;c2VjcmV0\x07Español\x1b[2J", model: "muse-spark-1.3-contributor-free" };
+            const before = JSON.stringify(value);
+            assert.equal(humanData(value).includes("\x1b"), false);
+            assert.match(humanData(value), /Español/);
+            assert.equal(JSON.stringify(value), before);
+          });
+          `);
+          fs.appendFileSync('tests/tui/spanish.test.tsx',String.raw`
+          test("/estado vuelve al objetivo sin despachar operaciones nuevas", async () => {
+            const app = await mount("running", "agents");
+            try {
+              app.mockInput.pressKey("ESCAPE"); await app.flush();
+              await app.mockInput.typeText("/estado"); app.mockInput.pressKey("RETURN"); await app.flush();
+              assert.match(app.captureCharFrame(), /OBJETIVO ACTUAL/);
+              assert.doesNotMatch(app.captureCharFrame(), /Comando desconocido/);
+              assert.equal(app.actions.length, 0);
+            } finally { await app.dispose(); }
+          });
+          `);
+          JS
       - name: Ordenar imports de los archivos modificados
         run: |
           node --input-type=module <<'JS'
@@ -66,11 +101,8 @@ jobs:
       - name: Nuevas referencias españolas autorizadas por la localización
         run: |
           node --experimental-ffi scripts/capture-tui.mjs docs/screenshots/es
-          printf '\n--- INTERFAZ COMPACTA ---\n'
           cat docs/screenshots/es/compact.txt
-          printf '\n--- AGENTES ---\n'
           cat docs/screenshots/es/agents.txt
-          printf '\n--- AJUSTES ---\n'
           cat docs/screenshots/es/settings.txt
       - name: Pruebas de regresión, idioma e instalación limpia
         run: |
