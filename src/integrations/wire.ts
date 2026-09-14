@@ -351,6 +351,7 @@ export class McpConnection {
     { name: "perfect-harness", version: "0.3.0" },
     { capabilities: {}, versionNegotiation: { mode: "legacy" } },
   );
+  private closing?: Promise<void>;
   private abort?: () => void;
   private signal?: AbortSignal;
   private constructor() {}
@@ -418,7 +419,7 @@ export class McpConnection {
       }
       connection.signal = signal;
       connection.abort = () => {
-        void connection.client.close().catch(() => {});
+        void connection.close().catch(() => {});
       };
       signal.addEventListener("abort", connection.abort, { once: true });
       await connection.client.connect(transport, { timeout, signal });
@@ -564,6 +565,7 @@ export class McpConnection {
   async close(): Promise<void> {
     if (this.abort && this.signal)
       this.signal.removeEventListener("abort", this.abort);
-    await this.client.close().catch(() => {});
+    this.closing ??= this.client.close().catch(() => {});
+    await this.closing;
   }
 }

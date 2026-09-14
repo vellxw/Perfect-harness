@@ -1,6 +1,10 @@
 /** Español de la aplicación. Los identificadores de protocolo y proveedor nunca se traducen. */
 export const locale = "es-AR";
 export const commandNames: Readonly<Record<string, string>> = {
+  skills: "habilidades",
+  teams: "equipos",
+  profiles: "perfiles",
+  modes: "modos",
   integrations: "integraciones",
   browser: "navegador",
   desktop: "escritorio",
@@ -123,6 +127,13 @@ export function roleLabel(value: string): string {
   return roleNames[value] ?? value;
 }
 const screenNames: Readonly<Record<string, string>> = {
+  skills: "Habilidades",
+  teams: "Equipos",
+  profiles: "Perfiles y modelos",
+  modes: "Modos de trabajo",
+  "skill-detail": "Habilidad y ámbitos",
+  "team-detail": "Equipo y miembros",
+  "profile-detail": "Perfil y modelo",
   integrations: "Integraciones",
   home: "Inicio",
   agents: "Agentes",

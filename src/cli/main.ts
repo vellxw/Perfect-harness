@@ -1,3 +1,4 @@
+import { registerSkills } from "./skills.js";
 import { Command, CommanderError } from "commander";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -107,6 +108,7 @@ export async function main(
       );
       exitCode = goalExit(finished);
     });
+  registerSkills(program, context);
   registerIntegrations(program, globals);
   registerPrepare(program, context);
   program

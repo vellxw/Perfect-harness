@@ -1,3 +1,6 @@
+import { StudioAdmin } from "../skills/admin.js";
+import { studioId } from "../skills/registry.js";
+import { defaultConfig } from "../config/schema.js";
 import { watch, type FSWatcher } from "node:fs";
 import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
@@ -45,6 +48,7 @@ import { snapshot } from "./snapshot.js";
 export class PresentationEngine {
   readonly store: SqliteStore;
   readonly integrations: IntegrationAdmin;
+  readonly studios: StudioAdmin;
   readonly home: string;
   private workspace: string;
   private selected?: string;
@@ -71,6 +75,7 @@ export class PresentationEngine {
     this.workspace = workspace;
     this.store = new SqliteStore(join(home, "state.sqlite"));
     this.integrations = new IntegrationAdmin(home);
+    this.studios = new StudioAdmin(this.store, home);
     this.unsubscribe = onDatabaseChange(join(home, "state.sqlite"), () =>
       this.wake(),
     );
@@ -139,6 +144,8 @@ export class PresentationEngine {
       integrationState.windows.length
     )
       state.integrations = integrationState;
+    if (this.store.get("studios", studioId(this.workspace)))
+      state.studio = this.studios.panel(this.workspace, defaultConfig());
     const serialized = JSON.stringify(state);
     if (force || serialized !== this.lastPayload) {
       this.lastPayload = serialized;
@@ -240,6 +247,39 @@ export class PresentationEngine {
         path: string | undefined,
         operation: string | undefined;
       switch (action.type) {
+        case "studio": {
+          const result = await this.studios.perform(
+            this.workspace,
+            await ctx.config(),
+            action.action,
+          );
+          message = result.message;
+          content =
+            action.action.command === "status" ? undefined : result.content;
+          path = result.path;
+          operation = "studio";
+          break;
+        }
+        case "create-skill": {
+          this.idle();
+          const goal = await createGoal(
+            {
+              request:
+                "Crear un borrador de habilidad con SKILL.md, recursos pertinentes y casos de selección positivos/negativos separados en desarrollo y reservados. No autoaprobar ni activar. Necesidad del usuario: " +
+                action.description,
+              source: this.workspace,
+              home: this.home,
+              config: await ctx.config(),
+              privacy: "private",
+              workMode: "skill-studio",
+            },
+            this.store,
+          );
+          this.start(goal);
+          message =
+            "Creador iniciado como goal privada; requiere proveedores configurados y aprobación independiente del borrador.";
+          break;
+        }
         case "integration": {
           if (action.action.command === "login") {
             this.idle();

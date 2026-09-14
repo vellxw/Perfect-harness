@@ -1,3 +1,5 @@
+import { StudioActionSchema } from "../skills/actions.js";
+import type { StudioPanelSnapshot } from "../skills/admin.js";
 import { z } from "zod";
 import type { GoalState, Role } from "../domain/model.js";
 import {
@@ -24,6 +26,13 @@ export const UiPreferencesSchema = z.object({
 });
 export type UiPreferences = z.infer<typeof UiPreferencesSchema>;
 export type Screen =
+  | "skills"
+  | "teams"
+  | "profiles"
+  | "modes"
+  | "skill-detail"
+  | "team-detail"
+  | "profile-detail"
   | "integrations"
   | "home"
   | "agents"
@@ -102,6 +111,7 @@ export interface UiDiagnostic {
   detail: string;
 }
 export interface UiSnapshot {
+  studio?: StudioPanelSnapshot;
   integrations?: IntegrationPanelSnapshot;
   protocol: 1;
   version: string;
@@ -152,6 +162,13 @@ export interface UiSnapshot {
 }
 const goalId = z.string().min(1).max(96);
 export const UiActionSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("studio"), action: StudioActionSchema }).strict(),
+  z
+    .object({
+      type: z.literal("create-skill"),
+      description: z.string().trim().min(8).max(20000),
+    })
+    .strict(),
   z
     .object({ type: z.literal("integration"), action: IntegrationActionSchema })
     .strict(),

@@ -16,6 +16,7 @@ export async function createGoal(
     config: PerfectConfig;
     privacy: Privacy;
     mode?: "real" | "mock";
+    workMode?: string;
   },
   store: StateStore,
 ): Promise<Goal> {
@@ -73,6 +74,7 @@ export async function createGoal(
     goal.studioSnapshotId = new SkillsRegistry(store).snapshot(
       goal,
       input.config,
+      input.workMode,
     ).id;
     store.put("goals", goal, "goal.created");
     store.event(goal.id, "workspace.snapshotted", {

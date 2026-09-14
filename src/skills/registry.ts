@@ -141,14 +141,18 @@ export class SkillsRegistry {
   snapshot(
     goal: Pick<Goal, "id" | "source">,
     base: PerfectConfig,
+    modeOverride?: string,
   ): StudioSnapshot {
     const record = this.get(goal.source, base);
+    const selectedConfig = structuredClone(record.config);
+    if (modeOverride) selectedConfig.activeMode = modeOverride;
+    StudioConfigSchema.parse(selectedConfig);
     const result: StudioSnapshot = {
       id: id("studio-snapshot"),
       goalId: goal.id,
       workspace: goal.source,
-      config: structuredClone(record.config),
-      hash: record.hash,
+      config: selectedConfig,
+      hash: hash(selectedConfig),
       revision: record.revision,
       skillLock: this.lock(goal.source),
       createdAt: now(),
