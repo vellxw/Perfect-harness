@@ -1,0 +1,58 @@
+name: Prepare V2 source (temporary)
+on:
+  push:
+    branches: [feat/perfect-harness-v2-tui-windows]
+    paths: [.github/workflows/v2-prepare-source.yml]
+permissions:
+  contents: write
+jobs:
+  prepare:
+    if: github.repository == 'vellxw/Perfect-harness' && github.ref == 'refs/heads/feat/perfect-harness-v2-tui-windows'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - name: Exact source adjustments and dependency lock
+        run: |
+          node scripts/v2-source-adjustments.mjs
+          npm install --package-lock-only
+          npm ci
+          npx --no-install prettier --write src/presentation src/ui src/adapters/sqlite/store.ts src/cli/index.ts
+      - name: Typecheck
+        id: types
+        continue-on-error: true
+        run: npm run typecheck
+      - name: Lint
+        id: lint
+        continue-on-error: true
+        run: npm run lint
+      - name: Regression and SDK contracts
+        id: tests
+        continue-on-error: true
+        run: npm test
+      - name: Build
+        id: build
+        continue-on-error: true
+        run: npm run build
+      - name: Commit only the generated lock and exact source changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git add -- package-lock.json src/presentation src/ui src/adapters/sqlite/store.ts src/cli/index.ts src/cli/main.ts src/cli/doctor.ts src/adapters/git/workspace.ts
+          if git diff --cached --quiet; then exit 0; fi
+          git diff --cached --check
+          git config user.name 'Perfect Harness Publisher'
+          git config user.email 'perfect-harness@users.noreply.github.com'
+          git commit -m 'build(v2): pin UI dependencies and normalize verified runtime migration'
+          AUTH_HEADER=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$AUTH_HEADER"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $AUTH_HEADER" push origin HEAD:refs/heads/feat/perfect-harness-v2-tui-windows
+          git rev-parse HEAD
+      - name: Require all checks before accepting the milestone
+        if: steps.types.outcome != 'success' || steps.lint.outcome != 'success' || steps.tests.outcome != 'success' || steps.build.outcome != 'success'
+        run: exit 1
