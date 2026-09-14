@@ -1,5 +1,6 @@
 param([switch]$Installer)
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Drawing
 if (-not $IsWindows) { throw 'Build this package on Windows x64.' }
 $root = Split-Path $PSScriptRoot -Parent
 Set-Location $root

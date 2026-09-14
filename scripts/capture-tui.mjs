@@ -22,7 +22,7 @@ for(const [name,scene,screen,cols,rows] of [
  for(const [row,line] of spans.lines.entries()){let col=0;for(const span of line.spans){const x=pad+col*cellW,y=pad+label+row*cellH,fg=color(span.fg),bg=color(span.bg);drawing+=`<rect x="${x}" y="${y}" width="${span.width*cellW}" height="${cellH}" fill="${bg}"/><text x="${x}" y="${y+15}" fill="${fg}" font-family="DejaVu Sans Mono,Cascadia Mono,Consolas,monospace" font-size="16" textLength="${Math.max(1,span.width*cellW)}" lengthAdjust="spacingAndGlyphs">${escape(span.text)}</text>`;col+=span.width;}}
  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">${drawing}</svg>`;
  await writeFile(join(output,name+'.png'),new Resvg(svg,{font:{loadSystemFonts:true}}).render().asPng());
- console.log(`=== ${name} ${cols}x${rows} ===\n${frame}`);
+ console.log(`Captured ${name} ${cols}x${rows}`);
  results.push({name,source:'native OpenTUI captureSpans',data:'synthetic fixture, no real provider calls',cols,rows});
  root.unmount();test.renderer.destroy();
 }

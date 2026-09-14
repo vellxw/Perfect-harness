@@ -1,5 +1,5 @@
 import { readFile, lstat } from "node:fs/promises";
-import { relative, join } from "node:path";
+import { relative, join, sep } from "node:path";
 import type { Evidence, Goal } from "../domain/model.js";
 import { hash, Blocked } from "../domain/util.js";
 import { safePath } from "./paths.js";
@@ -12,7 +12,10 @@ export async function readEvidence(
   if (evidence.goalId !== goal.id || evidence.validity !== "valid")
     throw new Blocked("EVIDENCE_SCOPE", evidence.id);
   const root = join(goal.root, "artifacts");
-  const path = await safePath(root, relative(root, evidence.artifactRef));
+  const path = await safePath(
+    root,
+    relative(root, evidence.artifactRef).split(sep).join("/"),
+  );
   const stat = await lstat(path);
   if (!stat.isFile() || stat.size > maxBytes)
     throw new Blocked("EVIDENCE_SIZE", evidence.id);

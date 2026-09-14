@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, chmod } from "node:fs/promises";
+import { mkdir, readFile, writeFile, chmod, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { ConfigSchema, defaultConfig, type PerfectConfig } from "./schema.js";
@@ -46,7 +46,9 @@ export async function loadConfig(
   }
   const config = ConfigSchema.parse(JSON.parse(content));
   const policy = await localPolicy(home);
-  if (policy.trustedConfigs[resolve(workspace)] !== hash(config))
+  if (
+    policy.trustedConfigs[await realpath(resolve(workspace))] !== hash(config)
+  )
     throw new Blocked(
       "CONFIG_APPROVAL",
       "Run perfect trust-config after reviewing perfect.config.json",

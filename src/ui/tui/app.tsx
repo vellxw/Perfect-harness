@@ -197,7 +197,17 @@ export function App({
   );
   const rows = useMemo(() => viewRows(s, screen), [s, screen]);
   const rowHeight = compact ? 2 : 3,
-    visibleRows = Math.max(1, Math.floor((height - 14) / rowHeight));
+    visibleRows = Math.max(
+      1,
+      Math.floor(
+        (height -
+          (compact ? 17 : 24) -
+          (s.goal?.reason ? (compact ? 2 : 4) : 0) -
+          (toast ? (compact ? 1 : 2) : 0) +
+          (rail ? 2 : 0)) /
+          rowHeight,
+      ),
+    );
   const activeSelected = Math.min(
     Math.max(0, selected),
     Math.max(0, rows.length - 1),
@@ -969,6 +979,7 @@ export function App({
               <SecretEntry
                 key={auth.promptId}
                 onSubmit={(value) => {
+                  if (typeof value !== "string") return;
                   mutate({
                     type: "auth-answer",
                     promptId: auth.promptId!,
@@ -988,6 +999,7 @@ export function App({
                 focused
                 placeholder="Paste the authorization value and press Enter"
                 onSubmit={(value) => {
+                  if (typeof value !== "string") return;
                   mutate({
                     type: "auth-answer",
                     promptId: auth.promptId!,

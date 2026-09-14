@@ -75,6 +75,6 @@ internal static class Perfect {
   start.EnvironmentVariables.Remove("NODE_OPTIONS");
   var animation=new ANIMATIONINFO();animation.cbSize=(uint)Marshal.SizeOf(typeof(ANIMATIONINFO));
   if(SystemParametersInfo(0x0048,animation.cbSize,ref animation,0)&&animation.iMinAnimate==0)start.EnvironmentVariables["PERFECT_REDUCED_MOTION"]="1";
-  using(var process=Process.Start(start)){if(process==null)throw new IOException("Bundled runtime did not start.");process.WaitForExit();return process.ExitCode;}
+  using(var process=Process.Start(start)){if(process==null)throw new IOException("Bundled runtime did not start.");ConsoleCancelEventHandler handler=(sender,e)=>{e.Cancel=true;};Console.CancelKeyPress+=handler;try{process.WaitForExit();return process.ExitCode;}finally{Console.CancelKeyPress-=handler;}}
  }
 }
