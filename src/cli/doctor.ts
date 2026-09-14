@@ -175,7 +175,7 @@ export async function doctor(
             ? "BLOCKED"
             : "PASS",
         detail: auth
-          ? `Configured ${auth.type}; required ${definition.auth}. Account ${definition.accountRef}.`
+          ? `Autenticación configurada: ${auth.type}; requerida: ${definition.auth}. Cuenta: ${definition.accountRef}.`
           : `Ejecutá perfect conectar ${definition.provider}`,
       });
       if (online && auth) {
