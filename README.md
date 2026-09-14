@@ -112,7 +112,7 @@ The original checkout is preserved. Managed worktrees have explicit ownership, c
 
 ## Security
 
-No host-shell fallback, no secrets in context, no remote push from product goals by default. The UI cannot write DONE or modify model bindings. Sensitive input is masked and sent only through private local IPC. Opening an artifact requires hash validation and a restricted media type. [Security model](docs/security-model.md), [SECURITY.md](SECURITY.md).
+No host-shell fallback, no secrets in context, no remote push from product goals by default. The UI cannot write DONE or modify model bindings. Sensitive input is masked and sent only through private local IPC. Opening an artifact requires hash validation and a restricted media type. [Security model](SECURITY.md), [SECURITY.md](SECURITY.md).
 
 An executable does not remove the need for Git/Docker/provider access. Windows Terminal owns Acrylic/Mica; terminal cells do not provide pixel-level blur. No Electron, Tauri, browser dashboard or new backend service is used.
 

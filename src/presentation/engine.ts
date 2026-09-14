@@ -80,7 +80,13 @@ export class PresentationEngine {
     const home = resolve(options.home ?? homeDir()),
       workspace = await realpath(resolve(options.workspace ?? process.cwd()));
     await mkdir(home, { recursive: true, mode: 0o700 });
-    const engine = new PresentationEngine(home, workspace, send);
+    // Windows may expose an 8.3 TEMP alias while fs events use its long name.
+    // Canonicalize before watching: libuv asserts if the directory prefixes disagree.
+    const engine = new PresentationEngine(
+      await realpath(home),
+      workspace,
+      send,
+    );
     try {
       engine.preferences = UiPreferencesSchema.parse(
         JSON.parse(await readFile(join(home, "ui.json"), "utf8")),

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -140,6 +140,23 @@ test("engine is event-driven and refuses unknown/cross-workspace actions", async
     (m) => messages.push(m),
   );
   try {
+    assert.equal(engine.home, await realpath(join(root, "home")));
+    await engine.dispatch("prefs", {
+      type: "preferences",
+      preferences: {
+        ui: {
+          motion: "off",
+          contrast: "normal",
+          transparent: true,
+          onboarded: true,
+        },
+      },
+    });
+    assert.ok(
+      messages.some(
+        (m) => m.type === "result" && m.requestId === "prefs" && m.ok,
+      ),
+    );
     await engine.dispatch("invalid", { type: "done" });
     assert.ok(messages.some((m) => m.type === "result" && !m.ok));
     await engine.dispatch("scope", {
@@ -157,5 +174,64 @@ test("engine is event-driven and refuses unknown/cross-workspace actions", async
   } finally {
     await engine.dispose();
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("snapshot includes every concurrent worker and uses each immutable route binding", async () => {
+  const { makeGoal } = await import("../fixtures/domain.js");
+  const { defaultConfig } = await import("../../src/config/schema.js");
+  const { ScriptedRuntime } = await import("../fake-provider/scripted.js");
+  const { snapshot } = await import("../../src/presentation/snapshot.js");
+  const { UiPreferencesSchema } = await import(
+    "../../src/presentation/protocol.js"
+  );
+  const store = new SqliteStore(":memory:");
+  const goal = makeGoal();
+  try {
+    store.put("goals", goal, "goal.created");
+    const route = await new ScriptedRuntime(async () => ({})).resolve(
+      defaultConfig().agents.general,
+      "public",
+      false,
+      new AbortController().signal,
+    );
+    for (const n of [1, 2]) {
+      store.put(
+        "runs",
+        {
+          id: `worker-${n}`,
+          goalId: goal.id,
+          taskId: `task-${n}`,
+          attempt: 1,
+          agentDefinitionId: "general",
+          status: "running",
+          routeBinding: { ...route, accountRef: `explicit-account-${n}` },
+          contextPackageId: `context-${n}`,
+          inputRevision: goal.candidateRevision,
+          requestIds: [],
+          usageIds: [],
+          startedAt: goal.createdAt,
+        },
+        "agent.started",
+      );
+    }
+    const result = snapshot(store, goal.source, UiPreferencesSchema.parse({}));
+    const active = result.agents.filter((a) => a.status === "running");
+    assert.equal(active.length, 2);
+    assert.deepEqual(
+      active.map((a) => a.id),
+      ["worker-1", "worker-2"],
+    );
+    assert.deepEqual(
+      active.map((a) => a.account),
+      ["explicit-account-1", "explicit-account-2"],
+    );
+    assert.ok(
+      active.every(
+        (a) => a.model === "mock-general" && a.modelReported === undefined,
+      ),
+    );
+  } finally {
+    store.close();
   }
 });

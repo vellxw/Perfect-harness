@@ -50,7 +50,7 @@ try {
      if($window){break}
    }
    if(-not $window){throw 'No interactive Windows Terminal window is available on this runner'}
-   $screen=[Windows.Forms.Screen]::PrimaryScreen.Bounds
+   $screen=[Windows.Forms.Screen]::PrimaryScreen.WorkingArea
    [void][PerfectCaptureWin32]::ShowWindow($window.MainWindowHandle,9)
    [void][PerfectCaptureWin32]::MoveWindow($window.MainWindowHandle,12,12,[Math]::Min(1380,$screen.Width-24),[Math]::Min(880,$screen.Height-24),$true)
    [void][PerfectCaptureWin32]::SetForegroundWindow($window.MainWindowHandle)

@@ -97,33 +97,36 @@ export function snapshot(
   const runs = goal ? store.list("runs", goal.id) : [],
     usage = goal ? store.list("usage", goal.id) : [];
   const definitions = config ? Object.values(config.agents) : [];
-  const agents = definitions.map((d) => {
-    const roleRuns = runs.filter((r) => r.agentDefinitionId === d.id),
-      run = roleRuns.findLast((r) => r.status === "running") ?? roleRuns.at(-1),
-      records = run ? usage.filter((u) => u.runId === run.id) : [],
-      last = records.at(-1),
-      binding = run?.routeBinding;
-    return {
-      id: run?.id ?? d.id,
-      role: d.id,
-      model: binding?.model ?? d.model,
-      provider: binding?.provider ?? d.provider,
-      account: d.accountRef,
-      status: run?.status ?? "idle",
-      task: run?.taskId,
-      startedAt: run?.startedAt,
-      requested: binding?.requestedReasoning ?? d.reasoning,
-      selected: binding?.selectedReasoning ?? d.reasoning,
-      sent: last?.reasoningSent,
-      reported: last?.reasoningReported,
-      modelReported: last?.modelReported,
-      tokens: records.some((u) => u.totalTokens !== undefined)
-        ? records.reduce((n, u) => n + (u.totalTokens ?? 0), 0)
-        : undefined,
-      requests: run?.requestIds.length ?? 0,
-      latencyMs: last?.latencyMs,
-      provenance: binding?.provenance ?? "configured, not tested",
-    };
+  const agents = definitions.flatMap((d) => {
+    const roleRuns = runs.filter((r) => r.agentDefinitionId === d.id);
+    const activeRuns = roleRuns.filter((r) => r.status === "running");
+    const visibleRuns = activeRuns.length ? activeRuns : [roleRuns.at(-1)];
+    return visibleRuns.map((run) => {
+      const records = run ? usage.filter((u) => u.runId === run.id) : [],
+        last = records.at(-1),
+        binding = run?.routeBinding;
+      return {
+        id: run?.id ?? d.id,
+        role: d.id,
+        model: binding?.model ?? d.model,
+        provider: binding?.provider ?? d.provider,
+        account: binding?.accountRef ?? d.accountRef,
+        status: run?.status ?? "idle",
+        task: run?.taskId,
+        startedAt: run?.startedAt,
+        requested: binding?.requestedReasoning ?? d.reasoning,
+        selected: binding?.selectedReasoning ?? d.reasoning,
+        sent: last?.reasoningSent,
+        reported: last?.reasoningReported,
+        modelReported: last?.modelReported,
+        tokens: records.some((u) => u.totalTokens !== undefined)
+          ? records.reduce((n, u) => n + (u.totalTokens ?? 0), 0)
+          : undefined,
+        requests: run?.requestIds.length ?? 0,
+        latencyMs: last?.latencyMs,
+        provenance: binding?.provenance ?? "configured, not tested",
+      };
+    });
   });
   const results = goal
     ? store

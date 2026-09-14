@@ -16,8 +16,8 @@ export const glass = {
 } as const;
 export const roles: Record<string, { name: string; color: string }> = {
   planner: { name: "Planner", color: "#A7DCCC" },
-  frontend: { name: "Muse", color: "#BAA9FF" },
-  backend: { name: "Astra", color: "#93BBFF" },
+  frontend: { name: "Frontend", color: "#BAA9FF" },
+  backend: { name: "Backend", color: "#93BBFF" },
   oracle: { name: "Oracle", color: "#EAC487" },
   general: { name: "Worker", color: "#ADB6CA" },
   integrator: { name: "Integrator", color: "#A9C9DB" },

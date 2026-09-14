@@ -46,7 +46,7 @@ export function TopBar({
       </text>
       <box flexDirection="row" gap={2}>
         <Status
-          state={s.goal?.state ?? "idle"}
+          state={s.connected ? (s.goal?.state ?? "idle") : "disconnected"}
           motion={s.preferences.ui.motion}
         />
         {!compact && (
@@ -154,9 +154,7 @@ export function AgentRail({
             <strong>{roles[a.role]?.name ?? a.role}</strong>
           </text>
           <Status state={a.status} motion={motion} />
-          <text fg={g.muted}>
-            {a.selected} · {a.requests} requests
-          </text>
+          <text fg={g.muted}>{a.model.slice(0, 21)}</text>
         </box>
       ))}
       <box flexGrow={1} />
