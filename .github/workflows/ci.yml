@@ -10,7 +10,7 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  contract:
+  checks:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -18,16 +18,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Install exact direct dependencies
-        run: npm install
+      - name: Install
+        run: if test -f package-lock.json; then npm ci; else npm install; fi
       - name: Typecheck
         run: npm run typecheck
-      - name: Pi contract
-        run: npm run test:contract
+      - name: Lint
+        run: npx eslint src tests
+      - name: Tests
+        run: npm test
       - name: Build
         run: npm run build
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: bootstrap-package-lock
+          name: package-lock
           path: package-lock.json
