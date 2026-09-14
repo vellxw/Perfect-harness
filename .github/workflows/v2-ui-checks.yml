@@ -1,0 +1,59 @@
+name: V2 UI and Windows checks
+on:
+  push:
+    branches: [feat/perfect-harness-v2-tui-windows]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - run: node scripts/v2-ui-adjustments.mjs
+      - name: Typecheck
+        id: types
+        continue-on-error: true
+        run: npm run typecheck
+      - name: Lint
+        id: lint
+        continue-on-error: true
+        run: npm run lint
+      - name: Core and native UI tests
+        id: tests
+        continue-on-error: true
+        run: npm test
+        env:
+          PERFECT_ARTIFACT_DIR: test-results/tui
+      - name: Build
+        id: build
+        continue-on-error: true
+        run: npm run build
+      - name: Capture actual native frames and generate icon assets
+        id: captures
+        continue-on-error: true
+        run: |
+          node scripts/build-brand.mjs
+          node --experimental-ffi scripts/capture-tui.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-ui-${{ matrix.os }}
+          path: |
+            test-results/tui
+            assets/brand
+          retention-days: 7
+      - name: Require all checks
+        if: steps.types.outcome != 'success' || steps.lint.outcome != 'success' || steps.tests.outcome != 'success' || steps.build.outcome != 'success' || steps.captures.outcome != 'success'
+        run: exit 1
