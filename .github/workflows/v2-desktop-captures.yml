@@ -1,8 +1,7 @@
 name: Terminal desktop capture
 on:
   push:
-    branches: [feat/perfect-harness-v2-tui-windows]
-    paths: [.github/workflows/v2-desktop-captures.yml, scripts/capture-xterm.sh]
+    branches: [main, feat/perfect-harness-v2-tui-windows]
   workflow_dispatch:
 permissions:
   contents: read
@@ -20,7 +19,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Install explicit capture dependencies
-        run: sudo apt-get update && sudo apt-get install -y xvfb xterm xdotool imagemagick fonts-dejavu-core
+        run: sudo apt-get update && sudo apt-get install -y xvfb xterm xdotool imagemagick fonts-dejavu-core x11-utils
       - run: xvfb-run -a -s '-screen 0 1440x1000x24' bash scripts/capture-xterm.sh
       - uses: actions/upload-artifact@v4
         if: always()

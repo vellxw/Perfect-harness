@@ -21,7 +21,7 @@ jobs:
       - name: Complete approval readability and validate real source
         run: |
           node scripts/finish-v2-source.mjs
-          npx --no-install prettier --write src/ui/tui/app.tsx src/ui/tui/approval.tsx tests/tui/approval.test.tsx tests/tui/secrets.test.tsx
+          npx --no-install prettier --write src/ui/tui/app.tsx src/ui/tui/approval.tsx tests/tui/approval.test.tsx tests/tui/secrets.test.tsx tests/tui/ipc.test.ts
           npm run typecheck
           npm run lint
           npm test
@@ -34,13 +34,13 @@ jobs:
       - name: Capture actual xterm window
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb xterm xdotool imagemagick fonts-dejavu-core
+          sudo apt-get install -y xvfb xterm xdotool imagemagick fonts-dejavu-core x11-utils
           xvfb-run -a -s '-screen 0 1440x1000x24' bash scripts/capture-xterm.sh docs/screenshots/linux-desktop
       - name: Commit only validated source and generated public assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          git add -- src/ui/tui/app.tsx src/ui/tui/approval.tsx tests/tui/approval.test.tsx tests/tui/secrets.test.tsx assets/brand docs/screenshots docs/performance
+          git add -- src/ui/tui/app.tsx src/ui/tui/approval.tsx tests/tui/approval.test.tsx tests/tui/secrets.test.tsx tests/tui/ipc.test.ts assets/brand docs/screenshots docs/performance
           git diff --cached --check
           if git diff --cached --quiet; then exit 0; fi
           git config user.name 'Perfect Harness Publisher'
