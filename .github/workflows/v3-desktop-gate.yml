@@ -1,0 +1,56 @@
+name: Contrato WinApp escritorio (temporal)
+on:
+  push:
+    branches: [feat/perfect-harness-v3-integraciones]
+    paths: [.github/workflows/v3-desktop-gate.yml]
+permissions:
+  contents: read
+jobs:
+  desktop:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    env:
+      WINAPP_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Descargar la versión oficial fijada y verificar integridad
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory test-results/desktop-contract -Force | Out-Null
+          Invoke-WebRequest https://github.com/microsoft/winappCli/releases/download/v0.6.0/winappcli-x64.zip -OutFile "$env:RUNNER_TEMP/winapp.zip"
+          if((Get-FileHash "$env:RUNNER_TEMP/winapp.zip" -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'f6dc42e3b4e4709c8f617003008e2cfdd9a51735e04e7170d60edda258db78a8'){throw 'Checksum incorrecto'}
+          Expand-Archive "$env:RUNNER_TEMP/winapp.zip" "$env:RUNNER_TEMP/winapp"
+          Get-ChildItem "$env:RUNNER_TEMP/winapp" -Recurse | Select-Object FullName,Length | Format-Table
+          $exe=(Get-ChildItem "$env:RUNNER_TEMP/winapp" -Recurse -Filter winapp.exe | Select-Object -First 1).FullName
+          if(-not $exe){throw 'Ejecutable oficial no encontrado'}
+          "WINAPP_BINARY=$exe" | Out-File $env:GITHUB_ENV -Append
+          & $exe --version
+          & $exe ui --help
+      - name: Probar UIA real contra una ventana sintética
+        shell: pwsh
+        run: |
+          $csc=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
+          & $csc /nologo /target:winexe /platform:x64 "/out:$env:RUNNER_TEMP/PerfectDesktopFixture.exe" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll tests/windows/DesktopFixture.cs
+          if($LASTEXITCODE -ne 0){throw 'No compiló la ventana de prueba'}
+          $p=Start-Process "$env:RUNNER_TEMP/PerfectDesktopFixture.exe" -PassThru
+          try {
+            for($i=0;$i -lt 40;$i++){Start-Sleep -Milliseconds 200;$p.Refresh();if($p.MainWindowHandle -ne 0){break}}
+            $hwnd=$p.MainWindowHandle.ToInt64()
+            if($hwnd -eq 0){throw 'Sin ventana de prueba'}
+            & $env:WINAPP_BINARY ui status -w $hwnd --json | Tee-Object test-results/desktop-contract/status.json
+            & $env:WINAPP_BINARY ui inspect -w $hwnd --depth 5 --json | Tee-Object test-results/desktop-contract/inspect.json
+            & $env:WINAPP_BINARY ui set-value Mensaje 'Prueba real: español ñ' -w $hwnd --json | Tee-Object test-results/desktop-contract/type.json
+            & $env:WINAPP_BINARY ui invoke Aplicar -w $hwnd --json | Tee-Object test-results/desktop-contract/invoke.json
+            & $env:WINAPP_BINARY ui inspect -w $hwnd --depth 5 --json | Tee-Object test-results/desktop-contract/after.json
+            & $env:WINAPP_BINARY ui screenshot -w $hwnd --output "$pwd/test-results/desktop-contract/window.png" --json | Tee-Object test-results/desktop-contract/screenshot.json
+            if($LASTEXITCODE -ne 0){throw 'Fallo en el contrato de escritorio'}
+          } finally {Stop-Process -Id $p.Id -ErrorAction SilentlyContinue}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: winapp-desktop-contract
+          path: test-results/desktop-contract
+          retention-days: 7
