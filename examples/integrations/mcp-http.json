@@ -1,0 +1,20 @@
+{
+  "id": "mi-servidor",
+  "title": "Servidor MCP revisado",
+  "kind": "mcp",
+  "enabled": false,
+  "roles": ["general"],
+  "dataClass": "private",
+  "transport": {
+    "type": "http",
+    "url": "https://example.invalid/mcp",
+    "bearerEnv": "PERFECT_MI_SERVICIO_TOKEN",
+    "headers": {},
+    "allowLoopback": false
+  },
+  "tools": {"consultar": "read", "proponer_cambio": "write"},
+  "resourcePrefixes": ["docs://manual/publico/"],
+  "maxCallsPerRun": 30,
+  "timeoutMs": 30000,
+  "approvalTimeoutMs": 600000
+}

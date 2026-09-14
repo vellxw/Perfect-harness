@@ -30,6 +30,11 @@ import {
   SecretEntry,
   TopBar,
 } from "./components.js";
+import {
+  integrationCommand,
+  integrationRowIntent,
+  type IntegrationIntent,
+} from "./integration-view.js";
 import { glass as g, roles, stateColor, stateIcon } from "./theme/tokens.js";
 import {
   commands,
@@ -59,6 +64,7 @@ export interface AppProps {
   openExternal?: (path: string) => Promise<void>;
 }
 const screens: Screen[] = [
+  "integrations",
   "agents",
   "plan",
   "tasks",
@@ -137,9 +143,11 @@ export function App({
           notify(message.message);
           if (message.content !== undefined)
             showDocument(
-              message.operation
-                ? "Evidencia"
-                : "Cambios de la versión candidata",
+              message.operation === "integration"
+                ? "Integraciones · catálogo y permisos"
+                : message.operation
+                  ? "Evidencia"
+                  : "Cambios de la versión candidata",
               message.content,
               message.path,
             );
@@ -180,6 +188,16 @@ export function App({
       client.dispatch({ type: "doctor", online: false });
     }
   }, [s.connected, client, initialScreen, s.demo, s.preferences.ui.onboarded]);
+  const pendingIntegrationCount =
+    s.integrations?.pending.filter((p) => p.state === "pending").length ?? 0;
+  const lastPendingCount = useRef(0);
+  useEffect(() => {
+    if (pendingIntegrationCount > lastPendingCount.current)
+      notify(
+        "Hay una acción externa esperando tu permiso. Abrí /integraciones para revisar sus argumentos.",
+      );
+    lastPendingCount.current = pendingIntegrationCount;
+  }, [pendingIntegrationCount, notify]);
   const paletteOpen = quick || (query.startsWith("/") && !query.includes(" "));
   const palette = useMemo(
     () =>
@@ -253,8 +271,37 @@ export function App({
       body: `Los mensajes de Contributor pueden usarse para entrenamiento. Habilitalo solo para código público que tengas permiso de compartir. Los secretos y proyectos confidenciales siguen prohibidos.\n\nCarpeta:\n${s.workspace}\n\nEscribí COMPARTIR para autorizar esta carpeta. Usá /contribuir revocar para revocar el permiso.`,
       action: { type: "contributor", allow: true },
     });
+  const applyIntegrationIntent = (intent: IntegrationIntent) => {
+    if (intent.notice) notify(intent.notice);
+    if (intent.composer !== undefined) {
+      navigate("home");
+      setFocus("composer");
+      setComposer(intent.composer);
+    }
+    if (intent.phrase && intent.title && intent.body && intent.action)
+      setConfirmation({
+        title: intent.title,
+        body: intent.body,
+        phrase: intent.phrase,
+        action: intent.action,
+      });
+    else if (intent.action) {
+      mutate(intent.action);
+      if (
+        intent.action.type === "integration" &&
+        intent.action.action.command !== "login"
+      )
+        navigate("integrations");
+    }
+  };
   const command = (name: string, rest = "") => {
     name = canonicalCommand(name);
+    const integrationIntent = integrationCommand(name, rest, s);
+    if (integrationIntent) {
+      setQuick(false);
+      applyIntegrationIntent(integrationIntent);
+      return;
+    }
     if (name === "status" || name === "home") {
       navigate("home");
       setFocus("composer");
@@ -446,6 +493,13 @@ export function App({
     } else command("goal", value);
   };
   const activate = (row: Row | undefined) => {
+    if (row && screen === "integrations") {
+      const intent = integrationRowIntent(row.id, s);
+      if (intent) {
+        applyIntegrationIntent(intent);
+        return;
+      }
+    }
     if (!row) return;
     if (screen === "projects") {
       mutate({ type: "select", goalId: row.id });

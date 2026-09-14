@@ -28,6 +28,7 @@ import type { Goal } from "../domain/model.js";
 import { Blocked, id } from "../domain/util.js";
 import { valueLabel } from "../i18n/es.js";
 import { humanMessage } from "../i18n/messages.js";
+import { IntegrationAdmin } from "../integrations/admin.js";
 import { readEvidence } from "../tools/evidence.js";
 import {
   UiActionSchema,
@@ -43,6 +44,7 @@ import { snapshot } from "./snapshot.js";
 /** One engine worker, no TCP server. The UI receives projections and sends validated user intents. */
 export class PresentationEngine {
   readonly store: SqliteStore;
+  readonly integrations: IntegrationAdmin;
   readonly home: string;
   private workspace: string;
   private selected?: string;
@@ -68,11 +70,16 @@ export class PresentationEngine {
     this.home = home;
     this.workspace = workspace;
     this.store = new SqliteStore(join(home, "state.sqlite"));
+    this.integrations = new IntegrationAdmin(home);
     this.unsubscribe = onDatabaseChange(join(home, "state.sqlite"), () =>
       this.wake(),
     );
     this.watcher = watch(home, (_event, name) => {
-      if (name?.startsWith("state.sqlite")) this.wake();
+      if (
+        name?.startsWith("state.sqlite") ||
+        name?.startsWith("integrations.sqlite")
+      )
+        this.wake();
     });
   }
   static async create(
@@ -118,14 +125,21 @@ export class PresentationEngine {
   private publish(force = false): void {
     if (this.closing) return;
     const state = snapshot(
-        this.store,
-        this.workspace,
-        this.preferences,
-        this.selected,
-        Boolean(this.active),
-        this.diagnostics,
-      ),
-      serialized = JSON.stringify(state);
+      this.store,
+      this.workspace,
+      this.preferences,
+      this.selected,
+      Boolean(this.active),
+      this.diagnostics,
+    );
+    const integrationState = this.integrations.snapshot(this.workspace);
+    if (
+      integrationState.connections.length ||
+      integrationState.pending.length ||
+      integrationState.windows.length
+    )
+      state.integrations = integrationState;
+    const serialized = JSON.stringify(state);
     if (force || serialized !== this.lastPayload) {
       this.lastPayload = serialized;
       this.send({ type: "snapshot", snapshot: state });
@@ -226,6 +240,24 @@ export class PresentationEngine {
         path: string | undefined,
         operation: string | undefined;
       switch (action.type) {
+        case "integration": {
+          if (action.action.command === "login") {
+            this.idle();
+            this.integrations.credentialKey(this.workspace, action.action.id);
+            void this.authenticateIntegration(action.action.id);
+            message = "Ingresá la credencial en el campo enmascarado";
+          } else {
+            const result = await this.integrations.perform(
+              this.workspace,
+              action.action,
+              AbortSignal.timeout(60000),
+            );
+            message = result.message;
+            content = result.content;
+            operation = "integration";
+          }
+          break;
+        }
         case "goal": {
           this.idle();
           const goal = await createGoal(
@@ -521,6 +553,56 @@ export class PresentationEngine {
       this.publish();
     }
   }
+  private async authenticateIntegration(serverId: string): Promise<void> {
+    const controller = new AbortController();
+    this.authAbort = controller;
+    const workspace = this.workspace,
+      promptId = id("integration-secret");
+    try {
+      const value = await new Promise<string>((resolveAnswer, reject) => {
+        const cancel = () => {
+          this.answers.delete(promptId);
+          reject(new Error("Conexión cancelada"));
+        };
+        controller.signal.addEventListener("abort", cancel, { once: true });
+        this.answers.set(promptId, (value) => {
+          controller.signal.removeEventListener("abort", cancel);
+          resolveAnswer(value);
+        });
+        this.send({
+          type: "auth",
+          provider: serverId,
+          promptId,
+          secret: true,
+          message:
+            "Ingresá una credencial con los permisos mínimos del servicio. Se guarda solo en este equipo (DPAPI en Windows; archivo privado en Linux). No se envía a un modelo ni se incluye en el repositorio.",
+        });
+      });
+      controller.signal.throwIfAborted();
+      await this.integrations.credential(workspace, serverId, value);
+      this.send({
+        type: "auth",
+        provider: serverId,
+        message:
+          "Credencial guardada. Probá la conexión y revisá su catálogo en /integraciones.",
+        done: true,
+      });
+    } catch (error) {
+      this.send({
+        type: "auth",
+        provider: serverId,
+        message:
+          error instanceof Blocked
+            ? humanMessage(text(error))
+            : "No se guardó la credencial o se canceló la conexión.",
+        done: true,
+      });
+    } finally {
+      this.answers.delete(promptId);
+      this.authAbort = undefined;
+      this.publish();
+    }
+  }
   private async authenticate(provider: string): Promise<void> {
     const controller = new AbortController();
     this.authAbort = controller;
@@ -635,6 +717,7 @@ export class PresentationEngine {
     this.watcher?.close();
     this.unsubscribe();
     if (this.timer) clearTimeout(this.timer);
+    this.integrations.close();
     this.store.close();
   }
 }

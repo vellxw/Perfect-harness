@@ -348,6 +348,7 @@ export class McpConnection {
     directory: string,
     signal: AbortSignal,
     timeout = 30000,
+    credentials: Record<string, string> = {},
   ): Promise<McpConnection> {
     signal.throwIfAborted();
     const connection = new McpConnection();
@@ -363,7 +364,10 @@ export class McpConnection {
         const command = await realpath(config.command);
         if (!(await lstat(command)).isFile())
           throw new Blocked("MCP_EXECUTABLE", "El ejecutable no es un archivo");
-        const env = cleanEnvironment(directory, config.envRefs);
+        const env = cleanEnvironment(directory, config.envRefs, {
+          ...process.env,
+          ...credentials,
+        });
         const stdio = new StdioClientTransport({
           command,
           args: config.args,
@@ -378,7 +382,7 @@ export class McpConnection {
       } else {
         const url = validateEndpoint(config);
         const token = config.bearerEnv
-          ? process.env[config.bearerEnv]
+          ? (credentials[config.bearerEnv] ?? process.env[config.bearerEnv])
           : undefined;
         if (config.bearerEnv && (!token || /[\r\n\0]/.test(token)))
           throw new Blocked(
@@ -419,7 +423,11 @@ export class McpConnection {
       seen = new Set<string>(),
       cursors = new Set<string>();
     let cursor: string | undefined;
-    for (let page = 0; page < 20; page++) {
+    for (
+      let page = 0;
+      page < 20 && this.client.getServerCapabilities()?.tools;
+      page++
+    ) {
       const result = await this.client.listTools(cursor ? { cursor } : {}, {
         signal,
         timeout,

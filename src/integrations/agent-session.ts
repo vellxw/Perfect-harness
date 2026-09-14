@@ -15,6 +15,7 @@ import {
   browserEffect,
   type BrowserTool,
 } from "./browser/tools.js";
+import { transportCredentials } from "./credentials.js";
 import {
   DESKTOP_TOOLS,
   desktopEffect,
@@ -230,6 +231,10 @@ export class AgentIntegrations implements RunIntegrations {
         join(this.home, "integrations-runtime", this.scope.runId, c.id),
         this.signal,
         c.timeoutMs,
+        await transportCredentials(
+          this.home,
+          c.kind === "github" ? githubTransport(c) : c.transport,
+        ),
       );
       this.wires.set(c.id, connection);
     }
@@ -320,6 +325,7 @@ export class AgentIntegrations implements RunIntegrations {
       await this.registry.wait(op, this.signal, () => {
         this.record(server);
       });
+      if (remote) remote = await this.wire(this.record(server));
       this.registry.claim(op.id, op.digest);
       const start = performance.now();
       try {
@@ -469,6 +475,10 @@ export async function probeIntegration(
       join(home, "integrations-runtime", "diagnostics", serverId),
       signal,
       config.timeoutMs,
+      await transportCredentials(
+        home,
+        config.kind === "github" ? githubTransport(config) : config.transport,
+      ),
     );
     registry.observeCatalog(
       workspace,

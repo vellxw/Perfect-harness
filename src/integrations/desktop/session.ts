@@ -24,6 +24,7 @@ import {
   type WindowGrant,
 } from "../types.js";
 import { boundedResult, cleanEnvironment } from "../wire.js";
+import { assertNonPasswordControl } from "./password.js";
 
 const target = {
   snapshot: z.string().uuid(),
@@ -586,17 +587,13 @@ export class DesktopSession {
         "DESKTOP_STALE_ELEMENT",
         "El control cambió, está deshabilitado o no es visible",
       );
-    const properties = (await this.winapp([
-      "get-property",
-      element.selector,
-      "--property",
-      "IsPassword",
-    ])) as { properties?: Record<string, string | null> };
-    if (String(properties.properties?.IsPassword).toLowerCase() !== "false")
-      throw new Blocked(
-        "DESKTOP_PASSWORD_DENIED",
-        "No se pudo descartar un campo de contraseña; la interacción se bloqueó",
-      );
+    await assertNonPasswordControl(
+      (await desktopBinaries()).guard,
+      this.work,
+      this.grant,
+      element,
+      this.signal,
+    );
     let command: string[];
     if (tool === "desktop_invoke") command = ["invoke", element.selector];
     else if (tool === "desktop_click") command = ["click", element.selector];

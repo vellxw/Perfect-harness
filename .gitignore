@@ -12,3 +12,8 @@ playwright-report/
 *.tgz
 *.log
 auth.json
+
+assets/windows/desktop/*.exe
+assets/windows/desktop/*.dll
+assets/windows/desktop/*LICENSE*
+assets/windows/desktop/provenance.json

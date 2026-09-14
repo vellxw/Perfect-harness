@@ -1,0 +1,12 @@
+{
+  "id": "github",
+  "title": "GitHub oficial",
+  "kind": "github",
+  "enabled": true,
+  "roles": ["planner", "general", "backend", "integrator", "oracle"],
+  "repositories": ["vellxw/Perfect-harness"],
+  "tokenEnv": "PERFECT_GITHUB_TOKEN",
+  "writeMode": "deny",
+  "branchPrefix": "perfect/",
+  "dataClass": "private"
+}
