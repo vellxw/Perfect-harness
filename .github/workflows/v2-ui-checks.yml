@@ -2,9 +2,13 @@ name: V2 UI and Windows checks
 on:
   push:
     branches: [feat/perfect-harness-v2-tui-windows]
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: v2-native-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   native:
     strategy:
@@ -21,28 +25,21 @@ jobs:
         with:
           node-version: '26.4.0'
       - run: npm ci
-      - run: node scripts/v2-ui-adjustments.mjs
       - name: Typecheck
-        id: types
-        continue-on-error: true
         run: npm run typecheck
       - name: Lint
-        id: lint
-        continue-on-error: true
         run: npm run lint
+      - name: Schema synchronization
+        run: npm run check:config
       - name: Core and native UI tests
-        id: tests
-        continue-on-error: true
         run: npm test
         env:
           PERFECT_ARTIFACT_DIR: test-results/tui
       - name: Build
-        id: build
-        continue-on-error: true
         run: npm run build
+      - name: Clean package installation
+        run: npm run test:package
       - name: Capture actual native frames and generate icon assets
-        id: captures
-        continue-on-error: true
         run: |
           node scripts/build-brand.mjs
           node --experimental-ffi scripts/capture-tui.mjs
@@ -53,7 +50,4 @@ jobs:
           path: |
             test-results/tui
             assets/brand
-          retention-days: 7
-      - name: Require all checks
-        if: steps.types.outcome != 'success' || steps.lint.outcome != 'success' || steps.tests.outcome != 'success' || steps.build.outcome != 'success' || steps.captures.outcome != 'success'
-        run: exit 1
+          retention-days: 14

@@ -2,10 +2,12 @@ name: Windows package
 on:
   push:
     branches: [feat/perfect-harness-v2-tui-windows]
-    paths: [.github/workflows/v2-windows-package.yml, src/windows/**, build/windows/**, scripts/package-windows.ps1, scripts/smoke-windows.ps1]
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: v2-windows-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   windows:
     runs-on: windows-2025
@@ -18,7 +20,6 @@ jobs:
         with:
           node-version: '26.4.0'
       - run: npm ci
-      - run: node scripts/v2-repair-01.mjs
       - name: Build complete installer with bundled Node runtime
         shell: pwsh
         run: |
@@ -39,4 +40,5 @@ jobs:
             release/*Setup*.exe
             release/SHA256SUMS.txt
             release/Perfect-Harness-Windows-x64/package-integrity.json
+          compression-level: 0
           retention-days: 14
