@@ -2,7 +2,7 @@ name: V4 UI source gate (temporary)
 on:
   push:
     branches: [feat/perfect-harness-v4-skills-studios]
-    paths: [scripts/v4-wire-ui.mjs, .github/workflows/v4-ui-source-gate.yml]
+    paths: [scripts/v4-wire-ui.mjs, scripts/v4-prepare-ui.mjs, .github/workflows/v4-ui-source-gate.yml]
 permissions:
   contents: write
 jobs:
@@ -18,7 +18,7 @@ jobs:
         with:
           node-version: '26.4.0'
       - run: npm ci
-      - run: node scripts/v4-wire-ui.mjs
+      - run: node scripts/v4-prepare-ui.mjs
       - run: npm install --save-exact --ignore-scripts yaml@2.9.1
       - run: npx --no-install prettier --write src/skills src/cli/skills.ts src/cli/main.ts src/presentation/engine.ts src/presentation/protocol.ts src/ui/tui src/i18n/es.ts src/application/goals.ts src/integrations/wire.ts tests/skills
       - run: npm run typecheck
@@ -34,7 +34,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import pathlib,json,subprocess,base64,os
-          names=subprocess.check_output(['git','diff','--name-only'],text=True).splitlines();entries=[]
+          names=[n for n in subprocess.check_output(['git','diff','--name-only'],text=True).splitlines() if not n.startswith('scripts/')];entries=[]
           for name in names:
             assert name.startswith(('src/','tests/')) or name in ['package.json','package-lock.json']
             p=pathlib.Path(name);assert p.is_file() and not p.is_symlink()
