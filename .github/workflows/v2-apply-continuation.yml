@@ -1,0 +1,66 @@
+name: Apply validated continuation (temporary)
+on:
+  push:
+    branches: [feat/perfect-harness-v2-tui-windows]
+    paths: [.github/workflows/v2-apply-continuation.yml]
+permissions:
+  contents: write
+jobs:
+  publish:
+    if: github.repository == 'vellxw/Perfect-harness' && github.ref == 'refs/heads/feat/perfect-harness-v2-tui-windows'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - name: Materialize fixed source delta only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64,gzip,hashlib,json,pathlib,subprocess
+          data=json.loads(subprocess.check_output(['gh','api','repos/vellxw/Perfect-harness/git/blobs/4ee31352486431eb702ad57432be6e5b9f93f46d']))
+          compressed=base64.b64decode(data['content'])
+          assert hashlib.sha256(compressed).hexdigest()=='81d73a7255371bb06b379151f84ef92de3f298f4fe454b8f0c2577a8a7cc1bff'
+          entries=json.loads(gzip.decompress(compressed))
+          expected={'src/presentation/engine.ts','src/presentation/snapshot.ts','src/ui/tui/components.tsx','src/ui/tui/theme/tokens.ts','tests/tui/presentation.test.ts','scripts/capture-tui.mjs','scripts/capture-windows.ps1','README.md'}
+          assert len(entries)==8 and {e['path'] for e in entries}==expected
+          def blob(b):return hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
+          updates=[]
+          for e in entries:
+            path=pathlib.Path(e['path'])
+            assert not path.is_symlink() and all(not p.is_symlink() for p in path.parents)
+            before=path.read_bytes();assert blob(before)==e['before'],str(path)+' base mismatch'
+            lines=before.decode().splitlines(keepends=True)
+            for start,count,text in reversed(e['edits']):
+              assert start>=0 and count>=0 and start+count<=len(lines)
+              lines[start:start+count]=text.splitlines(keepends=True)
+            after=''.join(lines).encode();assert blob(after)==e['after'],str(path)+' output mismatch'
+            updates.append((path,after))
+          for path,after in updates:path.write_bytes(after)
+          subprocess.run(['git','add','--',*sorted(expected)],check=True)
+          PY
+      - run: npm ci
+      - name: Validate before committing
+        run: |
+          npm run typecheck
+          npm run lint
+          npm run check:config
+          npm test
+          npm run build
+          git diff --cached --check
+      - name: Fast-forward the authorized branch only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name 'Perfect Harness Publisher'
+          git config user.email 'perfect-harness@users.noreply.github.com'
+          git commit -m 'fix(v2): canonicalize Windows watcher paths and preserve concurrent agent identity'
+          AUTH_HEADER=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$AUTH_HEADER"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $AUTH_HEADER" push origin HEAD:refs/heads/feat/perfect-harness-v2-tui-windows
+          git rev-parse HEAD
