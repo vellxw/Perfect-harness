@@ -31,13 +31,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           python3 - <<'PY'
-          import os,json,time,base64,hashlib,pathlib,subprocess,urllib.request,zipfile,io
+          import os,json,time,base64,hashlib,pathlib,subprocess,urllib.request,urllib.parse,zipfile,io
           repo='vellxw/Perfect-harness';head=os.environ['GITHUB_SHA']
+          class CleanRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self,req,fp,code,msg,headers,newurl):
+              target_url=urllib.parse.urlparse(newurl)
+              if target_url.scheme!='https':raise RuntimeError('Non-HTTPS artifact redirect rejected')
+              target=super().redirect_request(req,fp,code,msg,headers,newurl)
+              if target and target_url.netloc!=urllib.parse.urlparse(req.full_url).netloc:
+                target.remove_header('Authorization')
+              return target
+          opener=urllib.request.build_opener(CleanRedirect())
           def api(path,body=None,binary=False):
             url='https://api.github.com/repos/'+repo+'/'+path
             data=None if body is None else json.dumps(body).encode()
-            req=urllib.request.Request(url,data=data,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json'})
-            with urllib.request.urlopen(req,timeout=60) as response:result=response.read()
+            req=urllib.request.Request(url,data=data,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json','Cache-Control':'no-cache'})
+            with opener.open(req,timeout=60) as response:result=response.read()
             return result if binary else json.loads(result)
           records=[];deadline=time.monotonic()+720
           for job,folder,names in [
