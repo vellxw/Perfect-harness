@@ -1,7 +1,8 @@
-import { McpServer } from "@modelcontextprotocol/server";
+import { McpServer, fromJsonSchema } from "@modelcontextprotocol/server";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { chromium, type Browser, type Page, type ElementHandle } from "playwright";
 import { randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import { BrowserSchemas, BROWSER_TOOLS, type BrowserTool } from "./tools.js";
 
 /** Runs only in the dedicated browser container. It never sees project files or credentials. */
@@ -10,7 +11,7 @@ export class InteractiveBrowser {
   private page?:Page;
   private snapshotId="";
   private observedAt=0;
-  private elements=new Map<string,{handle:ElementHandle;signature:string}>();
+  private elements=new Map<string,{handle:ElementHandle<Element>;signature:string}>();
   private messages:{type:string;text:string}[]=[];
   private actions=0;
   constructor(private origin:string,private maxActions=100){
@@ -26,12 +27,13 @@ export class InteractiveBrowser {
     this.page.on("console",m=>{this.messages.push({type:m.type(),text:m.text().slice(0,2000)});if(this.messages.length>200)this.messages.shift();});
     this.page.on("pageerror",e=>{this.messages.push({type:"pageerror",text:e.message.slice(0,2000)});if(this.messages.length>200)this.messages.shift();});
     this.page.on("dialog",dialog=>{void dialog.dismiss();});
+    this.page.on("download",download=>{void download.cancel();});
     this.page.setDefaultTimeout(10000);
     return this.navigate(path);
   }
   private requirePage():Page{if(!this.page||this.page.isClosed())throw Error("Navegador cerrado; iniciá otra sesión");return this.page;}
   private mutate():void{if(++this.actions>this.maxActions)throw Error("BROWSER_ACTION_LIMIT: límite de interacciones agotado");}
-  private signature(handle:ElementHandle):Promise<string>{return handle.evaluate(e=>JSON.stringify({tag:e.tagName,type:e.getAttribute("type"),text:(e.textContent??"").slice(0,160),name:e.getAttribute("aria-label")??e.getAttribute("name"),href:e.getAttribute("href"),disabled:e.hasAttribute("disabled")}));}
+  private signature(handle:ElementHandle<Element>):Promise<string>{return handle.evaluate(e=>JSON.stringify({tag:e.tagName,type:e.getAttribute("type"),text:(e.textContent??"").slice(0,160),name:e.getAttribute("aria-label")??e.getAttribute("name"),href:e.getAttribute("href"),disabled:e.hasAttribute("disabled")}));}
   async snapshot():Promise<unknown>{
     const page=this.requirePage();
     for(const e of this.elements.values())await e.handle.dispose().catch(()=>{});
@@ -48,7 +50,7 @@ export class InteractiveBrowser {
     const dimensions=await page.evaluate(()=>({viewport:{width:innerWidth,height:innerHeight},scrollWidth:document.documentElement.scrollWidth,scrollHeight:document.documentElement.scrollHeight}));
     return {snapshot:this.snapshotId,url:page.url(),title:await page.title(),...dimensions,elements:refs,accessibility:(await page.locator("body").ariaSnapshot()).slice(0,16000),actions:this.actions,maxActions:this.maxActions,untrusted:true};
   }
-  private async element(snapshot:string,ref:string):Promise<ElementHandle>{
+  private async element(snapshot:string,ref:string):Promise<ElementHandle<Element>>{
     if(snapshot!==this.snapshotId||Date.now()-this.observedAt>90000)throw Error("BROWSER_STALE_SNAPSHOT: observá nuevamente antes de actuar");
     const item=this.elements.get(ref);if(!item||!await item.handle.evaluate(e=>e.isConnected)||await this.signature(item.handle)!==item.signature)throw Error("BROWSER_STALE_ELEMENT: el elemento cambió desde la observación");
     return item.handle;
@@ -84,17 +86,19 @@ export class InteractiveBrowser {
 export async function serveBrowser():Promise<void>{
   const origin=process.env.PERFECT_BROWSER_ORIGIN;
   if(!origin)throw Error("Este servidor solo se inicia mediante el navegador aislado de Perfect");
+  let ready=false;
+  for(let n=0;n<60;n++){try{await fetch(origin,{signal:AbortSignal.timeout(1000)});ready=true;break;}catch{await delay(300);}}
+  if(!ready)throw Error("BROWSER_SERVER_NOT_READY: la aplicación no respondió dentro del límite");
   const browser=new InteractiveBrowser(origin,Number(process.env.PERFECT_BROWSER_MAX_ACTIONS??100));
   const server=new McpServer({name:"perfect-isolated-browser",version:"0.3.0"});
   for(const tool of BROWSER_TOOLS.filter(t=>t.name!=="browser_open")){
     const name=tool.name as BrowserTool;
-    server.registerTool(name,{description:tool.description,inputSchema:BrowserSchemas[name]},async(args)=>{
+    server.registerTool(name,{description:tool.description,inputSchema:fromJsonSchema(tool.inputSchema)},async(args:unknown)=>{
       try{return await browser.call(name,args);}catch(error){return {isError:true,content:[{type:"text" as const,text:error instanceof Error?error.message:String(error)}]};}
     });
   }
   await browser.start(Number(process.env.PERFECT_BROWSER_WIDTH??1280),Number(process.env.PERFECT_BROWSER_HEIGHT??800),process.env.PERFECT_BROWSER_PATH??"/");
   const transport=new StdioServerTransport();
-  transport.onclose=()=>{void browser.close().finally(()=>process.exit(0));};
   process.on("SIGTERM",()=>{void browser.close().finally(()=>process.exit(0));});
   process.stdin.on("end",()=>{void browser.close().finally(()=>process.exit(0));});
   await server.connect(transport);

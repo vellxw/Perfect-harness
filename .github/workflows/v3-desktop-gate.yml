@@ -23,17 +23,16 @@ jobs:
           Invoke-WebRequest https://github.com/microsoft/winappCli/releases/download/v0.6.0/winappcli-x64.zip -OutFile "$env:RUNNER_TEMP/winapp.zip"
           if((Get-FileHash "$env:RUNNER_TEMP/winapp.zip" -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'f6dc42e3b4e4709c8f617003008e2cfdd9a51735e04e7170d60edda258db78a8'){throw 'Checksum incorrecto'}
           Expand-Archive "$env:RUNNER_TEMP/winapp.zip" "$env:RUNNER_TEMP/winapp"
-          Get-ChildItem "$env:RUNNER_TEMP/winapp" -Recurse | Select-Object FullName,Length | Format-Table
           $exe=(Get-ChildItem "$env:RUNNER_TEMP/winapp" -Recurse -Filter winapp.exe | Select-Object -First 1).FullName
           if(-not $exe){throw 'Ejecutable oficial no encontrado'}
           "WINAPP_BINARY=$exe" | Out-File $env:GITHUB_ENV -Append
           & $exe --version
-          & $exe ui --help
       - name: Probar UIA real contra una ventana sintética
         shell: pwsh
         run: |
           $csc=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
-          & $csc /nologo /target:winexe /platform:x64 "/out:$env:RUNNER_TEMP/PerfectDesktopFixture.exe" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll tests/windows/DesktopFixture.cs
+          $source=(Resolve-Path tests/windows/DesktopFixture.cs).Path
+          & $csc /nologo /target:winexe /platform:x64 "/out:$env:RUNNER_TEMP/PerfectDesktopFixture.exe" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll $source
           if($LASTEXITCODE -ne 0){throw 'No compiló la ventana de prueba'}
           $p=Start-Process "$env:RUNNER_TEMP/PerfectDesktopFixture.exe" -PassThru
           try {
