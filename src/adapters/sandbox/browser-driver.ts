@@ -1,8 +1,10 @@
+// .app is HSTS-preloaded in Chromium. Use a reserved testing hostname instead.
+export const SANDBOX_APP_HOST = "perfect-app.test";
 export const browserDriver = String.raw`
 import {chromium} from 'playwright';
 import {readFile,writeFile} from 'node:fs/promises';
 const spec=JSON.parse(await readFile('/spec.json','utf8'));
-const base='http://app:'+spec.port,failures=[],captures=[],comparisons=[],measurements=[];
+const base='http://${SANDBOX_APP_HOST}:'+spec.port,failures=[],captures=[],comparisons=[],measurements=[];
 let ready=false;
 for(let n=0;n<120;n++){
   try{const response=await fetch(base+spec.readyPath,{signal:AbortSignal.timeout(1000)});if(response.ok){ready=true;break;}}catch{}

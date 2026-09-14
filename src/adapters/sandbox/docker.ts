@@ -28,6 +28,7 @@ import { copySnapshot } from "../git/workspace.js";
 import { relativePath, safePath } from "../../tools/paths.js";
 import { Semaphore } from "../../application/semaphore.js";
 import { browserDriver, commandDriver, remotionDriver } from "./drivers.js";
+import { SANDBOX_APP_HOST } from "./browser-driver.js";
 const require = createRequire(import.meta.url);
 
 export function confinementArgs(
@@ -307,7 +308,7 @@ export class DockerRunner implements ExecutionRunner {
         const server = await processRun("docker", [
           ...args,
           "--network-alias",
-          "app",
+          SANDBOX_APP_HOST,
           ...this.mounts(serverDir, request, true, false),
           this.config.sandbox.image,
           "node",
