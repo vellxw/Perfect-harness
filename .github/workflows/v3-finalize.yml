@@ -29,16 +29,15 @@ jobs:
           for(const file of files){for(const edit of service.organizeImports({type:'file',fileName:file},{},{})){let s=fs.readFileSync(edit.fileName,'utf8');for(const c of edit.textChanges.toReversed())s=s.slice(0,c.span.start)+c.newText+s.slice(c.span.start+c.span.length);fs.writeFileSync(edit.fileName,s);}}service.dispose();
           execFileSync(process.execPath,['node_modules/prettier/bin/prettier.cjs','--write',...files],{stdio:'inherit'});
           JS
-      - name: Comprobar regresiones y seguridad antes de publicar
-        run: |
-          npm run typecheck
-          npm run lint
-          npm run check:config
-          npm run build
-          npm test
-          npm run test:package
-          npm run audit:production
-          git diff --check
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run check:config
+      - run: npm run build
+      - run: npm test
+      - run: npm run test:package
+      - run: npm run audit:production
+      - name: Revisar espacios de código sin alterar las celdas vacías de las referencias TUI
+        run: git diff --check -- . ':!docs/screenshots/es/*.txt'
       - name: Preparar árbol exacto validado sin modificar ramas
         env:
           GH_TOKEN: ${{ github.token }}
@@ -53,6 +52,7 @@ jobs:
             entries.append({'path':name,'mode':'100644','type':'blob','sha':response['sha']})
           tree=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/vellxw/Perfect-harness/git/trees','--input','-'],input=json.dumps({'base_tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),'tree':entries}),text=True))['sha']
           result={'parent':os.environ['GITHUB_SHA'],'tree':tree,'files':changed};pathlib.Path('test-results').mkdir(exist_ok=True);pathlib.Path('test-results/final-tree.json').write_text(json.dumps(result,indent=2));print(json.dumps(result,indent=2))
+          print('VERIFIED_TREE='+tree)
           PY
       - uses: actions/upload-artifact@v4
         if: always()
