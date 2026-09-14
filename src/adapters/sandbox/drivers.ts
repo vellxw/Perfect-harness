@@ -1,6 +1,6 @@
-export {browserDriver} from './browser-driver.js';
+export { browserDriver } from "./browser-driver.js";
 /** Trusted sources run inside the sandbox, never in the credential-bearing control process. */
-export const commandDriver=String.raw`
+export const commandDriver = String.raw`
 import {cp,readFile,access,symlink} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {resolve} from 'node:path';
@@ -11,7 +11,7 @@ const cwd=resolve('/workspace',spec.cwd??'.');if(cwd!=='/workspace'&&!cwd.starts
 const child=spawn(spec.executable,spec.args,{cwd,stdio:'inherit',env:{...process.env,HOME:'/tmp',PORT:String(spec.port??3000)}});
 child.on('error',error=>{console.error(error.message);process.exitCode=127;});child.on('exit',code=>{process.exitCode=code??137;});process.on('SIGTERM',()=>child.kill('SIGTERM'));
 `;
-export const remotionDriver=String.raw`
+export const remotionDriver = String.raw`
 import {cp,readFile,writeFile,access,symlink} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 const spec=JSON.parse(await readFile('/spec.json','utf8'));await cp('/input','/workspace',{recursive:true});

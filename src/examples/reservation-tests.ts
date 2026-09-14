@@ -1,5 +1,6 @@
-export const reservationGoal='Build a responsive reservation app with a native Node.js 24 HTTP API, SQLite persistence and protection against concurrent double booking. Preserve and pass the existing tests. Use the planner, a general worker, frontend specialist, backend specialist, independent Oracle review, browser verification and an evidence Judge. Serve on PORT (default 3000). The UI must let a visitor select an available slot, enter their name and reserve it; success text must include Reservation confirmed. No external dependencies are necessary.';
-export const reservationTests=String.raw`
+export const reservationGoal =
+  "Build a responsive reservation app with a native Node.js 24 HTTP API, SQLite persistence and protection against concurrent double booking. Preserve and pass the existing tests. Use the planner, a general worker, frontend specialist, backend specialist, independent Oracle review, browser verification and an evidence Judge. Serve on PORT (default 3000). The UI must let a visitor select an available slot, enter their name and reserve it; success text must include Reservation confirmed. No external dependencies are necessary.";
+export const reservationTests = String.raw`
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
@@ -11,7 +12,7 @@ const post=(url,body)=>fetch(url+'/api/reservations',{method:'POST',headers:{'co
 test('API validation, concurrent uniqueness and persistence after restart',async()=>{
   const dir=await mkdtemp(join(tmpdir(),'reservations-test-'));const database=join(dir,'state.sqlite');let app=await start(database);
   try{
-    const slots=await(await fetch(app.url+'/api/slots')).json();assert.ok(slots.length>=4);assert.ok(slots.every(s=>typeof s.id==='string'&&s.available===true));
+    const response=await fetch(app.url+'/api/slots');const slots=await response.json();const diagnostic=JSON.stringify({node:process.version,status:response.status,slots});assert.equal(response.status,200,diagnostic);assert.ok(Array.isArray(slots),diagnostic);assert.ok(slots.length>=4,diagnostic);assert.ok(slots.every(s=>typeof s.id==='string'&&s.available===true),diagnostic);
     assert.equal((await post(app.url,{slot:slots[0].id,name:''})).status,400);
     assert.equal((await post(app.url,{slot:'invalid',name:'Test Visitor'})).status,400);
     assert.equal((await post(app.url,{slot:slots[0].id,name:123})).status,400);

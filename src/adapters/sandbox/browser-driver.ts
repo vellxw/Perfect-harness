@@ -1,4 +1,4 @@
-export const browserDriver=String.raw`
+export const browserDriver = String.raw`
 import {chromium} from 'playwright';
 import {readFile,writeFile} from 'node:fs/promises';
 const spec=JSON.parse(await readFile('/spec.json','utf8'));

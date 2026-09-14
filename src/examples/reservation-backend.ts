@@ -1,4 +1,4 @@
-export const backendApp=String.raw`
+export const backendApp = String.raw`
 import {createServer} from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -32,7 +32,7 @@ export function createApp({database=':memory:'}={}){
   return{server,close:()=>new Promise((resolve,reject)=>{if(closed){resolve();return;}closed=true;server.close(error=>{db.close();error?reject(error):resolve();});})};
 }
 `;
-export const backendStart=String.raw`
+export const backendStart = String.raw`
 import {createApp} from './app.mjs';
 const app=createApp({database:process.env.DB_FILE??'/tmp/perfect-reservations.sqlite'});
 app.server.listen(Number(process.env.PORT??3000),'0.0.0.0',()=>console.log('Reservation server ready'));

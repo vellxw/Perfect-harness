@@ -3,12 +3,28 @@
   "version": "0.1.0",
   "description": "Evidence-driven local multi-agent orchestration on Pi SDK",
   "type": "module",
-  "engines": { "node": ">=24 <25" },
+  "engines": {
+    "node": ">=24 <25"
+  },
   "license": "MIT",
   "private": true,
-  "bin": { "perfect": "dist/cli/index.js" },
-  "exports": { ".": "./dist/index.js", "./pi-extension": "./dist/pi-extension/index.js" },
-  "files": ["dist", "docs", "examples", "perfect.config.example.json", "perfect.config.schema.json", "README.md", "SECURITY.md", "LICENSE"],
+  "bin": {
+    "perfect": "dist/cli/index.js"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./pi-extension": "./dist/pi-extension/index.js"
+  },
+  "files": [
+    "dist",
+    "docs",
+    "examples",
+    "perfect.config.example.json",
+    "perfect.config.schema.json",
+    "README.md",
+    "SECURITY.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
