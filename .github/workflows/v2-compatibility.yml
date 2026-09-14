@@ -1,0 +1,114 @@
+name: V2 compatibility gate
+on:
+  push:
+    branches: [feat/perfect-harness-v2-tui-windows]
+    paths: [.github/workflows/v2-compatibility.yml]
+permissions:
+  contents: read
+jobs:
+  linux-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Unmodified V1 baseline
+        run: |
+          npm ci
+          npm run typecheck
+          npm run lint
+          npm test
+          npm run build
+          mkdir -p /tmp/perfect-v2-development/runtime
+          cp "$(command -v node)" /tmp/perfect-v2-development/runtime/node24
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - name: Independent V2 dependencies, exact versions
+        run: |
+          mkdir -p /tmp/perfect-v2-packages
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const p=JSON.parse(fs.readFileSync('package.json','utf8'));
+          p.engines={node:'>=26.4 <27'};
+          delete p.dependencies['better-sqlite3'];
+          delete p.devDependencies['@types/better-sqlite3'];
+          Object.assign(p.dependencies,{'@opentui/core':'0.5.9','@opentui/react':'0.5.9','react':'19.2.0'});
+          Object.assign(p.devDependencies,{'@types/react':'19.2.0','@resvg/resvg-js':'2.6.2','esbuild':'0.25.9'});
+          fs.writeFileSync('/tmp/perfect-v2-packages/package.json',JSON.stringify(p,null,2)+'\n');
+          JS
+          cd /tmp/perfect-v2-packages
+          npm install
+          node --version
+          npm ls --depth=0
+      - name: Native renderer, React and SQLite contract
+        working-directory: /tmp/perfect-v2-packages
+        run: |
+          node --experimental-ffi --input-type=module <<'JS'
+          import {DatabaseSync} from 'node:sqlite';
+          import {createTestRenderer} from '@opentui/core/testing';
+          import {createRoot} from '@opentui/react';
+          import {createElement} from 'react';
+          import assert from 'node:assert/strict';
+          const db=new DatabaseSync(':memory:');db.exec('create table t(id text)');db.prepare('insert into t values(?)').run('ok');assert.equal(db.prepare('select id from t').get().id,'ok');db.close();
+          const test=await createTestRenderer({width:80,height:24});
+          const root=createRoot(test.renderer);root.render(createElement('text',null,'Perfect compatibility'));
+          await new Promise(r=>setTimeout(r,100));await test.renderOnce();
+          console.log(test.captureCharFrame());assert.match(test.captureCharFrame(),/Perfect compatibility/);
+          root.unmount();test.renderer.destroy();
+          console.log('NODE26_OPENTUI_REACT_SQLITE_PASS');
+          JS
+      - name: Export credential-free development source and runtime
+        if: always()
+        run: |
+          git archive HEAD | tar -x -C /tmp/perfect-v2-development
+          git bundle create /tmp/perfect-v2-development/history.bundle --all
+          git rev-parse HEAD > /tmp/perfect-v2-development/SOURCE_COMMIT
+          cp "$(command -v node)" /tmp/perfect-v2-development/runtime/node26
+          cp /tmp/perfect-v2-packages/package*.json /tmp/perfect-v2-development/runtime/
+          tar -czf /tmp/perfect-v2-development/dependencies-v1.tar.gz node_modules
+          tar -czf /tmp/perfect-v2-development/dependencies-v2.tar.gz -C /tmp/perfect-v2-packages node_modules
+          tar -czf /tmp/perfect-v2-development.tar.gz -C /tmp/perfect-v2-development .
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perfect-v2-development
+          path: /tmp/perfect-v2-development.tar.gz
+          retention-days: 3
+          compression-level: 0
+  windows-native-gate:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - name: Exact native runtime dependencies
+        shell: pwsh
+        run: |
+          '{"type":"module","dependencies":{"@opentui/core":"0.5.9","@opentui/react":"0.5.9","react":"19.2.0"}}' | Set-Content package.json
+          npm install
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Actual Windows renderer/SQLite test
+        shell: pwsh
+        run: |
+          @'
+          import assert from 'node:assert/strict';
+          import {DatabaseSync} from 'node:sqlite';
+          import {createTestRenderer} from '@opentui/core/testing';
+          import {createRoot} from '@opentui/react';
+          import {createElement} from 'react';
+          const db=new DatabaseSync(':memory:');db.exec('create table t(x)');db.prepare('insert into t values(?)').run(42);assert.equal(db.prepare('select x from t').get().x,42);db.close();
+          const test=await createTestRenderer({width:80,height:24});
+          const root=createRoot(test.renderer);root.render(createElement('text',null,'Perfect Windows native gate'));
+          await new Promise(r=>setTimeout(r,150));await test.renderOnce();
+          console.log(test.captureCharFrame());assert.match(test.captureCharFrame(),/Perfect Windows native gate/);
+          root.unmount();test.renderer.destroy();console.log('WINDOWS_NATIVE_GATE_PASS');
+          '@ | Set-Content gate.mjs
+          node --experimental-ffi gate.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
