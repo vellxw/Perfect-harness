@@ -281,6 +281,7 @@ export class PiRuntime implements AgentRuntime {
     let integrationError: Blocked | undefined;
     let stopForIntegration = () => {};
     const guard = () => {
+      request.services.skillGuard?.();
       if (integrationError) throw integrationError;
       signal.throwIfAborted();
       if (auditError) throw new Blocked("AUDIT_FAILURE", auditError);

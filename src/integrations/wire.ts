@@ -190,8 +190,14 @@ export function cleanEnvironment(
   source: NodeJS.ProcessEnv = process.env,
 ): Record<string, string> {
   const env: Record<string, string> = Object.fromEntries(
-    DEFAULT_INHERITED_ENV_VARS.map((k) => [k, ""]),
+    DEFAULT_INHERITED_ENV_VARS.map((k) => [k.toUpperCase(), ""]),
   );
+  const lookup = (key: string) =>
+    source[key] ??
+    source[
+      Object.keys(source).find((k) => k.toUpperCase() === key.toUpperCase()) ??
+        ""
+    ];
   for (const key of [
     "PATH",
     "SYSTEMROOT",
@@ -200,7 +206,7 @@ export function cleanEnvironment(
     "PROCESSOR_ARCHITECTURE",
     "PROGRAMFILES",
   ])
-    if (source[key]) env[key] = source[key]!;
+    if (lookup(key)) env[key] = lookup(key)!;
   Object.assign(env, {
     HOME: directory,
     USERPROFILE: directory,
@@ -219,7 +225,7 @@ export function cleanEnvironment(
   });
   for (const [key, sourceKey] of Object.entries(refs)) {
     if (
-      /^(?:NODE_|PYTHON|LD_|DYLD_|PATH$|HOME$|USERPROFILE$|APPDATA$|LOCALAPPDATA$|TEMP$|TMP$|COMSPEC$)/.test(
+      /^(?:NODE_|PYTHON|LD_|DYLD_|PATH$|HOME$|USERPROFILE$|APPDATA$|LOCALAPPDATA$|TEMP$|TMP$|COMSPEC$|SYSTEMROOT$|WINDIR$|SYSTEMDRIVE$)/i.test(
         key,
       )
     )
@@ -227,13 +233,13 @@ export function cleanEnvironment(
         "MCP_ENV_DENIED",
         `Variable de control no permitida: ${key}`,
       );
-    const value = source[sourceKey];
+    const value = lookup(sourceKey);
     if (!value || /[\r\n\0]/.test(value))
       throw new Blocked(
         "MCP_CREDENTIAL_REQUIRED",
         `Falta la variable local ${sourceKey}`,
       );
-    env[key] = value;
+    env[key.toUpperCase()] = value;
   }
   return env;
 }

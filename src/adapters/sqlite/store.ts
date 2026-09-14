@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdirSync, chmodSync } from "node:fs";
+import { mkdirSync, chmodSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type {
   Collection,
@@ -52,14 +52,20 @@ export class SqliteStore implements StateStore {
     const version = this.db
       .prepare("SELECT MAX(version) AS version FROM migrations")
       .get() as { version: number | null };
-    if ((version.version ?? 0) > 1) {
+    if ((version.version ?? 0) > 2) {
       this.db.close();
       throw new Blocked(
         "DATABASE_VERSION",
         "Database belongs to a newer harness; refusing downgrade",
       );
     }
+    if (version.version === 1 && path !== ":memory:") {
+      const backup = resolve(path) + ".before-v4.sqlite";
+      if (!existsSync(backup)) this.db.prepare("VACUUM INTO ?").run(backup);
+      chmodSync(backup, 0o600);
+    }
     this.db.prepare("INSERT OR IGNORE INTO migrations VALUES(1,?)").run(now());
+    this.db.prepare("INSERT OR IGNORE INTO migrations VALUES(2,?)").run(now());
     if (path !== ":memory:") chmodSync(path, 0o600);
   }
   get<K extends Collection>(
@@ -132,13 +138,31 @@ export class SqliteStore implements StateStore {
       )
         throw new Blocked("BINDING_IMMUTABLE", value.id);
       if (
-        ["plans", "contexts", "evidence", "approvals", "usage"].includes(
-          kind,
-        ) &&
+        [
+          "plans",
+          "contexts",
+          "evidence",
+          "approvals",
+          "usage",
+          "studioSnapshots",
+          "studioHistory",
+          "skillReleases",
+          "skillActivations",
+          "skillEvaluations",
+        ].includes(kind) &&
         existing &&
         JSON.stringify(existing) !== JSON.stringify(value)
       )
         throw new Error(`Immutable record: ${kind}/${value.id}`);
+      if (kind === "runs" && existing) {
+        const oldRun = existing as EntityMap["runs"],
+          newRun = value as EntityMap["runs"];
+        if (
+          hash([oldRun.profileId, oldRun.setIds, oldRun.studioSnapshotId]) !==
+          hash([newRun.profileId, newRun.setIds, newRun.studioSnapshotId])
+        )
+          throw new Blocked("PROFILE_BINDING_IMMUTABLE", value.id);
+      }
       this.db
         .prepare(
           "INSERT INTO entities(kind,id,goal_id,body) VALUES(?,?,?,?) ON CONFLICT(kind,id) DO UPDATE SET body=excluded.body",

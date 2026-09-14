@@ -156,6 +156,11 @@ export const TaskSpecSchema = z
       .default("public"),
     dependencies: z.array(Id).default([]),
     assignedAgent: z.enum(["general", "frontend", "backend", "integrator"]),
+    profileId: z
+      .string()
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+      .max(64)
+      .optional(),
     ownedFiles: z.array(z.string()).default([]),
     ownedSurfaces: z.array(z.string()).default([]),
     acceptanceCriteria: z.array(Id).min(1),
@@ -238,6 +243,9 @@ export interface Usage {
   createdAt: string;
 }
 export interface AgentRun {
+  profileId?: string;
+  setIds?: string[];
+  studioSnapshotId?: string;
   id: string;
   goalId: string;
   taskId?: string;
@@ -256,6 +264,20 @@ export interface AgentRun {
   stopReason?: string;
 }
 export interface ContextPackage {
+  specialization?: {
+    profileId: string;
+    setIds: string[];
+    workMode: string;
+    instruction: string;
+    catalog: { id: string; description: string; loaded: boolean }[];
+    procedures: string;
+    availableProfiles?: {
+      id: string;
+      role: Role;
+      setIds: string[];
+      readOnly: boolean;
+    }[];
+  };
   id: string;
   hash: string;
   goalId: string;
@@ -412,6 +434,7 @@ export interface Task extends TaskSpec {
   updatedAt: string;
 }
 export interface Goal {
+  studioSnapshotId?: string;
   id: string;
   schemaVersion: 1;
   originalRequest: string;

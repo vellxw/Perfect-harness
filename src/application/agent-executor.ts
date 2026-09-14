@@ -1,3 +1,7 @@
+import { SkillsRegistry } from "../skills/registry.js";
+import { SkillSession } from "../skills/session.js";
+import { resolveProfile, profileDefinition } from "../agents/profiles.js";
+import type { AgentDefinition, TaskSpec } from "../domain/model.js";
 import { recordIntegrationEvidence } from "./integration-evidence.js";
 import { join } from "node:path";
 import { readFile, lstat } from "node:fs/promises";
@@ -32,6 +36,7 @@ import { id, now, errorText, Blocked } from "../domain/util.js";
 export interface Invocation {
   goal: Goal;
   role: Role;
+  profileId?: string;
   task?: Task;
   workspace: string;
   leaseId?: string;
@@ -50,6 +55,16 @@ export class AgentExecutor {
     private config: PerfectConfig,
     private consent: boolean | (() => Promise<boolean>),
   ) {}
+  profile(goal: Goal, role: Role, task?: TaskSpec, profileId?: string) {
+    return resolveProfile(
+      new SkillsRegistry(this.store).forGoal(goal, this.config),
+      role,
+      profileId ?? task?.profileId,
+    );
+  }
+  definition(goal: Goal, role: Role, task?: TaskSpec): AgentDefinition {
+    return profileDefinition(this.profile(goal, role, task));
+  }
   private async consentGranted(): Promise<boolean> {
     return typeof this.consent === "function" ? this.consent() : this.consent;
   }
@@ -60,7 +75,7 @@ export class AgentExecutor {
     signal: AbortSignal,
   ): Promise<void> {
     await this.runtime.resolve(
-      this.config.agents[role],
+      this.definition(goal, role, task),
       effectivePrivacy(goal.privacyClass, task?.privacyClass),
       await this.consentGranted(),
       signal,
@@ -74,8 +89,8 @@ export class AgentExecutor {
     leaseId?: string,
     taskId?: string,
     evidence: Evidence[] = [],
+    definition: AgentDefinition = this.config.agents[role],
   ): AgentServices {
-    const definition = this.config.agents[role];
     const ownership = new OwnershipManager(this.store);
     const makeBroker = async () =>
       new FileBroker(
@@ -236,7 +251,13 @@ export class AgentExecutor {
       outerSignal,
       AbortSignal.timeout(this.config.limits.timeoutPerTask),
     ]);
-    const definition = this.config.agents[input.role];
+    const profile = this.profile(
+      input.goal,
+      input.role,
+      input.task,
+      input.profileId,
+    );
+    const definition = profileDefinition(profile);
     let semaphore = this.accounts.get(definition.accountRef);
     if (!semaphore) {
       semaphore = new Semaphore(
@@ -256,6 +277,21 @@ export class AgentExecutor {
           "MOCK_ROUTE_DENIED",
           "Real goals cannot use a simulated route",
         );
+      const runId = id("run");
+      const skillSession = new SkillSession(
+        this.store,
+        {
+          ...input.goal,
+          privacyClass: effectivePrivacy(
+            input.goal.privacyClass,
+            input.task?.privacyClass,
+          ),
+        },
+        this.config,
+        profile,
+        runId,
+        signal,
+      );
       const services = this.services(
         input.goal,
         input.role,
@@ -264,7 +300,50 @@ export class AgentExecutor {
         input.leaseId,
         input.task?.id,
         input.evidence,
+        definition,
       );
+      services.skillGuard = () => skillSession.guard();
+      const catalog = skillSession.list();
+      if (catalog.length)
+        services.skills = {
+          list: () => skillSession.list(),
+          load: (skillId) => skillSession.load(skillId),
+          read: (skillId, resource) => skillSession.read(skillId, resource),
+        };
+      const procedures =
+        input.role === "planner"
+          ? ""
+          : skillSession.auto(
+              input.task
+                ? input.task.title + " " + input.task.description
+                : input.instruction,
+            );
+      const frozen = new SkillsRegistry(this.store).forGoal(
+        input.goal,
+        this.config,
+      );
+      const specialization = {
+        profileId: profile.profile.id,
+        setIds: [...profile.profile.setIds],
+        workMode: profile.mode.id,
+        instruction: profile.mode.instruction,
+        catalog,
+        procedures,
+        ...(input.role === "planner"
+          ? {
+              availableProfiles: frozen.profiles
+                .filter(
+                  (p) => p.enabled && profile.mode.profiles.includes(p.id),
+                )
+                .map((p) => ({
+                  id: p.id,
+                  role: p.role,
+                  setIds: p.setIds,
+                  readOnly: p.readOnly,
+                })),
+            }
+          : {}),
+      };
       const context = await buildContext(
         input.goal,
         input.role,
@@ -273,9 +352,13 @@ export class AgentExecutor {
         this.store,
         this.config,
         input.evidence,
+        specialization,
       );
       let run: AgentRun = {
-        id: id("run"),
+        id: runId,
+        profileId: profile.profile.id,
+        setIds: [...profile.profile.setIds],
+        studioSnapshotId: input.goal.studioSnapshotId,
         goalId: input.goal.id,
         taskId: input.task?.id,
         attempt: input.task?.attempt ?? 1,
@@ -321,6 +404,7 @@ export class AgentExecutor {
           parseResult: input.parse,
           images: input.images,
           beforeRequest: async (requestId, tokens, cost) => {
+            skillSession.guard();
             if (
               route.provenance !== "mock" &&
               definition.model.includes("contributor") &&

@@ -1,3 +1,4 @@
+import { managedSkillPath } from "../skills/policy.js";
 import { lstat, realpath } from "node:fs/promises";
 import { resolve, relative, sep, join } from "node:path";
 import { Blocked } from "../domain/util.js";
@@ -14,6 +15,7 @@ export function relativePath(path: string): string {
   return path;
 }
 export function sensitive(path: string): boolean {
+  if (managedSkillPath(path)) return true;
   const parts = path.toLowerCase().split("/");
   return parts.some(
     (p) =>

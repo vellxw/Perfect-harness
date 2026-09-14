@@ -90,9 +90,9 @@ export class TaskEngine {
           "VISUAL_SCOPE",
           "Repair evidence exceeds image budget",
         );
-      const images = this.config.agents[
-        task.assignedAgent
-      ].capabilities.includes("image")
+      const images = this.executor
+        .definition(goal, task.assignedAgent, task)
+        .capabilities.includes("image")
         ? await Promise.all(
             captures.map(async (e) => {
               const bytes = await readEvidence(

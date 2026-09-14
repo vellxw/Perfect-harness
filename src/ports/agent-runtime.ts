@@ -9,6 +9,12 @@ import type {
   Usage,
 } from "../domain/model.js";
 export interface AgentServices {
+  skillGuard?(): void;
+  skills?: {
+    list(): { id: string; description: string; loaded: boolean }[];
+    load(id: string): string;
+    read(id: string, resource: string): string;
+  };
   listFiles(): Promise<string[]>;
   readFile(
     path: string,

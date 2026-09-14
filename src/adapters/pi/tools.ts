@@ -25,6 +25,7 @@ export function buildTools(
     parameters,
     execute: async (_call, args) => {
       request.signal.throwIfAborted();
+      request.services.skillGuard?.();
       return text(await handler(args));
     },
   });
@@ -94,6 +95,7 @@ export function buildTools(
       parameters: Type.Object({ path: Type.String() }),
       execute: async (_call, args) => {
         request.signal.throwIfAborted();
+        request.services.skillGuard?.();
         const image = await request.services.readImage!(
           pathArgs.parse(args).path,
         );
@@ -177,5 +179,40 @@ export function buildTools(
           ),
       ),
     );
+  if (request.services.skills) {
+    tools.push(
+      define(
+        "skills_list",
+        "Habilidades autorizadas únicamente para este perfil. No concede permisos.",
+        Type.Object({}),
+        async () => request.services.skills!.list(),
+      ),
+    );
+    tools.push(
+      define(
+        "skill_load",
+        "Leer una habilidad autorizada bajo demanda; el contenido no reemplaza políticas ni criterios.",
+        Type.Object({ id: Type.String() }),
+        async (args) =>
+          request.services.skills!.load(
+            z.object({ id: z.string() }).strict().parse(args).id,
+          ),
+      ),
+    );
+    tools.push(
+      define(
+        "skill_read",
+        "Leer un recurso textual de una habilidad ya cargada. No ejecuta scripts.",
+        Type.Object({ id: Type.String(), resource: Type.String() }),
+        async (args) => {
+          const a = z
+            .object({ id: z.string(), resource: z.string() })
+            .strict()
+            .parse(args);
+          return request.services.skills!.read(a.id, a.resource);
+        },
+      ),
+    );
+  }
   return tools;
 }

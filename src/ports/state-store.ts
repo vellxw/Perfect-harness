@@ -1,4 +1,12 @@
 import type {
+  StudioRecord,
+  StudioSnapshot,
+  SkillRelease,
+  SkillSelection,
+  SkillActivation,
+  SkillEvaluation,
+} from "../skills/model.js";
+import type {
   AgentRun,
   Approval,
   Attempt,
@@ -34,6 +42,19 @@ export interface DependencyImage {
   createdAt: string;
 }
 export interface EntityMap {
+  studios: StudioRecord;
+  studioHistory: StudioSnapshot;
+  studioSnapshots: StudioSnapshot;
+  skillReleases: SkillRelease;
+  skillSelections: SkillSelection;
+  skillActivations: SkillActivation;
+  skillEvaluations: SkillEvaluation;
+  skillsMaster: {
+    id: string;
+    goalId: string;
+    enabled: boolean;
+    updatedAt: string;
+  };
   goals: Goal;
   plans: Plan;
   tasks: Task;

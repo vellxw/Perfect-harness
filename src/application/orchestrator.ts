@@ -421,7 +421,9 @@ export class Orchestrator {
         );
         continue;
       }
-      const wave = selectWave(this.tasks(), this.config);
+      const wave = selectWave(this.tasks(), this.config, (task) =>
+        this.executor.definition(this.goal(), task.assignedAgent, task),
+      );
       if (wave.length) {
         if (this.goal().state !== "ASSIGN") this.move("ASSIGN");
         this.move("EXECUTE");
