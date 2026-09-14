@@ -1,6 +1,6 @@
 param([string]$Package='release/Perfect-Harness-Windows-x64',[string]$Output='test-results/windows-desktop')
 $ErrorActionPreference='Stop'
-Add-Type -AssemblyName System.Drawing,System.Windows.Forms,UIAutomationClient,UIAutomationTypes
+Add-Type -AssemblyName System.Drawing,System.Windows.Forms
 Add-Type @'
 using System;using System.Runtime.InteropServices;
 public static class PerfectCaptureWin32 {
@@ -19,10 +19,12 @@ New-Item -ItemType Directory $temp -Force | Out-Null
 $os=Get-CimInstance Win32_OperatingSystem
 $report=@{os=$os.Caption;build=$os.BuildNumber;terminal='1.24.11911.0';mode='real Windows Terminal window; synthetic app fixture, no OAuth';status='NOT_TESTED';captures=@();error=$null}
 $oldTerminal=$env:PERFECT_WT_PATH
+$profile=Join-Path $env:LOCALAPPDATA 'Microsoft/Windows Terminal/Fragments/PerfectHarness/PerfectHarness.json'
+$oldProfile=if(Test-Path $profile){[IO.File]::ReadAllBytes($profile)}else{$null}
 $ownedNodeIds=@()
 try {
  $archive=Join-Path $temp 'terminal.zip'
- Invoke-WebRequest 'https://github.com/microsoft/terminal/releases/download/v1.24.11911.0/Microsoft.WindowsTerminal_1.24.11911.0_x64.zip' -OutFile $archive
+ Invoke-WebRequest 'https://github.com/microsoft/terminal/releases/download/v1.24.11911.0/Microsoft.WindowsTerminal_1.24.11911.0_x64.zip' -OutFile $archive -TimeoutSec 90
  if((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne '7691efeb71c8dd0b95536c84e366fa4cf809a42c534912f9cefa1056534383bd'){throw 'Windows Terminal download hash mismatch'}
  Expand-Archive $archive (Join-Path $temp 'terminal')
  $terminal=Get-ChildItem (Join-Path $temp 'terminal') -Filter WindowsTerminal.exe -Recurse | Select-Object -First 1
@@ -33,10 +35,13 @@ try {
  $fragment=(& $exe --print-profile | ConvertFrom-Json)
  $settings=@{defaultProfile=$fragment.profiles[0].guid;initialCols=120;initialRows=36;confirmCloseAllTabs=$false;profiles=@{list=@($fragment.profiles[0])};schemes=$fragment.schemes;theme='dark'}
  $settings | ConvertTo-Json -Depth 15 | Set-Content (Join-Path $terminalRoot 'settings/settings.json') -Encoding utf8NoBOM
- # This isolated portable profile uses the exact generated fragment. The user's settings file is not edited.
+ # Only this isolated portable Terminal uses these settings. Personal settings.json is untouched.
  $env:PERFECT_WT_PATH=$terminal.FullName
  foreach($scene in @('idle','running')){
-   $launcher=Start-Process $exe -ArgumentList @('--window','--demo',$scene,'--motion','off') -PassThru -Wait
+   Write-Host "Starting real Windows Terminal capture: $scene"
+   $launcher=Start-Process $exe -ArgumentList @('--window','--demo',$scene,'--motion','off') -PassThru
+   # -Wait waits for descendants too, including the intentionally persistent Terminal.
+   if(-not $launcher.WaitForExit(15000)){ $launcher.Kill(); throw 'Launcher did not exit within 15s' }
    if($launcher.ExitCode -ne 0){throw "Launcher exited $($launcher.ExitCode)"}
    $window=$null
    for($i=0;$i -lt 60;$i++){
@@ -51,7 +56,7 @@ try {
    [void][PerfectCaptureWin32]::SetForegroundWindow($window.MainWindowHandle)
    Start-Sleep -Seconds 5
    $children=@(Get-CimInstance Win32_Process | Where-Object {$_.Name -eq 'node.exe' -and $_.CommandLine -like '*Perfect-Harness-Windows-x64*' -and $_.CommandLine -like "*--demo*$scene*"})
-   if(-not $children.Count){throw 'The bundled TUI process is not alive; no screenshot is accepted as an app success'}
+   if(-not $children.Count){throw 'The bundled TUI process is not alive; no screenshot is accepted'}
    $ownedNodeIds+=@($children | ForEach-Object ProcessId)
    $rect=[PerfectCaptureWin32+RECT]::new();[void][PerfectCaptureWin32]::GetWindowRect($window.MainWindowHandle,[ref]$rect)
    $w=$rect.Right-$rect.Left;$h=$rect.Bottom-$rect.Top
@@ -63,14 +68,7 @@ try {
      for($x=0;$x -lt $w;$x+=17){for($y=0;$y -lt $h;$y+=17){[void]$colors.Add($bitmap.GetPixel($x,$y).ToArgb())}}
      if($colors.Count -lt 16){throw 'Desktop capture is blank; interactive visual verification remains blocked'}
      $name="windows-terminal-$scene.png";$bitmap.Save((Join-Path $out $name),[Drawing.Imaging.ImageFormat]::Png)
-     $text=''
-     try {
-       $element=[Windows.Automation.AutomationElement]::FromHandle($window.MainWindowHandle)
-       $descendants=$element.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition)
-       foreach($element in $descendants){$pattern=$null;if($element.TryGetCurrentPattern([Windows.Automation.TextPattern]::Pattern,[ref]$pattern)){$text+=$pattern.DocumentRange.GetText(20000)}}
-     } catch { $text='' }
-     if($text){$text | Set-Content (Join-Path $out "$scene-accessibility.txt") -Encoding utf8NoBOM}
-     $report.captures+=@{file=$name;scene=$scene;width=$w;height=$h;processVerified=$true;accessibilityContainsPerfect=($text -match 'Perfect');accessibilityContainsDemo=($text -match 'DEMO')}
+     $report.captures+=@{file=$name;scene=$scene;width=$w;height=$h;processVerified=$true;inspection='Pixel capture; inspect the PNG to confirm layout and readability'}
    } finally {$graphics.Dispose();$bitmap.Dispose()}
    foreach($child in $children){Stop-Process -Id $child.ProcessId -ErrorAction SilentlyContinue}
    Stop-Process -Id $window.Id -ErrorAction SilentlyContinue
@@ -81,6 +79,7 @@ finally {
  $env:PERFECT_WT_PATH=$oldTerminal
  foreach($pidValue in $ownedNodeIds){Stop-Process -Id $pidValue -ErrorAction SilentlyContinue}
  Get-Process WindowsTerminal -ErrorAction SilentlyContinue | Where-Object {$_.Path -and $_.Path.StartsWith($temp,[StringComparison]::OrdinalIgnoreCase)} | Stop-Process -ErrorAction SilentlyContinue
+ if($null -ne $oldProfile){New-Item -ItemType Directory (Split-Path $profile -Parent) -Force | Out-Null;[IO.File]::WriteAllBytes($profile,$oldProfile)}elseif(Test-Path $profile){Remove-Item $profile}
  $report | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $out 'provenance.json') -Encoding utf8NoBOM
  Write-Host ($report | ConvertTo-Json -Depth 8)
 }

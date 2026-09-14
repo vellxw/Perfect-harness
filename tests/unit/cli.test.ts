@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { main } from "../../src/cli/main.js";
@@ -39,7 +39,7 @@ test("CLI help, init, privacy consent and error exits", async () => {
     const policy = JSON.parse(
       await readFile(join(home, "policy.json"), "utf8"),
     ) as { contributorWorkspaces: string[] };
-    assert.deepEqual(policy.contributorWorkspaces, [workspace]);
+    assert.deepEqual(policy.contributorWorkspaces, [await realpath(workspace)]);
     assert.equal(await main([...args, "consent-contributor", "--revoke"]), 0);
   } finally {
     await rm(root, { recursive: true, force: true });
