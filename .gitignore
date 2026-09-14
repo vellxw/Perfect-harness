@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
+.perfect/
+.env
+.env.*
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.tgz
+*.log
+auth.json
