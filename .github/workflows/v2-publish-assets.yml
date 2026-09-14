@@ -1,0 +1,60 @@
+name: Publish validated V2 assets (temporary)
+on:
+  push:
+    branches: [feat/perfect-harness-v2-tui-windows]
+    paths: [.github/workflows/v2-publish-assets.yml]
+permissions:
+  contents: write
+jobs:
+  assets:
+    if: github.repository == 'vellxw/Perfect-harness' && github.ref == 'refs/heads/feat/perfect-harness-v2-tui-windows'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - name: Complete approval readability and validate real source
+        run: |
+          node scripts/finish-v2-source.mjs
+          npx --no-install prettier --write src/ui/tui/app.tsx src/ui/tui/approval.tsx tests/tui/approval.test.tsx tests/tui/secrets.test.tsx
+          npm run typecheck
+          npm run lint
+          npm test
+          npm run build
+      - name: Generate original icon and actual renderer captures
+        run: |
+          node scripts/build-brand.mjs
+          node --experimental-ffi scripts/capture-tui.mjs docs/screenshots
+          node --experimental-ffi scripts/benchmark-tui.mjs docs/performance
+      - name: Capture actual xterm window
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xterm xdotool imagemagick fonts-dejavu-core
+          xvfb-run -a -s '-screen 0 1440x1000x24' bash scripts/capture-xterm.sh docs/screenshots/linux-desktop
+      - name: Commit only validated source and generated public assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git add -- src/ui/tui/app.tsx src/ui/tui/approval.tsx tests/tui/approval.test.tsx tests/tui/secrets.test.tsx assets/brand docs/screenshots docs/performance
+          git diff --cached --check
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name 'Perfect Harness Publisher'
+          git config user.email 'perfect-harness@users.noreply.github.com'
+          git commit -m 'feat(v2): publish original icon, verified renderer captures and readable approval dialogs'
+          AUTH_HEADER=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$AUTH_HEADER"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $AUTH_HEADER" push origin HEAD:refs/heads/feat/perfect-harness-v2-tui-windows
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v2-validated-visuals
+          path: |
+            docs/screenshots
+            docs/performance
+            assets/brand
+          retention-days: 14
