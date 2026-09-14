@@ -2,7 +2,7 @@ name: V3 escritorio Windows real
 on:
   push:
     branches: [feat/perfect-harness-v3-integraciones]
-    paths: [src/windows/**, src/integrations/**, scripts/desktop-smoke.mjs, scripts/prepare-desktop.ps1, .github/workflows/v3-native-desktop.yml]
+    paths: [src/windows/**, src/integrations/**, tests/windows/**, scripts/desktop-smoke.mjs, scripts/prepare-desktop.ps1, .github/workflows/v3-native-desktop.yml]
   workflow_dispatch:
 permissions:
   contents: read
@@ -24,7 +24,7 @@ jobs:
         with:
           node-version: '26.4.0'
       - run: npm ci
-      - name: Preparar módulos nativos fijados
+      - name: Preparar módulos nativos fijados y ventana sin elevación
         shell: pwsh
         run: |
           ./scripts/prepare-desktop.ps1
@@ -35,7 +35,11 @@ jobs:
           $fixture=(Resolve-Path tests/windows/DesktopFixture.cs).Path
           & $csc /nologo /target:winexe /platform:x64 "/out:$env:RUNNER_TEMP/PerfectDesktopFixture.exe" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll $fixture
           if($LASTEXITCODE -ne 0){throw 'No compiló la aplicación de prueba'}
+          $launcher=(Resolve-Path tests/windows/StartUnelevated.cs).Path
+          & $csc /nologo /target:exe /platform:x64 "/out:$env:RUNNER_TEMP/PerfectTestLauncher.exe" $launcher
+          if($LASTEXITCODE -ne 0){throw 'No compiló el iniciador restringido de prueba'}
           "PERFECT_DESKTOP_FIXTURE=$env:RUNNER_TEMP/PerfectDesktopFixture.exe" | Out-File $env:GITHUB_ENV -Append
+          "PERFECT_DESKTOP_LAUNCHER=$env:RUNNER_TEMP/PerfectTestLauncher.exe" | Out-File $env:GITHUB_ENV -Append
       - name: UIA, identidad de ventana, captura y revocación sin cuentas personales
         run: node --import tsx scripts/desktop-smoke.mjs
       - uses: actions/upload-artifact@v4

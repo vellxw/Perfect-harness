@@ -2,7 +2,7 @@ name: Conectar interfaz de integraciones (temporal)
 on:
   push:
     branches: [feat/perfect-harness-v3-integraciones]
-    paths: [.github/workflows/v3-ui-integration.yml]
+    paths: [.github/workflows/v3-ui-integration.yml, scripts/v3-ui-run.mjs]
 permissions:
   contents: write
 jobs:
@@ -17,13 +17,13 @@ jobs:
         with:
           node-version: '26.4.0'
       - run: npm ci
-      - run: node scripts/v3-connect-ui.mjs
+      - run: node scripts/v3-ui-run.mjs
       - name: Organizar y formatear las modificaciones
         run: |
           node --input-type=module <<'JS'
           import fs from 'node:fs';import ts from 'typescript';import path from 'node:path';import {execFileSync} from 'node:child_process';
           const walk=dir=>fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(dir,e.name)):[path.join(dir,e.name)]);
-          const files=[...new Set([...execFileSync('git',['diff','--name-only'],{encoding:'utf8'}).trim().split('\n'),...walk('src/integrations'),'src/ui/tui/integration-view.ts','src/cli/integrations.ts'])].filter(p=>p.endsWith('.ts')||p.endsWith('.tsx'));
+          const files=[...new Set([...execFileSync('git',['diff','--name-only'],{encoding:'utf8'}).trim().split('\n'),...walk('src/integrations'),...walk('tests/integrations'),'src/ui/tui/integration-view.ts','src/cli/integrations.ts'])].filter(p=>p.endsWith('.ts')||p.endsWith('.tsx'));
           const config=ts.readConfigFile('tsconfig.json',ts.sys.readFile),parsed=ts.parseJsonConfigFileContent(config.config,ts.sys,'.');
           const service=ts.createLanguageService({getScriptFileNames:()=>parsed.fileNames,getScriptVersion:()=> '0',getScriptSnapshot:p=>fs.existsSync(p)?ts.ScriptSnapshot.fromString(fs.readFileSync(p,'utf8')):undefined,getCurrentDirectory:()=>process.cwd(),getCompilationSettings:()=>parsed.options,getDefaultLibFileName:o=>ts.getDefaultLibFilePath(o),fileExists:ts.sys.fileExists,readFile:ts.sys.readFile,readDirectory:ts.sys.readDirectory});
           for(const file of files){for(const edit of service.organizeImports({type:'file',fileName:file},{},{})){let s=fs.readFileSync(edit.fileName,'utf8');for(const c of edit.textChanges.toReversed())s=s.slice(0,c.span.start)+c.newText+s.slice(c.span.start+c.span.length);fs.writeFileSync(edit.fileName,s);}}service.dispose();
@@ -45,7 +45,7 @@ jobs:
           import pathlib,json,subprocess,base64,os
           changed=subprocess.check_output(['git','diff','--name-only'],text=True).splitlines();entries=[]
           for name in changed:
-            assert name.startswith(('src/','scripts/')) or name=='.gitignore'
+            assert name.startswith(('src/','scripts/','tests/')) or name=='.gitignore'
             p=pathlib.Path(name);assert p.is_file() and not p.is_symlink()
             response=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/vellxw/Perfect-harness/git/blobs','--input','-'],input=json.dumps({'encoding':'base64','content':base64.b64encode(p.read_bytes()).decode()}),text=True))
             entries.append({'path':name,'mode':'100644','type':'blob','sha':response['sha']})
