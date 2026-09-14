@@ -4,6 +4,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import {
   PlanProposalSchema,
   type AgentDefinition,
+  type PlanProposal,
   type Privacy,
   type RouteBinding,
 } from "../domain/model.js";
@@ -32,7 +33,7 @@ export async function seedReservationSource(source: string): Promise<void> {
     reservationTests,
   );
 }
-export function reservationPlan() {
+export function reservationPlan(): PlanProposal {
   return PlanProposalSchema.parse({
     summary:
       "Build and independently verify a persistent responsive reservation application.",
@@ -66,6 +67,13 @@ export function reservationPlan() {
           executable: "node",
           args: ["--test", "tests/reservations.test.mjs"],
         },
+      },
+      {
+        id: "frontend-build",
+        title: "Frontend JavaScript syntax build",
+        kind: "command",
+        criteriaIds: ["responsive"],
+        command: { executable: "node", args: ["--check", "public/app.js"] },
       },
       {
         id: "browser",
@@ -164,7 +172,7 @@ export class ReservationDemoRuntime implements AgentRuntime {
     const role = request.run.agentDefinitionId;
     this.roles.push(role);
     const requestId = id("mock-request");
-    request.beforeRequest(requestId, 200, 0);
+    await request.beforeRequest(requestId, 200, 0);
     let result: unknown;
     if (role === "planner") result = reservationPlan();
     else if (role === "oracle" || role === "visual") {
@@ -188,6 +196,14 @@ export class ReservationDemoRuntime implements AgentRuntime {
         await delay(25, undefined, { signal: request.signal });
         const write = request.services.writeFile;
         if (!write) throw new Error("Worker has no broker");
+        if (
+          request.context.failures.length > 0 &&
+          role === "frontend" &&
+          (request.images?.length ?? 0) < 2
+        )
+          throw new Error(
+            "Frontend repair did not receive failure screenshots",
+          );
         if (role === "general") {
           await write(
             "package.json",

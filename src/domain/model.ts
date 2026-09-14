@@ -111,6 +111,8 @@ export const VerificationSpecSchema = z
       .object({
         composition: z.string(),
         entry: z.string(),
+        targetFiles: z.array(z.string()).default([]),
+        inputProps: z.record(z.string(), z.json()).default({}),
         frames: z.array(z.number().int().nonnegative()).min(1),
         fps: z.number().positive(),
         durationFrames: z.number().int().positive(),
@@ -151,7 +153,7 @@ export const TaskSpecSchema = z
     riskLevel: z.enum(["low", "medium", "high", "critical"]).default("low"),
     privacyClass: z
       .enum(["public", "private", "confidential"])
-      .default("private"),
+      .default("public"),
     dependencies: z.array(Id).default([]),
     assignedAgent: z.enum(["general", "frontend", "backend", "integrator"]),
     ownedFiles: z.array(z.string()).default([]),
@@ -215,6 +217,8 @@ export interface Usage {
   modelRequested: string;
   modelSerialized?: string;
   modelReported?: string;
+  providerResponseId?: string;
+  metadataProvenance?: "service-sse";
   reasoningRequested: Reasoning;
   reasoningSent?: string;
   reasoningReported?: string;
@@ -346,6 +350,7 @@ export interface Review {
   runId: string;
   revision: string;
   role: "oracle" | "visual";
+  purpose: "diagnostic" | "acceptance";
   decision: "approve" | "request_changes" | "uncertain";
   summary: string;
   findings: ReviewFinding[];
@@ -426,6 +431,7 @@ export interface Goal {
   oracleCalls: number;
   providerRequests: number;
   noProgress: number;
+  bestVerificationPasses?: number;
   activeMs: number;
   privacyClass: Privacy;
   mode: "real" | "mock";
@@ -491,4 +497,13 @@ export interface Attempt {
   startedAt: string;
   endedAt?: string;
   failureId?: string;
+}
+
+/** Public task defaults inherit the goal; a task can only raise confidentiality. */
+export function effectivePrivacy(
+  goal: Privacy,
+  task: Privacy = "public",
+): Privacy {
+  const levels: Privacy[] = ["public", "private", "confidential"];
+  return levels[Math.max(levels.indexOf(goal), levels.indexOf(task))]!;
 }

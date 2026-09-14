@@ -18,6 +18,28 @@ export async function recoverGoal(
   await runner.recover(goal.id);
   const workspace = new GitWorkspace(goal.root, config),
     revision = await workspace.revision();
+  if (
+    await git(workspace.repo, [
+      "status",
+      "--porcelain",
+      "--untracked-files=all",
+    ])
+  )
+    throw new Blocked(
+      "RECOVERY_DIRTY",
+      "Managed candidate has uncheckpointed changes; inspect it before resuming",
+    );
+  const unresolved = store
+    .list("intents", goal.id)
+    .filter((i) => i.kind !== "container" && i.status !== "completed");
+  if (
+    revision !== goal.candidateRevision &&
+    !unresolved.some((i) => i.kind === "integration")
+  )
+    throw new Blocked(
+      "RECOVERY_REVISION",
+      "Candidate changed without a recorded integration intent",
+    );
   for (const intent of store
     .list("intents", goal.id)
     .filter((i) => i.kind !== "container" && i.status !== "completed")) {
@@ -36,7 +58,12 @@ export async function recoverGoal(
     }
     const task = intent.taskId ? store.get("tasks", intent.taskId) : undefined;
     const message = await git(workspace.repo, ["log", "-1", "--format=%s"]);
-    if (!task || message !== `Perfect integrate ${task.id}`)
+    const parent = await git(workspace.repo, ["rev-parse", "HEAD^"]);
+    if (
+      !task ||
+      parent !== intent.beforeRevision ||
+      message !== `Perfect integrate ${task.id}`
+    )
       throw new Blocked(
         "INTEGRATION_UNCERTAIN",
         "Candidate changed during an interrupted integration",

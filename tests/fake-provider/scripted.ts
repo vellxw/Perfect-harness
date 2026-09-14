@@ -41,7 +41,7 @@ export class ScriptedRuntime implements AgentRuntime {
     request.signal.throwIfAborted();
     this.invocations.push(request);
     const requestId = id("mock-request");
-    request.beforeRequest(requestId, 100, 0);
+    await request.beforeRequest(requestId, 100, 0);
     const result = await this.handler(request);
     request.usage({
       id: id("mock-usage"),

@@ -1,3 +1,10 @@
+export function parseRetryAfter(value?: string, at = Date.now()): number {
+  if (!value) return 0;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  const date = Date.parse(value);
+  return Number.isFinite(date) ? Math.max(0, date - at) : 0;
+}
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -17,6 +24,7 @@ import type {
 import { hash, id, now, Blocked, errorText } from "../../domain/util.js";
 import { openSession, PI_VERSION } from "./session.js";
 import { buildTools } from "./tools.js";
+import { auditedFetch, type TransportObservation } from "./transport-audit.js";
 
 export function auditPayload(
   payload: unknown,
@@ -159,15 +167,32 @@ export class PiRuntime implements AgentRuntime {
           serialized?: string;
           reasoning?: string;
           firstToken?: number;
+          observation: TransportObservation;
         }
       | undefined;
     const original = runtime.streamSimple.bind(runtime);
-    runtime.streamSimple = (m, context, options) =>
-      original(m, context, {
+    runtime.streamSimple = (m, context, options) => {
+      const observation: TransportObservation = {
+        usageReported: false,
+        reasoningTokensReported: false,
+      };
+      return original(m, context, {
         ...options,
         maxRetries: 0,
         maxTokens: this.config.limits.maxOutputTokens,
         transport: "sse",
+        fetch: auditedFetch(
+          options?.fetch ?? globalThis.fetch,
+          observation,
+          {
+            endpoint: route.endpoint,
+            model: route.model,
+            reasoning: nativeReasoning,
+          },
+          (error) => {
+            if (error instanceof Blocked) auditError = errorText(error);
+          },
+        ),
         onPayload: async (payload, selectedModel) => {
           signal.throwIfAborted();
           if (++requestCount > this.config.limits.maxAgentTurns)
@@ -183,7 +208,10 @@ export class PiRuntime implements AgentRuntime {
             this.config.budgets.mode === "hard" &&
             (typeof cap !== "number" ||
               cap > this.config.limits.maxOutputTokens ||
-              request.images?.length)
+              request.images?.length ||
+              /"(?:type)"\s*:\s*"(?:input_image|image_url|image)"/.test(
+                JSON.stringify(transformed),
+              ))
           )
             throw new Blocked(
               "BUDGET_UNBOUNDED",
@@ -195,6 +223,7 @@ export class PiRuntime implements AgentRuntime {
             started: Date.now(),
             serialized: observed.model,
             reasoning: observed.reasoning,
+            observation,
           };
           const inputBound = Buffer.byteLength(JSON.stringify(transformed));
           const estimate =
@@ -203,7 +232,7 @@ export class PiRuntime implements AgentRuntime {
                   this.config.limits.maxOutputTokens * model.cost.output) /
                 1_000_000
               : 0;
-          request.beforeRequest(
+          await request.beforeRequest(
             requestId,
             inputBound + this.config.limits.maxOutputTokens,
             estimate,
@@ -220,7 +249,7 @@ export class PiRuntime implements AgentRuntime {
         onResponse: async (response, selectedModel) => {
           await options?.onResponse?.(response, selectedModel);
           const header = response.headers["retry-after"];
-          retryAfter = header ? Math.min(60000, Number(header) * 1000 || 0) : 0;
+          retryAfter = parseRetryAfter(header);
           request.event("provider.response", {
             requestId: current?.id,
             status: response.status,
@@ -230,8 +259,10 @@ export class PiRuntime implements AgentRuntime {
           });
         },
       });
+    };
     const guard = () => {
       signal.throwIfAborted();
+      if (auditError) throw new Blocked("AUDIT_FAILURE", auditError);
       if (submitted)
         throw new Error("Result already submitted; no more mutations allowed");
     };
@@ -277,17 +308,8 @@ export class PiRuntime implements AgentRuntime {
             message.stopReason === "aborted"
           )
             lastError = message.errorMessage ?? message.stopReason;
-          const metadata = message as unknown as {
-            responseModel?: string;
-            providerThinkingLevel?: string;
-          };
-          if (metadata.responseModel && metadata.responseModel !== route.model)
-            auditError = `ROUTE_RESPONSE_MISMATCH: ${metadata.responseModel}`;
-          if (
-            metadata.providerThinkingLevel &&
-            metadata.providerThinkingLevel !== nativeReasoning
-          )
-            auditError = `REASONING_RESPONSE_MISMATCH: ${metadata.providerThinkingLevel}`;
+          // Read from service bytes: Pi 0.85.1 Responses adapters discard these optional fields.
+          const metadata = current?.observation;
           summary = message.content
             .filter((c) => c.type === "text")
             .map((c) => c.text)
@@ -296,7 +318,8 @@ export class PiRuntime implements AgentRuntime {
             const u = message.usage,
               known =
                 message.stopReason !== "error" &&
-                message.stopReason !== "aborted";
+                message.stopReason !== "aborted" &&
+                metadata?.usageReported === true;
             const usage: Usage = {
               id: id("usage"),
               goalId: run.goalId,
@@ -306,15 +329,20 @@ export class PiRuntime implements AgentRuntime {
               accountRef: route.accountRef,
               modelRequested: route.model,
               modelSerialized: current.serialized,
-              modelReported: metadata.responseModel,
+              modelReported: metadata?.model,
               reasoningRequested: route.reasoning,
               reasoningSent: current.reasoning,
-              reasoningReported: metadata.providerThinkingLevel,
+              reasoningReported: metadata?.reasoning,
+              providerResponseId: metadata?.responseId,
+              metadataProvenance: "service-sse",
               inputTokens: known ? u.input : undefined,
               outputTokens: known ? u.output : undefined,
               cacheReadTokens: known ? u.cacheRead : undefined,
               cacheWriteTokens: known ? u.cacheWrite : undefined,
-              reasoningTokens: known ? u.reasoning : undefined,
+              reasoningTokens:
+                known && metadata?.reasoningTokensReported
+                  ? u.reasoning
+                  : undefined,
               totalTokens: known ? u.totalTokens : undefined,
               latencyMs: Date.now() - current.started,
               timeToFirstTokenMs:
@@ -368,6 +396,11 @@ export class PiRuntime implements AgentRuntime {
           );
         if (!transient || retries >= this.config.limits.maxProviderRetries)
           throw new Blocked("PROVIDER_FAILED", lastError);
+        if (retryAfter > 60000)
+          throw new Blocked(
+            "PROVIDER_COOLDOWN",
+            `Provider requests ${Math.ceil(retryAfter / 1000)} seconds of cooldown; resume after that interval`,
+          );
         retries++;
         request.event("provider.retry", {
           attempt: retries,

@@ -11,7 +11,22 @@ export interface AgentServices {
   listFiles(): Promise<string[]>;
   readFile(
     path: string,
-  ): Promise<{ path: string; content: string; hash: string }>;
+    startLine?: number,
+    endLine?: number,
+  ): Promise<{
+    path: string;
+    content: string;
+    hash: string;
+    truncated?: boolean;
+    totalLines?: number;
+    nextLine?: number;
+  }>;
+  readEvidence?(
+    id: string,
+  ): Promise<{ id: string; content: string; truncated: boolean }>;
+  readImage?(
+    path: string,
+  ): Promise<{ data: string; mimeType: string; source: string }>;
   writeFile?(
     path: string,
     content: string,
@@ -38,7 +53,7 @@ export interface AgentRequest {
     requestId: string,
     tokenUpperBound: number,
     estimatedCost?: number,
-  ) => void;
+  ) => void | Promise<void>;
   usage: (usage: Usage) => void;
   event: (type: string, payload: unknown) => void;
 }

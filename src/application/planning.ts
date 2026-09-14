@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   PlanProposalSchema,
+  effectivePrivacy,
   TaskSpecSchema,
   type Goal,
   type Plan,
@@ -14,7 +15,8 @@ import { AgentExecutor } from "./agent-executor.js";
 import { validatePlan, overlaps } from "../domain/task-graph.js";
 import { sensitive } from "../tools/paths.js";
 import { GitWorkspace } from "../adapters/git/workspace.js";
-import { lineageAttempts } from "./failures.js";
+import { lineage, lineageAttempts } from "./failures.js";
+import { planImpact } from "./plan-impact.js";
 import { hash, id, now, canonical, Blocked } from "../domain/util.js";
 
 function taskSpec(task: Task) {
@@ -73,7 +75,7 @@ export class PlanningService {
         workspace: new GitWorkspace(goal.root, this.config).repo,
         instruction: [
           "Interpret the goal, inspect the repository, state assumptions, design explicit contracts and return a real acyclic task graph. Do not implement code. Assign substantial frontend to frontend, sensitive backend to backend, exploration/tests/docs to general. Avoid shared file ownership unless tasks are sequential. Every mandatory criterion needs an actual verification strategy.",
-          "Each verifier runs in a fresh isolated snapshot with no public network. A server/build check must be self-contained. Prefer committed, auditable tests over inline scripts. Network/dependency preparation requires a separate user approval. Existing tests, secrets and references cannot be changed. Protected paths: " +
+          "Assign package.json and package-lock.json to the same task when adding root npm dependencies. Never lower task confidentiality. Each verifier runs in a fresh isolated snapshot with no public network. A server/build check must be self-contained. Prefer committed, auditable tests over inline scripts. Network/dependency preparation requires a separate user approval. Existing tests, secrets and references cannot be changed. Protected paths: " +
             JSON.stringify(this.config.protectedPaths),
           "Do not use a verification that merely prints success. Cover observable behavior, edge cases and failure paths. Add browser or Remotion capture scenarios for visual criteria. Descriptions must be self-contained.",
           `Additional required checks: ${JSON.stringify(this.config.verificationPolicy.extraChecks)}`,
@@ -109,7 +111,7 @@ export class PlanningService {
         ...t,
         id: ids.get(t.id)!,
         dependencies: t.dependencies.map((d) => ids.get(d)!),
-        privacyClass: goal.privacyClass,
+        privacyClass: effectivePrivacy(goal.privacyClass, t.privacyClass),
       })),
     });
     const plan: Plan = {
@@ -124,6 +126,22 @@ export class PlanningService {
       hash: hash(qualified),
     };
     const taskIds = new Set(plan.tasks.map((t) => t.id));
+    const impacted = planImpact(
+      this.store.list("tasks", goal.id),
+      plan.tasks,
+      triggerTask?.id,
+    );
+    const triggerRoot = triggerTask
+      ? lineage(triggerTask, this.store)
+      : undefined;
+    const remaining = triggerTask
+      ? Math.max(
+          0,
+          this.config.limits.maxTaskRetries +
+            1 -
+            lineageAttempts(triggerTask, this.store),
+        )
+      : this.config.limits.maxTaskRetries + 1;
     this.store.transaction(() => {
       this.store.put("plans", plan, "plan.generated");
       for (const old of this.store.list("tasks", goal.id))
@@ -137,12 +155,16 @@ export class PlanningService {
         const existing = this.store.get("tasks", spec.id),
           definition = this.config.agents[spec.assignedAgent];
         const same =
-          existing && canonical(taskSpec(existing)) === canonical(spec);
-        const remaining = triggerTask
-          ? this.config.limits.maxTaskRetries +
-            1 -
-            lineageAttempts(triggerTask, this.store)
-          : this.config.limits.maxTaskRetries + 1;
+          existing &&
+          !impacted.has(spec.id) &&
+          canonical(taskSpec(existing)) === canonical(spec);
+        const sharesFailureBudget =
+          Boolean(triggerRoot) &&
+          (!existing || lineage(existing, this.store) === triggerRoot);
+        const maxAttempts = Math.min(
+          existing?.maxAttempts ?? this.config.limits.maxTaskRetries + 1,
+          sharesFailureBudget ? (existing?.attempt ?? 0) + remaining : Infinity,
+        );
         const task: Task = {
           ...spec,
           goalId: goal.id,
@@ -153,9 +175,11 @@ export class PlanningService {
           reasoning: definition.reasoning,
           baseRevision:
             same && existing ? existing.baseRevision : goal.candidateRevision,
-          dependencyOutputVersions: existing?.dependencyOutputVersions ?? {},
+          dependencyOutputVersions: same
+            ? (existing?.dependencyOutputVersions ?? {})
+            : {},
           attempt: existing?.attempt ?? 0,
-          maxAttempts: existing?.maxAttempts ?? Math.max(0, remaining),
+          maxAttempts,
           outputs: existing?.outputs ?? [],
           evidence: existing?.evidence ?? [],
           summary: existing?.summary,
@@ -166,13 +190,22 @@ export class PlanningService {
           repairsTaskId:
             existing?.repairsTaskId ??
             (!existing ? triggerTask?.id : undefined),
-          triggerFailureIds:
-            existing?.triggerFailureIds ??
-            this.store
-              .list("failures", goal.id)
-              .filter((f) => !f.resolvedAt)
-              .slice(-4)
-              .map((f) => f.id),
+          triggerFailureIds: [
+            ...new Set([
+              ...(existing?.triggerFailureIds ?? []),
+              ...(impacted.has(spec.id)
+                ? this.store
+                    .list("failures", goal.id)
+                    .filter(
+                      (f) =>
+                        !f.resolvedAt &&
+                        (!triggerRoot || f.lineageId === triggerRoot),
+                    )
+                    .slice(-4)
+                    .map((f) => f.id)
+                : []),
+            ]),
+          ],
           createdAt: existing?.createdAt ?? now(),
           updatedAt: now(),
         };
@@ -243,7 +276,7 @@ export class PlanningService {
         .map((t) => ({
           ...t,
           dependencies: t.dependencies.map((d) =>
-            replacement && d === parent.id ? repairId : d,
+            d === parent.id ? repairId : d,
           ),
         })),
       taskSpec(task),
@@ -280,20 +313,31 @@ export class PlanningService {
           { ...parent, status: "superseded", updatedAt: now() },
           "task.superseded",
         );
-        for (const other of this.store
-          .list("tasks", goal.id)
-          .filter((t) => t.dependencies.includes(parent.id)))
-          this.store.put(
-            "tasks",
-            {
-              ...other,
-              dependencies: other.dependencies.map((d) =>
-                d === parent.id ? task.id : d,
-              ),
-              updatedAt: now(),
-            },
-            "task.dependency_redirected",
-          );
+      }
+      const oldTasks = this.store.list("tasks", goal.id);
+      const affected = planImpact(oldTasks, plan.tasks);
+      for (const spec of plan.tasks.filter((item) => item.id !== task.id)) {
+        const other = this.store.get("tasks", spec.id)!;
+        const reset = affected.has(spec.id);
+        this.store.put(
+          "tasks",
+          {
+            ...other,
+            ...spec,
+            planId: plan.id,
+            status: reset ? "pending" : other.status,
+            baseRevision: reset ? goal.candidateRevision : other.baseRevision,
+            resultRevision: reset ? undefined : other.resultRevision,
+            resolvedRouteBinding: reset
+              ? undefined
+              : other.resolvedRouteBinding,
+            dependencyOutputVersions: reset
+              ? {}
+              : other.dependencyOutputVersions,
+            updatedAt: now(),
+          },
+          reset ? "task.dependency_invalidated" : "task.plan_rebased",
+        );
       }
       this.store.put("tasks", task, "repair.created");
       this.store.put(

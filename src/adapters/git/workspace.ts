@@ -1,11 +1,4 @@
-import {
-  mkdir,
-  readFile,
-  writeFile,
-  readdir,
-  lstat,
-  copyFile,
-} from "node:fs/promises";
+import { mkdir, readFile, writeFile, readdir, lstat } from "node:fs/promises";
 import { join, resolve, relative, dirname } from "node:path";
 import type { PerfectConfig } from "../../config/schema.js";
 import type { Goal, Task } from "../../domain/model.js";
@@ -19,7 +12,7 @@ import {
 import { git } from "./process.js";
 
 export interface Manifest {
-  files: { path: string; hash: string; size: number }[];
+  files: { path: string; hash: string; size: number; mode: number }[];
   head: string;
   index: string;
   fingerprint: string;
@@ -96,6 +89,7 @@ export async function manifest(
         path,
         hash: hash(data.toString("base64")),
         size: data.length,
+        mode: st.mode & 0o111 ? 0o755 : 0o644,
       });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -127,7 +121,17 @@ export async function copySnapshot(
     const from = await safePath(source, file.path);
     const to = join(destination, file.path);
     await mkdir(dirname(to), { recursive: true });
-    await copyFile(from, to);
+    const bytes = await readFile(from);
+    if (
+      bytes.length !== file.size ||
+      hash(bytes.toString("base64")) !== file.hash ||
+      secretContent(bytes.toString("utf8"))
+    )
+      throw new Blocked(
+        "SOURCE_CHANGED",
+        `Snapshot changed during copy: ${file.path}`,
+      );
+    await writeFile(to, bytes, { flag: "wx", mode: file.mode });
   }
   return snapshot;
 }
@@ -139,9 +143,7 @@ export class GitWorkspace {
   ) {
     this.repo = join(root, "repo");
   }
-  async initialize(
-    source: string,
-  ): Promise<{
+  async initialize(source: string): Promise<{
     baseline: string;
     sourceFingerprint: string;
     manifest: Manifest;
@@ -253,6 +255,14 @@ export class GitWorkspace {
     );
   }
   async apply(goal: Goal): Promise<void> {
+    if (
+      (await this.revision()) !== goal.candidateRevision ||
+      (await git(this.repo, ["status", "--porcelain"])).trim()
+    )
+      throw new Blocked(
+        "CANDIDATE_CHANGED",
+        "Reviewed candidate was modified; re-verification is required",
+      );
     if (
       resolve(goal.source) === resolve(this.repo) ||
       relative(goal.source, this.root).startsWith("..") === false

@@ -58,13 +58,11 @@ test(
               reason: finished.pauseReason ?? finished.terminalReason,
               failures: store.list("failures", goal.id),
               checks: store.list("verifications", goal.id),
-              tasks: store
-                .list("tasks", goal.id)
-                .map((t) => ({
-                  id: t.id,
-                  status: t.status,
-                  error: t.failureReason,
-                })),
+              tasks: store.list("tasks", goal.id).map((t) => ({
+                id: t.id,
+                status: t.status,
+                error: t.failureReason,
+              })),
             },
             null,
             2,
@@ -97,6 +95,18 @@ test(
         ),
       );
       assert.ok(store.events(goal.id).some((e) => e.type === "repair.created"));
+      const firstVisualFailure = failures.find((v) => v.specId === "browser")!;
+      assert.ok(
+        store
+          .list("verifications", goal.id)
+          .some(
+            (v) =>
+              v.specId === "frontend-build" &&
+              v.revision === firstVisualFailure.revision &&
+              v.status === "passed",
+          ),
+        "A syntax-green frontend still must fail the visual gate",
+      );
       assert.equal(
         store.list("intents", goal.id).filter((i) => i.status !== "completed")
           .length,

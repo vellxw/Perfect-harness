@@ -61,7 +61,7 @@ export async function withContext<T>(
     store.close();
   }
 }
-export const goalConfig = (goal: Goal) =>
+export const goalConfig = (goal: Goal): PerfectConfig =>
   ConfigSchema.parse(goal.configSnapshot);
 export function goalExit(goal: Goal): number {
   return goal.state === "DONE"

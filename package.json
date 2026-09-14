@@ -12,8 +12,14 @@
     "perfect": "dist/cli/index.js"
   },
   "exports": {
-    ".": "./dist/index.js",
-    "./pi-extension": "./dist/pi-extension/index.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./pi-extension": {
+      "types": "./dist/pi-extension/index.d.ts",
+      "import": "./dist/pi-extension/index.js"
+    }
   },
   "files": [
     "dist",
@@ -34,7 +40,10 @@
     "test:contract": "node --import tsx --test tests/contract/*.test.ts",
     "test:integration": "node --import tsx --test --test-concurrency=1 tests/integration/*.test.ts",
     "test:e2e": "node --import tsx --test --test-concurrency=1 tests/e2e/*.test.ts",
-    "audit:production": "npm audit --omit=dev --audit-level=high"
+    "audit:production": "npm audit --omit=dev --audit-level=high",
+    "generate:config": "node --import tsx scripts/generate-config.mjs",
+    "check:config": "node --import tsx scripts/generate-config.mjs --check",
+    "test:package": "node scripts/package-check.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "0.85.1",
@@ -53,5 +62,6 @@
     "tsx": "4.20.5",
     "typescript": "5.9.3",
     "prettier": "3.6.2"
-  }
+  },
+  "types": "./dist/index.d.ts"
 }

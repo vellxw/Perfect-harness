@@ -7,7 +7,7 @@ import type {
   StateStore,
 } from "../../ports/state-store.js";
 import type { Event } from "../../domain/model.js";
-import { id, now, Blocked } from "../../domain/util.js";
+import { id, now, hash, Blocked } from "../../domain/util.js";
 
 /** One local database; mutations and audit events commit atomically. */
 export class SqliteStore implements StateStore {
@@ -26,6 +26,16 @@ export class SqliteStore implements StateStore {
       CREATE TABLE IF NOT EXISTS events(sequence INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT UNIQUE NOT NULL,goal_id TEXT NOT NULL,body TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS events_goal ON events(goal_id,sequence);
       CREATE TABLE IF NOT EXISTS process_locks(workspace_id TEXT PRIMARY KEY,owner TEXT NOT NULL,pid INTEGER NOT NULL,created_at TEXT NOT NULL);`);
+    const version = this.db
+      .prepare("SELECT MAX(version) AS version FROM migrations")
+      .get() as { version: number | null };
+    if ((version.version ?? 0) > 1) {
+      this.db.close();
+      throw new Blocked(
+        "DATABASE_VERSION",
+        "Database belongs to a newer harness; refusing downgrade",
+      );
+    }
     this.db.prepare("INSERT OR IGNORE INTO migrations VALUES(1,?)").run(now());
     if (path !== ":memory:") chmodSync(path, 0o600);
   }
@@ -64,6 +74,13 @@ export class SqliteStore implements StateStore {
     this.transaction(() => {
       const goalId = "goalId" in value ? value.goalId : value.id;
       const existing = this.get(kind, value.id);
+      if (
+        kind === "runs" &&
+        existing &&
+        hash((existing as EntityMap["runs"]).routeBinding) !==
+          hash((value as EntityMap["runs"]).routeBinding)
+      )
+        throw new Blocked("BINDING_IMMUTABLE", value.id);
       if (
         ["plans", "contexts", "evidence", "approvals", "usage"].includes(
           kind,

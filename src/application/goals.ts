@@ -4,6 +4,7 @@ import type { Goal, Privacy } from "../domain/model.js";
 import type { PerfectConfig } from "../config/schema.js";
 import type { StateStore } from "../ports/state-store.js";
 import { GitWorkspace } from "../adapters/git/workspace.js";
+import { secretContent } from "../tools/paths.js";
 import { hash, id, now, Blocked } from "../domain/util.js";
 
 export async function createGoal(
@@ -17,6 +18,11 @@ export async function createGoal(
   },
   store: StateStore,
 ): Promise<Goal> {
+  if (secretContent(input.request))
+    throw new Blocked(
+      "SECRET_CONTENT",
+      "Remove credentials from the goal before submitting it",
+    );
   if (!input.request.trim()) throw new Error("A nonempty goal is required");
   const source = await realpath(input.source),
     home = resolve(input.home);

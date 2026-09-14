@@ -68,3 +68,18 @@ test("expired ownership is not silently reallocated", () => {
     store.close();
   }
 });
+
+test("the same task cannot hold two overlapping write leases", () => {
+  const store = new SqliteStore(":memory:");
+  try {
+    const ownership = new OwnershipManager(store),
+      task = makeTask();
+    ownership.acquire(task, "one", 60000);
+    assert.throws(
+      () => ownership.acquire(task, "two", 60000),
+      /OWNERSHIP_BUSY/,
+    );
+  } finally {
+    store.close();
+  }
+});

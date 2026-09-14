@@ -47,6 +47,9 @@ export const ConfigSchema = z
         maxNoProgressIterations: z.number().int().positive().default(2),
         contextTokens: z.number().int().positive().default(24000),
         maxOutputTokens: z.number().int().positive().default(12000),
+        maxImageBytes: z.number().int().positive().default(10_000_000),
+        maxReviewImages: z.number().int().positive().default(24),
+        maxToolTextChars: z.number().int().positive().default(16000),
         maxFileBytes: z.number().int().positive().default(2_000_000),
         maxWorkspaceBytes: z.number().int().positive().default(100_000_000),
       })
@@ -57,13 +60,11 @@ export const ConfigSchema = z
         maxParallelAgents: z.number().int().positive().default(4),
         maxParallelWriters: z.number().int().positive().default(2),
         maxParallelGeneralWorkers: z.number().int().positive().default(2),
-        perAccount: z
-          .record(z.string(), z.number().int().positive())
-          .default({
-            "xai-personal": 2,
-            "chatgpt-personal": 1,
-            "opencode-personal": 1,
-          }),
+        perAccount: z.record(z.string(), z.number().int().positive()).default({
+          "xai-personal": 2,
+          "chatgpt-personal": 1,
+          "opencode-personal": 1,
+        }),
         heavyCommands: z.number().int().positive().default(1),
       })
       .strict()

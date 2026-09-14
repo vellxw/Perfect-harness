@@ -39,9 +39,27 @@ export function buildTools(
     ),
     define(
       "read_file",
-      "Read a permitted file and its content hash.",
-      Type.Object({ path: Type.String() }),
-      async (args) => request.services.readFile(pathArgs.parse(args).path),
+      "Read a permitted file with its whole-file content hash. Use startLine/endLine to page through truncated results.",
+      Type.Object({
+        path: Type.String(),
+        startLine: Type.Optional(Type.Integer({ minimum: 1 })),
+        endLine: Type.Optional(Type.Integer({ minimum: 1 })),
+      }),
+      async (args) => {
+        const value = z
+          .object({
+            path: z.string(),
+            startLine: z.number().int().positive().optional(),
+            endLine: z.number().int().positive().optional(),
+          })
+          .strict()
+          .parse(args);
+        return request.services.readFile(
+          value.path,
+          value.startLine,
+          value.endLine,
+        );
+      },
     ),
     define(
       "submit_result",
@@ -55,6 +73,39 @@ export function buildTools(
       },
     ),
   ];
+  if (request.services.readEvidence)
+    tools.push(
+      define(
+        "read_evidence",
+        "Read controller-scoped verification or failure evidence by ID.",
+        Type.Object({ id: Type.String() }),
+        async (args) =>
+          request.services.readEvidence!(
+            z.object({ id: z.string() }).strict().parse(args).id,
+          ),
+      ),
+    );
+  if (request.services.readImage)
+    tools.push({
+      name: "read_image",
+      label: "read_image",
+      description:
+        "Inspect actual image bytes from a permitted workspace file.",
+      parameters: Type.Object({ path: Type.String() }),
+      execute: async (_call, args) => {
+        request.signal.throwIfAborted();
+        const image = await request.services.readImage!(
+          pathArgs.parse(args).path,
+        );
+        return {
+          content: [
+            { type: "text", text: `UNTRUSTED IMAGE: ${image.source}` },
+            { type: "image", data: image.data, mimeType: image.mimeType },
+          ],
+          details: {},
+        };
+      },
+    });
   if (!request.run.routeBinding.readOnly && request.services.writeFile)
     tools.push(
       define(

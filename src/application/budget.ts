@@ -15,6 +15,16 @@ export class BudgetManager {
     tokens: number,
     estimatedCost?: number,
   ): void {
+    if (
+      !Number.isSafeInteger(tokens) ||
+      tokens < 0 ||
+      (estimatedCost !== undefined &&
+        (!Number.isFinite(estimatedCost) || estimatedCost < 0))
+    )
+      throw new Blocked(
+        "BUDGET_INVALID",
+        "Reservations require finite nonnegative bounds",
+      );
     this.store.transaction(() => {
       if (this.store.get("reservations", requestId))
         throw new Error("Duplicate request reservation");
@@ -82,6 +92,22 @@ export class BudgetManager {
     });
   }
   settle(usage: Usage): void {
+    for (const count of [
+      usage.totalTokens,
+      usage.inputTokens,
+      usage.outputTokens,
+      usage.cacheReadTokens,
+      usage.cacheWriteTokens,
+      usage.reasoningTokens,
+    ])
+      if (count !== undefined && (!Number.isSafeInteger(count) || count < 0))
+        throw new Blocked(
+          "USAGE_INVALID",
+          "Cannot settle invalid token counters",
+        );
+    for (const amount of [usage.estimatedCost, usage.reportedCharge])
+      if (amount !== undefined && (!Number.isFinite(amount) || amount < 0))
+        throw new Blocked("USAGE_INVALID", "Cannot settle invalid cost");
     this.store.transaction(() => {
       this.store.put("usage", usage, "usage.recorded");
       const reservation = usage.requestId

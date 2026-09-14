@@ -63,3 +63,32 @@ test("managed worktrees preserve dirty source and staging; apply refuses diverge
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("apply rejects unverified candidate edits even when the original remains unchanged", async () => {
+  const root = await mkdtemp(join(tmpdir(), "perfect-apply-")),
+    source = join(root, "source"),
+    cfg = defaultConfig();
+  try {
+    await mkdir(source);
+    await writeFile(join(source, "README.md"), "original");
+    await git(source, ["init"]);
+    const workspace = new GitWorkspace(join(root, "control"), cfg),
+      snapshot = await workspace.initialize(source);
+    const goal = {
+      ...makeGoal(),
+      source,
+      root: workspace.root,
+      baseline: snapshot.baseline,
+      candidateRevision: snapshot.baseline,
+      sourceFingerprint: snapshot.sourceFingerprint,
+    };
+    await writeFile(join(workspace.repo, "README.md"), "unreviewed change");
+    await assert.rejects(workspace.apply(goal), /CANDIDATE_CHANGED/);
+    assert.equal(await readFile(join(source, "README.md"), "utf8"), "original");
+    await git(workspace.repo, ["add", "."]);
+    await git(workspace.repo, ["commit", "-m", "unreviewed checkpoint"]);
+    await assert.rejects(workspace.apply(goal), /CANDIDATE_CHANGED/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

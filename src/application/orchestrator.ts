@@ -32,7 +32,7 @@ export const acceptanceHash = (plan: Plan) =>
 export interface RunOptions {
   signal?: AbortSignal;
   acceptPlan?: boolean;
-  contributorConsent?: boolean;
+  contributorConsent?: boolean | (() => Promise<boolean>);
   onState?: (goal: Goal) => void;
 }
 
@@ -76,7 +76,17 @@ export class Orchestrator {
       event,
     );
   }
-  private cycle(progress: boolean): void {
+  private cycle(): void {
+    const latest = new Map<string, VerificationResult>();
+    for (const result of this.store.list("verifications", this.goalId)) {
+      if (result.revision === this.goal().candidateRevision)
+        latest.set(result.specId, result);
+    }
+    const passed = this.plan().verification.filter(
+      (spec) => spec.mandatory && latest.get(spec.id)?.status === "passed",
+    ).length;
+    // A new plan, another task ID or a changed diff is not verified progress.
+    const progress = passed > (this.goal().bestVerificationPasses ?? 0);
     const goal = this.goal(),
       iteration = goal.iteration + 1,
       noProgress = progress ? 0 : goal.noProgress + 1;
@@ -84,7 +94,17 @@ export class Orchestrator {
       throw new Error("GOAL_ITERATION_LIMIT");
     if (noProgress > this.config.limits.maxNoProgressIterations)
       throw new Error("NO_PROGRESS_LIMIT");
-    this.patch({ iteration, noProgress }, "goal.iteration");
+    this.patch(
+      {
+        iteration,
+        noProgress,
+        bestVerificationPasses: Math.max(
+          passed,
+          goal.bestVerificationPasses ?? 0,
+        ),
+      },
+      "goal.iteration",
+    );
   }
   private async discover(): Promise<void> {
     const goal = this.goal(),
@@ -149,7 +169,7 @@ export class Orchestrator {
     this.move("REPLAN", failure.normalizedError);
     this.store.put(
       "failures",
-      { ...failure, escalationLevel: 1 },
+      { ...failure, escalationLevel: Math.max(1, failure.escalationLevel) },
       "planner.escalated",
     );
     if (
@@ -181,7 +201,7 @@ export class Orchestrator {
     this.move("DECOMPOSE");
     this.ensurePlanApproval();
     this.move("ASSIGN");
-    this.cycle(true);
+    this.cycle();
   }
   private async taskFailure(task: Task, error: unknown): Promise<void> {
     if (this.signal.aborted) throw this.signal.reason;
@@ -236,7 +256,7 @@ export class Orchestrator {
         "task.retry_scheduled",
       );
     }
-    this.cycle(false);
+    this.cycle();
     this.move("ASSIGN");
   }
   private parentFor(result: VerificationResult): Task {
@@ -271,6 +291,15 @@ export class Orchestrator {
     return parent;
   }
   private async verificationFailure(result: VerificationResult): Promise<void> {
+    const classified = classifyFailure(result.summary);
+    if (["provider", "environment", "policy"].includes(classified)) {
+      this.store.event(this.goalId, "verification.infrastructure_blocked", {
+        verificationId: result.id,
+        category: classified,
+        evidenceIds: result.evidenceIds,
+      });
+      throw new Blocked("VERIFICATION_INFRASTRUCTURE", result.summary);
+    }
     const parent = this.parentFor(result),
       spec = this.plan().verification.find((v) => v.id === result.specId)!;
     const failure = recordFailure(this.store, {
@@ -308,7 +337,7 @@ export class Orchestrator {
       failure,
       `Repair verifier ${spec.id}: ${spec.title}. Preserve the accepted criterion and verifier. Inspect captured evidence. Failure: ${result.summary}. Original responsibility: ${parent.description}`,
     );
-    this.cycle(true);
+    this.cycle();
     this.move("ASSIGN");
   }
   private async reviewFailure(
@@ -349,7 +378,7 @@ export class Orchestrator {
       failure,
       `Address independent ${role} findings without weakening acceptance criteria: ${summary}`,
     );
-    this.cycle(true);
+    this.cycle();
     this.move("ASSIGN");
   }
   private async drive(): Promise<void> {
@@ -473,8 +502,8 @@ export class Orchestrator {
           .filter(
             (r) =>
               r.role === role &&
-              r.revision === current.candidateRevision &&
-              r.decision === "approve",
+              r.purpose === "acceptance" &&
+              r.revision === current.candidateRevision,
           )
           .at(-1);
         if (!review)
@@ -514,24 +543,22 @@ export class Orchestrator {
               r.status === "completed" &&
               (goal.mode === "mock" ||
                 r.routeBinding.provenance === "catalog") &&
-              r.routeBinding.model === t.resolvedRouteBinding?.model,
+              hash(r.routeBinding) === hash(t.resolvedRouteBinding),
           ),
         );
       const humanApprovedIds = plan.criteria
         .filter(
           (c) =>
             c.kind === "human" &&
-            this.store
-              .list("approvals", goal.id)
-              .some(
-                (a) =>
-                  a.kind === "human" &&
-                  a.scopeHash ===
-                    hash({
-                      criterionId: c.id,
-                      revision: goal.candidateRevision,
-                    }),
-              ),
+            this.store.list("approvals", goal.id).some(
+              (a) =>
+                a.kind === "human" &&
+                a.scopeHash ===
+                  hash({
+                    criterionId: c.id,
+                    revision: goal.candidateRevision,
+                  }),
+            ),
         )
         .map((c) => c.id);
       const judgment = judge({

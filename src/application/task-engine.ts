@@ -8,6 +8,7 @@ import { GitWorkspace } from "../adapters/git/workspace.js";
 import { git } from "../adapters/git/process.js";
 import { AgentExecutor } from "./agent-executor.js";
 import { OwnershipManager } from "./ownership.js";
+import { readEvidence, imageMime } from "../tools/evidence.js";
 import { id, now, hash, errorText, Blocked } from "../domain/util.js";
 
 export const WorkerResultSchema = z
@@ -36,6 +37,11 @@ export class TaskEngine {
       ownership = new OwnershipManager(this.store);
     if (task.attempt >= task.maxAttempts)
       return { task, error: new Error("TASK_ATTEMPTS_EXHAUSTED") };
+    try {
+      await this.executor.preflight(goal, task.assignedAgent, task, signal);
+    } catch (error) {
+      return { task, error };
+    } // Auth/policy failures do not consume implementation attempts.
     const base = task.resultRevision
       ? task.baseRevision
       : goal.candidateRevision;
@@ -67,11 +73,48 @@ export class TaskEngine {
         worktree,
         this.config.limits.timeoutPerTask + 60000,
       ).id;
+      const proofIds = new Set(
+        this.store
+          .list("failures", goal.id)
+          .filter((f) => !f.resolvedAt && task.triggerFailureIds.includes(f.id))
+          .flatMap((f) => f.evidenceIds),
+      );
+      const evidence = this.store
+        .list("evidence", goal.id)
+        .filter((e) => proofIds.has(e.id) && e.validity === "valid");
+      const captures = evidence.filter(
+        (e) => e.kind === "screenshot" || e.kind === "frame",
+      );
+      if (captures.length > this.config.limits.maxReviewImages)
+        throw new Blocked(
+          "VISUAL_SCOPE",
+          "Repair evidence exceeds image budget",
+        );
+      const images = this.config.agents[
+        task.assignedAgent
+      ].capabilities.includes("image")
+        ? await Promise.all(
+            captures.map(async (e) => {
+              const bytes = await readEvidence(
+                goal,
+                e,
+                this.config.limits.maxImageBytes,
+              );
+              return {
+                data: bytes.toString("base64"),
+                mimeType: imageMime(bytes),
+                source: `FAILURE ${e.id}`,
+              };
+            }),
+          )
+        : [];
       const invocation = await this.executor.invoke(
         {
           goal: { ...goal, candidateRevision: task.resultRevision ?? base },
           role: task.assignedAgent,
           task,
+          evidence,
+          images,
           workspace: worktree,
           leaseId,
           instruction:

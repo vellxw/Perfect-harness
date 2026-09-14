@@ -120,7 +120,7 @@ function judgmentInput() {
   return {
     goal: makeGoal(),
     plan: makePlan(),
-    tasks: [makeTask({ status: "accepted" })],
+    tasks: [makeTask({ status: "accepted", resultRevision: "rev1" })],
     evidence: [evidence],
     results: [result],
     reviews: [],
@@ -151,3 +151,109 @@ test("Judge rejects modified artifacts", () =>
     judge({ ...judgmentInput(), artifactsValid: false }).done,
     false,
   ));
+
+test("Judge rejects missing active-plan tasks even if another task claims acceptance", () => {
+  const input = judgmentInput();
+  input.tasks[0]!.id = "different";
+  assert.equal(judge(input).done, false);
+});
+test("Judge refuses superseded tasks still required by the active plan", () => {
+  const input = judgmentInput();
+  input.tasks[0]!.status = "superseded";
+  assert.equal(judge(input).done, false);
+});
+test("Judge rejects evidence borrowed from another verifier execution", () => {
+  const input = judgmentInput();
+  input.evidence[0]!.verificationId = "other-run";
+  assert.equal(judge(input).done, false);
+});
+test("Judge requires a real successful exit, not merely a passed label", () => {
+  const input = judgmentInput();
+  input.results[0]!.exitCode = 1;
+  assert.equal(judge(input).done, false);
+});
+test("Judge refuses a mutated acceptance contract", () => {
+  const input = judgmentInput();
+  input.plan.criteria[0]!.description = "A weaker unapproved condition";
+  assert.equal(judge(input).done, false);
+});
+test("diagnostic Oracle advice never satisfies the final acceptance review", () => {
+  const input = judgmentInput();
+  const proof = {
+    ...input.evidence[0]!,
+    id: "review-proof",
+    producer: "reviewer" as const,
+    runId: "oracle-run",
+    kind: "review" as const,
+  };
+  const review = {
+    id: "review-test",
+    goalId: input.goal.id,
+    runId: "oracle-run",
+    revision: "rev1",
+    role: "oracle" as const,
+    purpose: "diagnostic" as const,
+    decision: "approve" as const,
+    summary: "Diagnostic advice, not final approval",
+    findings: [],
+    evidenceIds: [proof.id],
+    createdAt: "now",
+  };
+  assert.equal(
+    judge({
+      ...input,
+      evidence: [...input.evidence, proof],
+      reviews: [review],
+      requiredReviews: ["oracle"],
+    }).done,
+    false,
+  );
+  assert.equal(
+    judge({
+      ...input,
+      evidence: [...input.evidence, proof],
+      reviews: [{ ...review, purpose: "acceptance" }],
+      requiredReviews: ["oracle"],
+    }).done,
+    true,
+  );
+});
+test("TAP timing and worktree attempt IDs cannot hide the same failure", () => {
+  assert.equal(
+    failureSignature(
+      "test",
+      "duration_ms: 12.456\nerror at worktrees/task-one-1/src/test.ts\nFailure (5.6ms)",
+    ).signature,
+    failureSignature(
+      "test",
+      "duration_ms: 99.001\nerror at worktrees/repair-two-2/src/test.ts\nFailure (200ms)",
+    ).signature,
+  );
+});
+
+test("UUIDs and authentication assertions do not masquerade as provider outages", async () => {
+  const { classifyFailure } = await import("../../src/application/policies.js");
+  assert.equal(
+    classifyFailure(
+      "AssertionError: auth endpoint must return HTTP 401; goal-4016-4030-4290",
+    ),
+    "implementation",
+  );
+  assert.equal(
+    classifyFailure(
+      "file:///tmp/goal-4016-4030-4290/src/ui.ts:1 expected button",
+    ),
+    "implementation",
+  );
+  assert.equal(
+    classifyFailure("PROVIDER_FAILED: HTTP 429 quota exhausted"),
+    "provider",
+  );
+});
+
+test("task classification can raise confidentiality but cannot lower the goal", async () => {
+  const { effectivePrivacy } = await import("../../src/domain/model.js");
+  assert.equal(effectivePrivacy("public", "confidential"), "confidential");
+  assert.equal(effectivePrivacy("private", "public"), "private");
+  assert.equal(effectivePrivacy("confidential", "private"), "confidential");
+});

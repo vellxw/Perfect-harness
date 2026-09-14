@@ -41,7 +41,11 @@ export async function buildContext(
   const files: ContextPackage["files"] = [];
   let size = 0;
   for (const path of paths) {
-    if (!manifest.includes(path)) continue;
+    if (
+      !manifest.includes(path) ||
+      /\.(png|jpe?g|webp|gif|woff2?|mp4|glb|zip|pdf)$/i.test(path)
+    )
+      continue;
     const file = await services.readFile(path);
     if (size + file.content.length > config.limits.contextTokens * 2) continue;
     files.push(file);

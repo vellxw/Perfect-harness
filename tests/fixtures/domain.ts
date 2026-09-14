@@ -41,6 +41,7 @@ export function makeGoal(): Goal {
     sourceFingerprint: "fingerprint",
     candidateRevision: "rev1",
     criteria: proposal().criteria,
+    activePlanId: "plan-test",
     configSnapshot: defaultConfig(),
     configSnapshotHash: hash(defaultConfig()),
     iteration: 0,
@@ -84,6 +85,6 @@ export function makePlan(): Plan {
     basedOnRevision: "rev1",
     generatedByRunId: "run-test",
     createdAt: now(),
-    hash: "hash",
+    hash: hash(proposal()),
   };
 }

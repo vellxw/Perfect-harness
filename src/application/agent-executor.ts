@@ -1,4 +1,8 @@
 import { join } from "node:path";
+import { readFile, lstat } from "node:fs/promises";
+import { safePath, sensitive } from "../tools/paths.js";
+import { readEvidence, imageMime } from "../tools/evidence.js";
+import { effectivePrivacy } from "../domain/model.js";
 import type {
   AgentRun,
   Evidence,
@@ -43,14 +47,32 @@ export class AgentExecutor {
     private runtime: AgentRuntime,
     private runner: ExecutionRunner,
     private config: PerfectConfig,
-    private consent: boolean,
+    private consent: boolean | (() => Promise<boolean>),
   ) {}
+  private async consentGranted(): Promise<boolean> {
+    return typeof this.consent === "function" ? this.consent() : this.consent;
+  }
+  async preflight(
+    goal: Goal,
+    role: Role,
+    task: Task | undefined,
+    signal: AbortSignal,
+  ): Promise<void> {
+    await this.runtime.resolve(
+      this.config.agents[role],
+      effectivePrivacy(goal.privacyClass, task?.privacyClass),
+      await this.consentGranted(),
+      signal,
+    );
+  }
   services(
     goal: Goal,
     role: Role,
     workspace: string,
     signal: AbortSignal,
     leaseId?: string,
+    taskId?: string,
+    evidence: Evidence[] = [],
   ): AgentServices {
     const definition = this.config.agents[role];
     const ownership = new OwnershipManager(this.store);
@@ -72,10 +94,90 @@ export class AgentExecutor {
     return {
       listFiles: async () =>
         (await manifest(workspace, this.config)).files.map((f) => f.path),
-      readFile: async (path) => {
+      readFile: async (path, startLine = 1, endLine) => {
         signal.throwIfAborted();
-        return (await makeBroker()).read(path);
+        if (
+          !Number.isSafeInteger(startLine) ||
+          startLine < 1 ||
+          (endLine !== undefined &&
+            (!Number.isSafeInteger(endLine) || endLine < startLine))
+        )
+          throw new Blocked("LINE_RANGE", "Invalid read range");
+        const file = await (await makeBroker()).read(path),
+          lines = file.content.split("\n");
+        const selected: string[] = [];
+        let chars = 0,
+          index = startLine - 1;
+        for (
+          ;
+          index < Math.min(lines.length, endLine ?? lines.length);
+          index++
+        ) {
+          const line = lines[index]!;
+          if (chars + line.length > this.config.limits.maxToolTextChars) break;
+          selected.push(line);
+          chars += line.length + 1;
+        }
+        if (
+          !selected.length &&
+          index < lines.length &&
+          lines[index]!.length > this.config.limits.maxToolTextChars
+        )
+          throw new Blocked(
+            "LINE_SIZE",
+            "Line exceeds tool budget; request a scoped refactor or inspect a non-minified source",
+          );
+        return {
+          ...file,
+          content: selected.join("\n"),
+          truncated: index < lines.length,
+          totalLines: lines.length,
+          nextLine: index < lines.length ? index + 1 : undefined,
+        };
       },
+      readEvidence: async (evidenceId) => {
+        signal.throwIfAborted();
+        const item = evidence.find((e) => e.id === evidenceId);
+        if (!item || !["report", "review", "diff", "log"].includes(item.kind))
+          throw new Blocked(
+            "EVIDENCE_SCOPE",
+            "Only scoped text evidence may be read",
+          );
+        const bytes = await readEvidence(
+          goal,
+          item,
+          this.config.limits.maxFileBytes,
+        );
+        const content = bytes.toString("utf8");
+        return {
+          id: item.id,
+          content: content.slice(0, this.config.limits.maxToolTextChars),
+          truncated: content.length > this.config.limits.maxToolTextChars,
+        };
+      },
+      ...(definition.capabilities.includes("image")
+        ? {
+            readImage: async (path: string) => {
+              signal.throwIfAborted();
+              if (sensitive(path)) throw new Blocked("SECRET_DENIED", path);
+              const full = await safePath(workspace, path),
+                stat = await lstat(full);
+              if (
+                !stat.isFile() ||
+                stat.size > this.config.limits.maxImageBytes
+              )
+                throw new Blocked("IMAGE_SIZE", path);
+              const data = await readFile(full);
+              if (data.length > this.config.limits.maxImageBytes)
+                throw new Blocked("IMAGE_SIZE", path);
+              return {
+                data: data.toString("base64"),
+                mimeType: imageMime(data),
+                source: path,
+              };
+            },
+          }
+        : {}),
       ...(!definition.readOnly && leaseId
         ? {
             writeFile: async (
@@ -97,6 +199,7 @@ export class AgentExecutor {
               const output = await this.runner.command(
                 {
                   goalId: goal.id,
+                  taskId,
                   workspace,
                   revision: goal.candidateRevision,
                   artifactsDir: join(goal.root, "artifacts", id("tool")),
@@ -143,8 +246,8 @@ export class AgentExecutor {
     return semaphore.use(signal, async () => {
       const route = await this.runtime.resolve(
         definition,
-        input.goal.privacyClass,
-        this.consent,
+        effectivePrivacy(input.goal.privacyClass, input.task?.privacyClass),
+        await this.consentGranted(),
         signal,
       );
       if (route.provenance === "mock" && input.goal.mode !== "mock")
@@ -158,6 +261,8 @@ export class AgentExecutor {
         input.workspace,
         signal,
         input.leaseId,
+        input.task?.id,
+        input.evidence,
       );
       const context = await buildContext(
         input.goal,
@@ -210,7 +315,15 @@ export class AgentExecutor {
           resultSchema: input.schema,
           parseResult: input.parse,
           images: input.images,
-          beforeRequest: (requestId, tokens, cost) => {
+          beforeRequest: async (requestId, tokens, cost) => {
+            if (
+              definition.model.includes("contributor") &&
+              !(await this.consentGranted())
+            )
+              throw new Blocked(
+                "CONTRIBUTOR_CONSENT",
+                "Workspace consent was revoked during execution",
+              );
             budget.reserve(requestId, run.id, route, tokens, cost);
             run = { ...run, requestIds: [...run.requestIds, requestId] };
             this.store.put("runs", run, "agent.request_started");

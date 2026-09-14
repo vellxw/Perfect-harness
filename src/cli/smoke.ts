@@ -6,7 +6,7 @@ import type { PerfectConfig } from "../config/schema.js";
 import type { Role } from "../domain/model.js";
 import type { StateStore } from "../ports/state-store.js";
 import { PiRuntime } from "../adapters/pi/runtime.js";
-import { DockerRunner } from "../adapters/sandbox/docker.js";
+import { PreparedDockerRunner } from "../adapters/sandbox/prepared-runner.js";
 import { AgentExecutor } from "../application/agent-executor.js";
 import { Orchestrator } from "../application/orchestrator.js";
 import { createGoal } from "../application/goals.js";
@@ -92,7 +92,7 @@ export async function providerSmoke(input: {
     input.store,
   );
   const runtime = new PiRuntime(input.home, input.config),
-    runner = new DockerRunner(
+    runner = new PreparedDockerRunner(
       input.config,
       input.store,
       join(input.home, "sandbox"),
@@ -216,7 +216,7 @@ export async function fullstackSmoke(input: {
   const runtime = input.mock
       ? new ReservationDemoRuntime()
       : new PiRuntime(input.home, input.config),
-    runner = new DockerRunner(
+    runner = new PreparedDockerRunner(
       input.config,
       input.store,
       join(input.home, "sandbox"),

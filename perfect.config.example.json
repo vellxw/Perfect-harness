@@ -93,6 +93,9 @@
     "maxNoProgressIterations": 2,
     "contextTokens": 24000,
     "maxOutputTokens": 12000,
+    "maxImageBytes": 10000000,
+    "maxReviewImages": 24,
+    "maxToolTextChars": 16000,
     "maxFileBytes": 2000000,
     "maxWorkspaceBytes": 100000000
   },
@@ -107,19 +110,9 @@
     },
     "heavyCommands": 1
   },
-  "budgets": {
-    "mode": "warn",
-    "maxTokens": 2000000,
-    "allowMetered": false
-  },
-  "reviewPolicy": {
-    "finalFeatureReview": true,
-    "visualReview": true
-  },
-  "verificationPolicy": {
-    "extraChecks": [],
-    "requirePlanApproval": true
-  },
+  "budgets": { "mode": "warn", "maxTokens": 2000000, "allowMetered": false },
+  "reviewPolicy": { "finalFeatureReview": true, "visualReview": true },
+  "verificationPolicy": { "extraChecks": [], "requirePlanApproval": true },
   "protectedPaths": [
     ".env",
     ".git",

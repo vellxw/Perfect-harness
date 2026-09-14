@@ -12,6 +12,7 @@ export interface ExecutionRequest {
   signal: AbortSignal;
 }
 export interface ExecutionOutput {
+  environment?: Record<string, unknown>;
   code: number;
   stdout: string;
   stderr: string;

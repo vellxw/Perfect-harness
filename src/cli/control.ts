@@ -203,7 +203,9 @@ export async function applyGoal(
       // A known precondition failure has no effect. Other errors remain uncertain.
       if (
         error instanceof Blocked &&
-        ["SOURCE_CHANGED", "APPLY_PATH"].includes(error.code)
+        ["SOURCE_CHANGED", "APPLY_PATH", "CANDIDATE_CHANGED"].includes(
+          error.code,
+        )
       )
         context.store.put(
           "intents",

@@ -11,6 +11,7 @@ import type {
   ExecutionRunner,
   ExecutionOutput,
 } from "../../ports/execution.js";
+import { readEvidence } from "../../tools/evidence.js";
 import { hash, id, now, errorText, Blocked } from "../../domain/util.js";
 export class VerificationService {
   constructor(
@@ -62,6 +63,7 @@ export class VerificationService {
           code: output.code,
           stdout: output.stdout,
           stderr: output.stderr,
+          environment: output.environment,
         },
         null,
         2,
@@ -84,6 +86,7 @@ export class VerificationService {
         revision: goal.candidateRevision,
         environmentHash: hash({
           runner: this.runner.constructor.name,
+          actual: output.environment,
           platform: process.platform,
           spec,
         }),
@@ -124,11 +127,9 @@ export class VerificationService {
   async artifactsValid(evidence: Evidence[]): Promise<boolean> {
     for (const e of evidence) {
       try {
-        if (
-          hash((await readFile(e.artifactRef)).toString("base64")) !==
-          e.contentHash
-        )
-          return false;
+        const goal = this.store.get("goals", e.goalId);
+        if (!goal) return false;
+        await readEvidence(goal, e, 200_000_000);
       } catch {
         return false;
       }

@@ -14,10 +14,8 @@ export class OwnershipManager {
         .list("ownership", task.goalId)
         .filter((l) => l.status === "held");
       if (
-        held.some(
-          (l) =>
-            l.taskId !== task.id &&
-            l.surfaces.some((a) => surfaces.some((b) => overlaps(a, b))),
+        held.some((l) =>
+          l.surfaces.some((a) => surfaces.some((b) => overlaps(a, b))),
         )
       )
         throw new Blocked("OWNERSHIP_BUSY", task.id);
@@ -42,7 +40,8 @@ export class OwnershipManager {
     if (
       !lease ||
       lease.status !== "held" ||
-      Date.parse(lease.expiresAt) < Date.now()
+      !Number.isFinite(Date.parse(lease.expiresAt)) ||
+      Date.parse(lease.expiresAt) <= Date.now()
     )
       throw new Blocked("OWNERSHIP_EXPIRED", path);
     if (!lease.surfaces.some((s) => path === s || path.startsWith(`${s}/`)))

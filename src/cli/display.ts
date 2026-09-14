@@ -7,6 +7,12 @@ export function statusSnapshot(store: StateStore, goal: Goal) {
     verifications = store
       .list("verifications", goal.id)
       .filter((v) => v.revision === goal.candidateRevision);
+  const latestChecks = [
+    ...new Map(verifications.map((v) => [v.specId, v])).values(),
+  ];
+  const plan = goal.activePlanId
+    ? store.get("plans", goal.activePlanId)
+    : undefined;
   const accounts = [...new Set(usage.map((u) => u.accountRef))].map(
     (account) => {
       const records = usage.filter((u) => u.accountRef === account);
@@ -46,8 +52,8 @@ export function statusSnapshot(store: StateStore, goal: Goal) {
     running: runs.filter((r) => r.status === "running"),
     recentRuns: runs.slice(-10),
     verification: {
-      passed: verifications.filter((v) => v.status === "passed").length,
-      total: verifications.length,
+      passed: latestChecks.filter((v) => v.status === "passed").length,
+      total: plan?.verification.length ?? latestChecks.length,
     },
     oracleCalls: goal.oracleCalls,
     plannerCalls: goal.plannerCalls,
@@ -60,15 +66,20 @@ export function renderStatus(store: StateStore, goal: Goal): string {
   const lines = [
     `GOAL ${goal.id}`,
     goal.originalRequest,
-    `State: ${goal.state} | Mode: ${goal.mode} | Iteration: ${goal.iteration}`,
+    `State: ${goal.state} | Mode: ${goal.mode} | Iteration: ${goal.iteration}/${(goal.configSnapshot as { limits: { maxGoalIterations: number } }).limits.maxGoalIterations}`,
     `Candidate: ${goal.candidateRevision}`,
     `Planner: ${goal.plannerCalls} calls | Oracle: ${goal.oracleCalls} calls | Requests: ${goal.providerRequests}`,
     "",
   ];
   for (const run of value.running) {
     const route = run.routeBinding;
+    const observation = store
+      .list("usage", goal.id)
+      .filter((u) => u.runId === run.id)
+      .at(-1);
+    const elapsed = Math.floor((Date.now() - Date.parse(run.startedAt)) / 1000);
     lines.push(
-      `RUNNING ${run.taskId ?? route.id}: ${route.provider}/${route.model} | requested ${route.requestedReasoning} | selected ${route.selectedReasoning}`,
+      `RUNNING ${run.taskId ?? route.id}: ${route.provider}/${route.model} | requested ${route.requestedReasoning} | selected ${route.selectedReasoning} | sent ${observation?.reasoningSent ?? "not observed yet"} | reported ${observation?.reasoningReported ?? "unknown"} | ${elapsed}s`,
     );
   }
   for (const task of value.tasks.filter(

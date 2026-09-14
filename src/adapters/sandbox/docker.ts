@@ -94,23 +94,26 @@ export class DockerRunner implements ExecutionRunner {
       return false;
     }
   }
-  private async requireImage(image: string): Promise<void> {
+  private async requireImage(image: string): Promise<string> {
     if (!(await this.available()))
       throw new Blocked(
         "SANDBOX_REQUIRED",
         "Docker is unavailable; no host-shell fallback is permitted",
       );
+    const inspected = await processRun(
+      "docker",
+      ["image", "inspect", "--format", "{{.Id}}", image],
+      { timeoutMs: 5000 },
+    );
     if (
-      (
-        await processRun("docker", ["image", "inspect", image], {
-          timeoutMs: 5000,
-        })
-      ).code !== 0
+      inspected.code !== 0 ||
+      !/^sha256:[a-f0-9]{64}$/.test(inspected.stdout.trim())
     )
       throw new Blocked(
         "SANDBOX_IMAGE",
         `Install the approved image explicitly: ${image}`,
       );
+    return inspected.stdout.trim();
   }
   private intent(request: ExecutionRequest, resource: string): OperationIntent {
     const intent: OperationIntent = {
@@ -154,6 +157,15 @@ export class DockerRunner implements ExecutionRunner {
         { timeoutMs: 15000 },
       );
       if (removed.code !== 0) throw new Blocked("RESOURCE_STOP_FAILED", name);
+    } else if (
+      !/no such (?:object|container|network)|network .* not found/i.test(
+        inspected.stderr,
+      )
+    ) {
+      throw new Blocked(
+        "RESOURCE_UNKNOWN",
+        `Cannot establish whether ${name} stopped; keep ownership until recovery`,
+      );
     }
     this.store.put(
       "intents",
@@ -226,7 +238,7 @@ export class DockerRunner implements ExecutionRunner {
   ): Promise<ExecutionOutput> {
     this.validateCommand(command);
     return this.heavy.use(request.signal, async () => {
-      await this.requireImage(this.config.sandbox.image);
+      const imageId = await this.requireImage(this.config.sandbox.image);
       const dir = await this.setup(request, commandDriver, command),
         name = id("perfect-command"),
         intent = this.intent(request, name);
@@ -236,13 +248,13 @@ export class DockerRunner implements ExecutionRunner {
           [
             ...confinementArgs(name, request.goalId, this.config),
             ...this.mounts(dir, request, true, false),
-            this.config.sandbox.image,
+            imageId,
             "node",
             "/driver/execute.mjs",
           ],
           { signal: request.signal, timeoutMs: command.timeoutMs },
         );
-        return { ...result, artifacts: [] };
+        return { ...result, artifacts: [], environment: { imageId } };
       } finally {
         await this.stop(intent);
       }
@@ -275,8 +287,10 @@ export class DockerRunner implements ExecutionRunner {
   ): Promise<ExecutionOutput> {
     this.validateCommand(scenario.server);
     return this.heavy.use(request.signal, async () => {
-      await this.requireImage(this.config.sandbox.image);
-      await this.requireImage(this.config.sandbox.browserImage);
+      const imageId = await this.requireImage(this.config.sandbox.image);
+      const browserImageId = await this.requireImage(
+        this.config.sandbox.browserImage,
+      );
       const network = id("perfect-net"),
         serverName = id("perfect-server"),
         browserName = id("perfect-browser");
@@ -310,7 +324,7 @@ export class DockerRunner implements ExecutionRunner {
           "--network-alias",
           SANDBOX_APP_HOST,
           ...this.mounts(serverDir, request, true, false),
-          this.config.sandbox.image,
+          imageId,
           "node",
           "/driver/execute.mjs",
         ]);
@@ -356,7 +370,7 @@ export class DockerRunner implements ExecutionRunner {
             `${playwright}:/driver/node_modules/playwright:ro`,
             "--volume",
             `${core}:/driver/node_modules/playwright-core:ro`,
-            this.config.sandbox.browserImage,
+            browserImageId,
             "node",
             "/driver/execute.mjs",
           ],
@@ -368,11 +382,19 @@ export class DockerRunner implements ExecutionRunner {
         return {
           ...result,
           artifacts: await this.artifacts(request.artifactsDir),
+          environment: { imageId, browserImageId },
         };
       } finally {
-        if (browserIntent) await this.stop(browserIntent);
-        if (serverIntent) await this.stop(serverIntent);
-        await this.stop(netIntent);
+        const failures: unknown[] = [];
+        for (const intent of [browserIntent, serverIntent, netIntent]) {
+          if (intent)
+            try {
+              await this.stop(intent);
+            } catch (error) {
+              failures.push(error);
+            }
+        }
+        if (failures.length) throw failures[0];
       }
     });
   }
@@ -382,7 +404,7 @@ export class DockerRunner implements ExecutionRunner {
   ): Promise<ExecutionOutput> {
     relativePath(spec.entry);
     return this.heavy.use(request.signal, async () => {
-      await this.requireImage(this.config.sandbox.image);
+      const imageId = await this.requireImage(this.config.sandbox.image);
       const dir = await this.setup(request, remotionDriver, spec),
         name = id("perfect-render"),
         intent = this.intent(request, name);
@@ -392,7 +414,7 @@ export class DockerRunner implements ExecutionRunner {
           [
             ...confinementArgs(name, request.goalId, this.config),
             ...this.mounts(dir, request),
-            this.config.sandbox.image,
+            imageId,
             "node",
             "/driver/execute.mjs",
           ],
@@ -404,6 +426,7 @@ export class DockerRunner implements ExecutionRunner {
         return {
           ...result,
           artifacts: await this.artifacts(request.artifactsDir),
+          environment: { imageId },
         };
       } finally {
         await this.stop(intent);

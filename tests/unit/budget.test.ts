@@ -88,3 +88,23 @@ test("semaphore provides real bounded parallelism and aborts queued work", async
   release();
   await held;
 });
+
+test("negative or nonfinite reservations cannot create budget credit", () => {
+  const store = new SqliteStore(":memory:");
+  try {
+    store.put("goals", makeGoal(), "goal.created");
+    const budget = new BudgetManager(store, "goal-test", defaultConfig());
+    for (const amount of [-1, NaN, Infinity, 1.1])
+      assert.throws(
+        () => budget.reserve("invalid", "run", route(), amount),
+        /BUDGET_INVALID/,
+      );
+    assert.throws(
+      () => budget.reserve("invalid", "run", route(), 100, -1),
+      /BUDGET_INVALID/,
+    );
+    assert.equal(store.list("reservations").length, 0);
+  } finally {
+    store.close();
+  }
+});

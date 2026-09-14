@@ -1,5 +1,5 @@
 import { readFile, writeFile, mkdir, lstat } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { z } from "zod";
 import {
   ReviewSchema,
@@ -13,6 +13,7 @@ import type { PerfectConfig } from "../config/schema.js";
 import { AgentExecutor } from "./agent-executor.js";
 import { GitWorkspace } from "../adapters/git/workspace.js";
 import { safePath } from "../tools/paths.js";
+import { readEvidence, imageMime } from "../tools/evidence.js";
 import { id, now, hash, Blocked } from "../domain/util.js";
 
 export class ReviewService {
@@ -42,48 +43,54 @@ export class ReviewService {
       );
     }
     const workspace = new GitWorkspace(goal.root, this.config);
+    const latestChecks = new Map<
+      string,
+      import("../domain/model.js").VerificationResult
+    >();
+    for (const check of this.store.list("verifications", goal.id))
+      if (check.revision === goal.candidateRevision)
+        latestChecks.set(check.specId, check);
+    const checkProof = new Set(
+      [...latestChecks.values()]
+        .filter((c) => Boolean(question) || c.status === "passed")
+        .flatMap((c) => c.evidenceIds),
+    );
     const evidence = this.store
       .list("evidence", goal.id)
       .filter(
         (e) =>
           e.revision === goal.candidateRevision &&
           e.validity === "valid" &&
-          e.producer === "runner",
+          e.producer === "runner" &&
+          checkProof.has(e.id),
       );
     const images: { data: string; mimeType: string; source: string }[] = [];
     if (role === "visual") {
       for (const item of evidence.filter(
         (e) => e.kind === "screenshot" || e.kind === "frame",
       )) {
-        if (
-          !resolve(item.artifactRef).startsWith(
-            `${resolve(goal.root)}/artifacts/`,
-          )
-        )
-          throw new Blocked("EVIDENCE_PATH", "Unexpected image location");
-        const st = await lstat(item.artifactRef);
-        if (!st.isFile() || st.isSymbolicLink() || st.size > 10_000_000)
-          throw new Blocked("IMAGE_SIZE", "Capture exceeds review limit");
-        const bytes = await readFile(item.artifactRef);
-        if (hash(bytes.toString("base64")) !== item.contentHash)
-          throw new Blocked(
-            "EVIDENCE_CHANGED",
-            "Capture modified after verification",
-          );
+        const bytes = await readEvidence(
+          goal,
+          item,
+          this.config.limits.maxImageBytes,
+        );
         images.push({
           data: bytes.toString("base64"),
-          mimeType: "image/png",
+          mimeType: imageMime(bytes),
           source: `ACTUAL: ${item.id} ${item.artifactRef}`,
         });
       }
       for (const path of [
         ...new Set(
-          plan.verification.flatMap((v) => v.scenario?.targetFiles ?? []),
+          plan.verification.flatMap(
+            (v) => v.scenario?.targetFiles ?? v.remotion?.targetFiles ?? [],
+          ),
         ),
       ]) {
         const full = await safePath(workspace.repo, path),
           st = await lstat(full);
-        if (st.size > 10_000_000) throw new Blocked("IMAGE_SIZE", path);
+        if (st.size > this.config.limits.maxImageBytes)
+          throw new Blocked("IMAGE_SIZE", path);
         images.push({
           data: (await readFile(full)).toString("base64"),
           mimeType: "image/png",
@@ -95,10 +102,10 @@ export class ReviewService {
           "VISUAL_EVIDENCE_REQUIRED",
           "A visual review must inspect actual images",
         );
-      if (images.length > 24)
+      if (images.length > this.config.limits.maxReviewImages)
         throw new Blocked(
           "VISUAL_SCOPE",
-          "Split the visual scenario: more than 24 images need a separate review plan",
+          "Split the visual scenario: image budget exceeded",
         );
     }
     const diff = await workspace.diff(goal.baseline);
@@ -111,14 +118,11 @@ export class ReviewService {
         "Review the integrated candidate against every relevant acceptance criterion.",
       `Criteria: ${JSON.stringify(plan.criteria)}`,
       `Verification summaries: ${JSON.stringify(
-        this.store
-          .list("verifications", goal.id)
-          .filter((r) => r.revision === goal.candidateRevision)
-          .map((r) => ({
-            specId: r.specId,
-            status: r.status,
-            summary: r.summary.slice(0, 3000),
-          })),
+        [...latestChecks.values()].map((r) => ({
+          specId: r.specId,
+          status: r.status,
+          summary: r.summary.slice(0, 3000),
+        })),
       )}`,
       `Images in order: ${JSON.stringify(images.map((i) => i.source))}`,
       diff.length <= 40000
@@ -133,7 +137,7 @@ export class ReviewService {
         instruction,
         schema: z.toJSONSchema(ReviewSchema),
         parse: (value) => ReviewSchema.parse(value),
-        evidence: evidence.slice(-12),
+        evidence,
         images,
       },
       signal,
@@ -146,6 +150,7 @@ export class ReviewService {
       runId: invoked.run.id,
       revision: goal.candidateRevision,
       role,
+      purpose: question ? "diagnostic" : "acceptance",
       evidenceIds: [],
       createdAt: now(),
     };

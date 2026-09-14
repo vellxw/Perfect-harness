@@ -24,7 +24,8 @@ import {
 import { defaultConfig, ConfigSchema } from "../config/schema.js";
 import { localPolicy, savePolicy } from "../config/load.js";
 import { PiRuntime } from "../adapters/pi/runtime.js";
-import { DockerRunner } from "../adapters/sandbox/docker.js";
+import { PreparedDockerRunner } from "../adapters/sandbox/prepared-runner.js";
+import { registerPrepare } from "./prepare.js";
 import { GitWorkspace } from "../adapters/git/workspace.js";
 import { Orchestrator } from "../application/orchestrator.js";
 import { createGoal } from "../application/goals.js";
@@ -72,17 +73,19 @@ export async function main(
   };
   const execute = async (ctx: CliContext, goal: Goal, acceptPlan = false) =>
     interruptible(async (signal) => {
-      const config = goalConfig(goal),
-        policy = await localPolicy(ctx.home);
+      const config = goalConfig(goal);
       const orchestrator = new Orchestrator(
         ctx.store,
         new PiRuntime(ctx.home, config),
-        new DockerRunner(config, ctx.store, join(ctx.home, "sandbox")),
+        new PreparedDockerRunner(config, ctx.store, join(ctx.home, "sandbox")),
       );
       const finished = await orchestrator.run(goal.id, {
         signal,
         acceptPlan,
-        contributorConsent: policy.contributorWorkspaces.includes(goal.source),
+        contributorConsent: async () =>
+          (await localPolicy(ctx.home)).contributorWorkspaces.includes(
+            goal.source,
+          ),
         onState: (state) => {
           if (!ctx.json)
             process.stderr.write(
@@ -96,6 +99,7 @@ export async function main(
       );
       exitCode = goalExit(finished);
     });
+  registerPrepare(program, context);
   program
     .command("goal <description...>")
     .description(
@@ -186,16 +190,14 @@ export async function main(
         if (name === "routing")
           ctx.print({
             configured: goalConfig(goal).agents,
-            observed: ctx.store
-              .list("runs", goal.id)
-              .map((run) => ({
-                runId: run.id,
-                role: run.agentDefinitionId,
-                binding: run.routeBinding,
-                usage: ctx.store
-                  .list("usage", goal.id)
-                  .filter((u) => u.runId === run.id),
-              })),
+            observed: ctx.store.list("runs", goal.id).map((run) => ({
+              runId: run.id,
+              role: run.agentDefinitionId,
+              binding: run.routeBinding,
+              usage: ctx.store
+                .list("usage", goal.id)
+                .filter((u) => u.runId === run.id),
+            })),
           });
         if (name === "cost")
           ctx.print({
