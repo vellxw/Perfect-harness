@@ -1,0 +1,35 @@
+name: V2 continuation diagnostics (temporary)
+on:
+  push:
+    branches: [feat/perfect-harness-v2-tui-windows]
+    paths: [.github/workflows/v2-resume-diagnostics.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - name: Export repository and installed packages only
+        run: |
+          mkdir -p /tmp/perfect-v2-resume/runtime
+          git archive HEAD | tar -x -C /tmp/perfect-v2-resume
+          git bundle create /tmp/perfect-v2-resume/history.bundle --all
+          git rev-parse HEAD > /tmp/perfect-v2-resume/SOURCE_COMMIT
+          cp "$(command -v node)" /tmp/perfect-v2-resume/runtime/node
+          tar -czf /tmp/perfect-v2-resume/dependencies.tar.gz node_modules
+          tar -czf /tmp/perfect-v2-resume.tar.gz -C /tmp/perfect-v2-resume .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: perfect-v2-resume
+          path: /tmp/perfect-v2-resume.tar.gz
+          retention-days: 3
+          compression-level: 0
