@@ -1,0 +1,114 @@
+name: Validar localización española (temporal)
+on:
+  push:
+    branches: [feat/perfect-harness-v2-tui-windows]
+    paths:
+      - .github/workflows/es-localize.yml
+      - scripts/localize-es.mjs
+      - scripts/finish-es.mjs
+      - src/i18n/**
+      - src/cli/spanish.ts
+      - tests/**/spanish.test.*
+permissions:
+  contents: write
+concurrency:
+  group: perfect-spanish-migration
+  cancel-in-progress: true
+jobs:
+  localize:
+    if: github.repository == 'vellxw/Perfect-harness' && github.ref == 'refs/heads/feat/perfect-harness-v2-tui-windows'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - name: Aplicar traducciones con comprobación de todas las anclas
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          // Recopilar TODAS las anclas ausentes antes de fallar; jamás publicar una migración incompleta.
+          for(const name of ['localize-es','finish-es']){
+            let source=fs.readFileSync('scripts/'+name+'.mjs','utf8');
+            source='const missingAnchors=[];\n'+source;
+            source=source.replace(/if\(required\)throw Error\((`[^`]+`)\);return;/g,'if(required){missingAnchors.push($1);console.error($1);}return;');
+            source+='\nif(missingAnchors.length)throw Error("Anclas ausentes: "+missingAnchors.length);\n';
+            fs.writeFileSync('scripts/.'+name+'-audit.mjs',source);
+          }
+          JS
+          node scripts/.localize-es-audit.mjs
+          node scripts/.finish-es-audit.mjs
+      - name: Ordenar imports de los archivos modificados
+        run: |
+          node --input-type=module <<'JS'
+          import ts from 'typescript';import fs from 'node:fs';import {execFileSync} from 'node:child_process';
+          const changed=execFileSync('git',['diff','--name-only'],{encoding:'utf8'}).trim().split('\n').filter(p=>/\.(ts|tsx)$/.test(p));
+          const config=ts.readConfigFile('tsconfig.json',ts.sys.readFile),parsed=ts.parseJsonConfigFileContent(config.config,ts.sys,'.');
+          for(const file of changed){
+            const service=ts.createLanguageService({getScriptFileNames:()=>parsed.fileNames,getScriptVersion:()=> '0',getScriptSnapshot:p=>fs.existsSync(p)?ts.ScriptSnapshot.fromString(fs.readFileSync(p,'utf8')):undefined,getCurrentDirectory:()=>process.cwd(),getCompilationSettings:()=>parsed.options,getDefaultLibFileName:o=>ts.getDefaultLibFilePath(o),fileExists:ts.sys.fileExists,readFile:ts.sys.readFile,readDirectory:ts.sys.readDirectory});
+            for(const edit of service.organizeImports({type:'file',fileName:file},{},{})){
+              let value=fs.readFileSync(edit.fileName,'utf8');for(const change of edit.textChanges.toReversed())value=value.slice(0,change.span.start)+change.newText+value.slice(change.span.start+change.span.length);fs.writeFileSync(edit.fileName,value);
+            }service.dispose();
+          }
+          execFileSync(process.execPath,['node_modules/prettier/bin/prettier.cjs','--write',...changed,'src/i18n','src/cli/spanish.ts','tests/unit/spanish.test.ts','tests/tui/spanish.test.tsx'],{stdio:'inherit'});
+          JS
+      - name: Tipos y estilo
+        run: |
+          npm run typecheck
+          npm run lint
+          npm run check:config
+          npm run build
+      - name: Nuevas referencias españolas autorizadas por la localización
+        run: |
+          node --experimental-ffi scripts/capture-tui.mjs docs/screenshots/es
+          printf '\n--- INTERFAZ COMPACTA ---\n'
+          cat docs/screenshots/es/compact.txt
+          printf '\n--- AGENTES ---\n'
+          cat docs/screenshots/es/agents.txt
+          printf '\n--- AJUSTES ---\n'
+          cat docs/screenshots/es/settings.txt
+      - name: Pruebas de regresión, idioma e instalación limpia
+        run: |
+          npm test
+          npm run test:package
+      - name: Auditar diferencias y crear objetos sin mover la rama
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import os,json,subprocess,pathlib,base64,urllib.request
+          repo='vellxw/Perfect-harness';head=os.environ['GITHUB_SHA']
+          def api(path,data):
+            req=urllib.request.Request('https://api.github.com/repos/'+repo+'/'+path,data=json.dumps(data).encode(),headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json'})
+            with urllib.request.urlopen(req,timeout=60) as r:return json.load(r)
+          changes=subprocess.check_output(['git','diff','--name-only'],text=True).splitlines()
+          captures=[p.as_posix() for p in pathlib.Path('docs/screenshots/es').rglob('*') if p.is_file()]
+          allowed=[]
+          for name in sorted(set(changes+captures)):
+            assert name.startswith(('src/','tests/','docs/screenshots/es/')) or name in {'package.json','package-lock.json','build/windows/perfect.iss','scripts/capture-tui.mjs'},name
+            p=pathlib.Path(name);assert p.is_file() and not p.is_symlink() and p.stat().st_size<5_000_000
+            allowed.append(p)
+          subprocess.run(['git','diff','--check'],check=True)
+          entries=[]
+          for p in allowed:
+            blob=api('git/blobs',{'encoding':'base64','content':base64.b64encode(p.read_bytes()).decode()})['sha']
+            entries.append({'path':p.as_posix(),'mode':'100644','type':'blob','sha':blob})
+          base=subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip()
+          tree=api('git/trees',{'base_tree':base,'tree':entries})['sha']
+          pathlib.Path('test-results').mkdir(exist_ok=True)
+          result={'parent':head,'tree':tree,'changedFiles':[str(p) for p in allowed],'validation':'typecheck, lint, schema, build, real native renderer, unit/integration/security/TUI and package installation. Providers simulated. Docker E2E separate.'}
+          pathlib.Path('test-results/spanish-tree.json').write_text(json.dumps(result,ensure_ascii=False,indent=2))
+          print(json.dumps(result,ensure_ascii=False,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perfect-es-validation
+          path: |
+            test-results/spanish-tree.json
+            docs/screenshots/es
+          retention-days: 14
