@@ -1,8 +1,8 @@
 import type { UiClient } from "../../presentation/client.js";
 import { emptySnapshot } from "../../presentation/client.js";
 import type {
-  UiMessage,
   UiAction,
+  UiMessage,
   UiSnapshot,
 } from "../../presentation/protocol.js";
 export function demoSnapshot(scene = "running"): UiSnapshot {
@@ -18,7 +18,7 @@ export function demoSnapshot(scene = "running"): UiSnapshot {
   if (scene === "idle") return s;
   s.goal = {
     id: "demo-checkout",
-    request: "Build the checkout and verify it visually",
+    request: "Construí la pantalla de pago y verificala visualmente",
     state:
       scene === "done"
         ? "DONE"
@@ -39,11 +39,11 @@ export function demoSnapshot(scene = "running"): UiSnapshot {
     activeMs: 143000,
     reason:
       scene === "paused"
-        ? "Docker is unavailable. Your checkpoint is safe; start Docker and resume."
+        ? "Docker no está disponible. Tu trabajo está guardado; iniciá Docker y reanudá."
         : scene === "failed"
-          ? "Repeated contract failure. Inspect the evidence before starting a continuation."
+          ? "Fallo de contrato repetido. Revisá la evidencia antes de iniciar una continuación."
           : scene === "done"
-            ? "All required criteria are covered by current evidence."
+            ? "Todos los criterios obligatorios están respaldados por evidencia actual."
             : undefined,
   };
   s.agents = [
@@ -122,38 +122,38 @@ export function demoSnapshot(scene = "running"): UiSnapshot {
   const events: [string, string, string, string][] = [
     [
       "planner",
-      "Implementation plan ready",
-      "8 tasks · 3 parallel groups · acceptance contract approved",
+      "Plan de implementación listo",
+      "8 tareas · 3 grupos paralelos · contrato de aceptación aprobado",
       "completed",
     ],
     [
       "general",
-      "API contracts documented",
-      "Shared interfaces are ready for the two specialists",
+      "Contratos de API documentados",
+      "Los contratos compartidos están listos para ambos especialistas",
       "completed",
     ],
     [
       "backend",
-      "Backend implementation complete",
-      "42 tests passed · webhook idempotency covered",
+      "Implementación del servidor completada",
+      "42 pruebas aprobadas · idempotencia de webhooks cubierta",
       "completed",
     ],
     [
       "frontend",
-      "Building the responsive checkout",
-      "src/app/checkout.tsx · isolated working copy",
+      "Construyendo una pantalla de pago adaptable",
+      "src/app/checkout.tsx · copia de trabajo aislada",
       "running",
     ],
     [
       "visual",
-      "Mobile overflow detected",
-      "390 × 844 · screenshot attached to repair",
+      "Desborde detectado en móvil",
+      "390 × 844 · captura adjunta a la reparación",
       "failed",
     ],
     [
       "frontend",
-      "Repairing the responsive layout",
-      "Current candidate remains unverified until checks pass again",
+      "Reparando el diseño adaptable",
+      "La versión actual sigue sin verificar hasta aprobar las comprobaciones",
       "running",
     ],
   ];
@@ -161,20 +161,20 @@ export function demoSnapshot(scene = "running"): UiSnapshot {
     events.push(
       [
         "controller",
-        "Verification rerun passed",
-        "Build · API · browser · visual review",
+        "Nueva verificación aprobada",
+        "Compilación · API · navegador · revisión visual",
         "completed",
       ],
       [
         "oracle",
-        "Independent review approved",
-        "No blocking findings on the final candidate",
+        "Revisión independiente aprobada",
+        "Sin hallazgos bloqueantes en la versión final",
         "completed",
       ],
       [
         "controller",
-        "Evidence Judge: DONE",
-        "Verified candidate is ready to inspect and apply",
+        "Evaluador de evidencia: COMPLETADO",
+        "Versión verificada lista para inspeccionar y aplicar",
         "completed",
       ],
     );
@@ -194,25 +194,26 @@ export function demoSnapshot(scene = "running"): UiSnapshot {
     hash: "demo-hash",
     version: 2,
     summary:
-      "Contract-first checkout with parallel implementation and independent verification.",
+      "Pantalla de pago con contratos previos, implementación paralela y verificación independiente.",
     architecture: [
-      "Shared contract before frontend/backend execution",
-      "Idempotent payment handling with isolated tests",
-      "Responsive UI verified at desktop and mobile sizes",
+      "Contrato compartido antes de implementar la interfaz y el servidor",
+      "Pagos idempotentes con pruebas aisladas",
+      "Interfaz adaptable verificada en escritorio y móvil",
     ],
     risks: [
-      "Payment credentials never enter test fixtures",
-      "Contributor content must be public",
+      "Las credenciales de pago nunca ingresan en los datos de prueba",
+      "El contenido de Contributor debe ser público",
     ],
     criteria: [
       {
         id: "responsive",
-        description: "Checkout works without overflow at 390px and 1280px.",
+        description:
+          "La pantalla de pago funciona sin desborde a 390 y 1280 píxeles.",
         kind: "visual",
       },
       {
         id: "api",
-        description: "API rejects duplicated payment events.",
+        description: "La API rechaza eventos de pago duplicados.",
         kind: "functional",
       },
     ],
@@ -221,66 +222,67 @@ export function demoSnapshot(scene = "running"): UiSnapshot {
   s.tasks = [
     {
       id: "discover",
-      title: "Discover the source project",
+      title: "Explorar el proyecto original",
       status: "accepted",
       role: "general",
       dependencies: [],
       attempt: 1,
       maxAttempts: 3,
-      description: "Inspect the project and baseline checks",
+      description: "Inspeccionar el proyecto y las comprobaciones iniciales",
       surfaces: [],
     },
     {
       id: "contracts",
-      title: "Define API contracts",
+      title: "Definir los contratos de la API",
       status: "accepted",
       role: "general",
       dependencies: ["discover"],
       attempt: 1,
       maxAttempts: 3,
-      description: "Define stable contracts before parallel work",
+      description: "Definir contratos estables antes de trabajar en paralelo",
       surfaces: ["src/contracts"],
     },
     {
       id: "backend-api",
-      title: "Implement checkout service",
+      title: "Implementar el servicio de pagos",
       status: "accepted",
       role: "backend",
       dependencies: ["contracts"],
       attempt: 1,
       maxAttempts: 3,
-      description: "Idempotent checkout API and tests",
+      description: "API de pagos idempotente y pruebas",
       surfaces: ["src/api"],
     },
     {
       id: "frontend-checkout",
-      title: "Build responsive checkout",
+      title: "Construir la pantalla de pago adaptable",
       status: scene === "done" ? "accepted" : "running",
       role: "frontend",
       dependencies: ["contracts"],
       attempt: 2,
       maxAttempts: 3,
-      description: "Repair mobile overflow using the captured evidence",
+      description: "Reparar el desborde móvil utilizando las capturas",
       surfaces: ["src/app/checkout.tsx"],
     },
     {
       id: "integrate",
-      title: "Integrate the candidate",
+      title: "Integrar la versión candidata",
       status: scene === "done" ? "accepted" : "pending",
       role: "integrator",
       dependencies: ["backend-api", "frontend-checkout"],
       attempt: 1,
       maxAttempts: 3,
-      description: "Integrate compatible outputs and rerun all required checks",
+      description:
+        "Integrar resultados compatibles y repetir las comprobaciones obligatorias",
       surfaces: [],
     },
   ];
   s.checks = [
-    "Build",
+    "Compilación",
     "TypeScript",
-    "API integration",
-    "Desktop browser",
-    "Mobile visual",
+    "Integración de API",
+    "Navegador de escritorio",
+    "Aspecto en móvil",
   ].map((title, i) => ({
     id: `check-${i}`,
     title,
@@ -288,8 +290,8 @@ export function demoSnapshot(scene = "running"): UiSnapshot {
     status: i === 4 && scene !== "done" ? "failed" : "passed",
     summary:
       i === 4 && scene !== "done"
-        ? "Horizontal overflow: viewport 390, scrollWidth 1200"
-        : "All configured checks in this fixture passed",
+        ? "Desborde horizontal: ventana de 390, contenido de 1200 píxeles"
+        : "Todas las comprobaciones de esta demostración están aprobadas",
     evidenceIds: ["demo-evidence"],
     revision: s.goal!.revision,
   }));
@@ -301,7 +303,7 @@ export function demoSnapshot(scene = "running"): UiSnapshot {
       kind: "screenshot",
       revision: s.goal.revision,
       current: true,
-      hash: "synthetic fixture; no actual screenshot is linked",
+      hash: "datos sintéticos; no hay una captura real vinculada",
     },
   ];
   s.accounts = [
@@ -313,18 +315,18 @@ export function demoSnapshot(scene = "running"): UiSnapshot {
     {
       name: "Node 26.4.0",
       status: "PASS",
-      detail: "Synthetic diagnostic row, not a machine measurement",
+      detail: "Fila de diagnóstico sintética, no es una medición del equipo",
     },
-    { name: "Pi 0.85.1", status: "PASS", detail: "Synthetic fixture" },
+    { name: "Pi 0.85.1", status: "PASS", detail: "Datos sintéticos" },
     {
       name: "Docker",
       status: "BLOCKED",
-      detail: "Fixture shows a paused execution; no host fallback",
+      detail: "Demostración en pausa; sin ejecución alternativa en el equipo",
     },
     {
-      name: "Real provider smoke",
+      name: "Prueba de proveedores reales",
       status: "NOT_TESTED",
-      detail: "No personal credentials are used in demo mode",
+      detail: "La demostración no usa credenciales personales",
     },
   ];
   s.recentGoals = [
@@ -364,7 +366,7 @@ export class DemoClient implements UiClient {
         requestId: "demo",
         ok: false,
         message:
-          "Display fixture only. Reopen Perfect without --demo to perform real actions.",
+          "Solo es una demostración visual. Abrí Perfect sin --demo para realizar acciones reales.",
       });
   };
   close = async () => {};

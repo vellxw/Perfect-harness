@@ -1,32 +1,38 @@
-# Windows package and launch experience
+# Instalación y ejecución en Windows
 
-## Install and open
+## Paquetes
 
-Download the **Windows package** artifact for a successful commit. Run `Perfect-Harness-Setup-x64.exe`, or extract **all** of `Perfect-Harness-Windows-x64.zip`. The installer is per-user, adds Start-menu and optional desktop shortcuts, optionally adds its own directory to your user PATH, and supports uninstall. Do not copy `Perfect.exe` alone: it launches the bundled Node runtime, application code and native OpenTUI assets beside it.
+La versión 0.2.1 ofrece `Perfect-Harness-Setup-x64.exe` con instalador en español, un ZIP portable completo `Perfect-Harness-Windows-x64.zip` y `SHA256SUMS.txt`. El flujo **Windows package** también publica un archivo independiente llamado **Perfect-Windows-x64-Espanol-Instalador**, para no descargar ambas distribuciones juntas.
 
-Double-click Perfect, or use its shortcut, to open the Perfect Harness profile in Windows Terminal. From an existing interactive terminal, `perfect` uses that terminal. `Perfect.exe --version`, `--no-ui` and classic commands do not require a separate global Node/npm installation.
+La instalación es por usuario, sin elevar privilegios. Crea una entrada en Inicio, un acceso opcional al escritorio y el perfil de Windows Terminal. Añadir Perfect al PATH es opcional y reversible. El paquete incluye Node y sus dependencias: `Perfect.exe` no es un ejecutable autónomo que pueda copiarse sin el resto de su carpeta.
 
-Windows Terminal is an external prerequisite for the dedicated visual window. Missing Terminal produces an actionable message, not an empty PowerShell. Git and a working Docker engine capable of running Linux containers remain prerequisites for actual coding execution. They are not silently installed or granted elevated privileges. A standalone UI can run without Docker, but verification must pause instead of falling back to the host shell.
+Windows Terminal es necesario para la ventana visual dedicada. Git y un motor Docker con contenedores Linux siguen siendo requisitos para ejecutar código de proyectos. No se instalan sin permiso ni se ejecutan comandos directamente en el equipo cuando falta el entorno aislado.
 
-Use `perfect --workspace "C:\Projects\My App"` to select your project, or `/workspace` inside the UI. The default desktop shortcut starts in `Documents\Perfect Projects\Workspace`. Private goals are the default; configure your local providers before attempting a real goal.
+## Abrir un proyecto
 
-## What the installer changes
+```powershell
+perfect --carpeta "C:\Proyectos\Mi aplicación"
+```
 
-Application: `%LOCALAPPDATA%\Programs\PerfectHarness` by default. Terminal fragment: `%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\PerfectHarness\PerfectHarness.json`. This is an app-owned fragment with a fixed GUID, not an edit to the user's `settings.json`. Its profile uses 88% opacity, Acrylic, a muted wallpaper, Cascadia Mono and a dark color scheme. Acrylic support and appearance depend on the terminal/compositor and accessibility settings. Mica is a window-theme preference and is not forced globally.
+Desde la interfaz, `/carpeta` permite indicar el proyecto original. El acceso directo conserva la ubicación predeterminada `Documents\Perfect Projects\Workspace`; la traducción no mueve proyectos ni cambia rutas persistidas. Los nombres de comandos originales, como `--workspace`, siguen siendo válidos.
 
-Uninstall removes its own fragment only when it references this installation and removes its own PATH entry only when it added it. Project folders, original source code and local harness state are not deleted. Credentials remain outside the installation and Git repository.
+## Integración con Windows Terminal
 
-## Packaging decision
+La instalación utiliza `%LOCALAPPDATA%\Programs\PerfectHarness`. Su fragmento propio se registra en `%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\PerfectHarness\PerfectHarness.json` con una identidad fija.
 
-The distribution deliberately uses a small C#/.NET Framework x64 launcher plus a pinned Node 26.4.0 runtime and ordinary production dependencies. Windows includes the required Framework runtime; the compiler is only needed on the build machine. This approach preserves Pi's dynamic resources, the separate engine worker and OpenTUI's native library paths without forcing them through a single-file bundler.
+El perfil proporciona icono, título, fuente monoespaciada, fondo oscuro, opacidad 88, Acrylic y un fondo original discreto. Mica depende de la configuración personal de Windows Terminal y no se activa globalmente. La aplicación no reescribe `settings.json`.
 
-Node SEA and Bun compilation were investigated as alternatives. The chosen release is **not** a Node SEA image and does not claim every dependency works under Bun. Avoiding a speculative runtime rewrite is more valuable than reducing a complete installation to one file.
+La desinstalación elimina únicamente su fragmento si corresponde a esta instalación y la entrada de PATH que añadió. No elimina proyectos, estado del motor ni credenciales locales. La versión española conserva el AppId y las carpetas de instalación para mantener continuidad con 0.2.0.
 
-The launcher has product/version metadata, an embedded multi-resolution ICO, DPI/long-path manifest and `asInvoker` privileges. It does not execute a command string through cmd/PowerShell. The core worker is hidden and communicates over private inherited IPC, not a localhost web server.
+## Arquitectura del paquete
 
-## Build and smoke
+Se utiliza un iniciador C# x64 pequeño sobre .NET Framework, junto con Node 26.4.0 y las dependencias normales. Se eligió esta distribución para conservar los recursos dinámicos de Pi y los recursos nativos de OpenTUI, sin imponer una conversión a SEA o Bun que no estuviera validada.
 
-On Windows x64 with Node 26.4.0 and the official Inno Setup compiler:
+El ejecutable incluye metadatos de versión, icono, declaración de DPI, compatibilidad con rutas largas y ejecución sin elevación (`asInvoker`). Los argumentos se transmiten de forma explícita; no se concatenan en una orden de PowerShell o cmd. La interfaz se comunica con el proceso del motor mediante un canal IPC privado.
+
+## Compilar y probar
+
+En una máquina Windows x64 con las herramientas de compilación:
 
 ```powershell
 npm ci
@@ -34,16 +40,25 @@ npm ci
 ./scripts/smoke-windows.ps1 -Installer
 ```
 
-The package script verifies version without external Node on PATH, native icon resources, generated Terminal profile and dependency integrity. The smoke test registers/removes the profile, checks the user's Terminal settings were not edited, invokes JSON diagnostics, installs silently into a clean path, checks PATH addition, uninstalls and checks the original PATH was restored.
+El script verifica versión y metadatos contra `package.json`, icono, perfil de Windows Terminal y ejecución sin Node global. Las pruebas de instalación usan una carpeta temporal, comprueban ayuda y opciones españolas, salida JSON, PATH y desinstalación. Las claves de JSON y los identificadores del protocolo no cambian con el idioma.
 
-## Signing
+El diagnóstico instalado se puede ejecutar con:
 
-The launcher and setup executable are currently **unsigned**. SHA256 checksums detect file changes, not publisher identity. Do not disable Windows security protections to install them. A production publisher should sign the finished launcher and installer with Authenticode using an external certificate/managed signing service; never commit a PFX, password or private key. Signing must be followed by a fresh checksum manifest and installer smoke.
+```powershell
+perfect diagnostico
+perfect diagnostico --en-linea
+```
 
-## Evidence boundaries
+El primero no envía inferencias; el segundo puede comprobar o renovar credenciales, pero tampoco demuestra por sí solo acceso a modelos o cuota disponible. Las pruebas con cuentas personales se solicitan por separado.
 
-The hosted `windows-2025` runner is Windows Server 2025 build 26100, **not a Windows 11 desktop session**. Passing its native renderer, CLI and installer tests is useful Windows compatibility evidence, but not a claim that a human Windows 11 installation or Acrylic performance was tested.
+## Firma y distribución
 
-`capture-windows.ps1` attempts an actual Windows Terminal window using Microsoft's pinned portable ZIP in an isolated settings directory, launches the packaged executable, verifies a live bundled TUI process, captures the actual window and records OS/process provenance. If an interactive desktop is unavailable or blank, it records BLOCKED rather than fabricating a screenshot. Its application data is a clearly marked demo; no OAuth is involved. A final Windows 11 user-session visual/keyboard/Docker check remains required before calling the package broadly certified.
+Los ejecutables están **sin firma Authenticode**. SHA256 verifica integridad, no la identidad del editor. No desactives protecciones de Windows. Una publicación firmada requiere un certificado y un proceso de firma externo; no se incluyen PFX, claves privadas ni credenciales en el repositorio o en CI.
 
-Official references: Microsoft Terminal JSON fragments and profile appearance documentation; OpenTUI runtime/standalone documentation; Node single-executable documentation; Inno Setup documentation. Versions are pinned in scripts, not inferred from branding.
+## Qué demuestra CI
+
+El ejecutable y el instalador se compilan y ejecutan en **Windows Server 2025 build 26100**. Eso no equivale a una certificación de una sesión personal de Windows 11.
+
+La captura de escritorio usa una distribución verificada de Windows Terminal en un entorno aislado, confirma que el proceso de la interfaz siga vivo y registra el sistema, tamaño y método. Si no existe un escritorio interactivo utilizable, informa `BLOCKED`, no una captura inventada. Las escenas de demostración no usan cuentas personales.
+
+La aceptación final en Windows 11 —teclado, transparencia y ejecución real con Docker— sigue siendo una comprobación local. El idioma de errores emitidos por Windows Terminal, Docker o servicios externos depende de esos programas; Perfect conserva su información original cuando no hay una traducción conocida.

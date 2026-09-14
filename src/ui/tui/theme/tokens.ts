@@ -15,13 +15,13 @@ export const glass = {
   danger: "#FF91A0",
 } as const;
 export const roles: Record<string, { name: string; color: string }> = {
-  planner: { name: "Planner", color: "#A7DCCC" },
-  frontend: { name: "Frontend", color: "#BAA9FF" },
-  backend: { name: "Backend", color: "#93BBFF" },
-  oracle: { name: "Oracle", color: "#EAC487" },
-  general: { name: "Worker", color: "#ADB6CA" },
-  integrator: { name: "Integrator", color: "#A9C9DB" },
-  visual: { name: "Visual review", color: "#EAC487" },
+  planner: { name: "Planificador", color: "#A7DCCC" },
+  frontend: { name: "Interfaz", color: "#BAA9FF" },
+  backend: { name: "Servidor", color: "#93BBFF" },
+  oracle: { name: "Revisor experto", color: "#EAC487" },
+  general: { name: "Asistente", color: "#ADB6CA" },
+  integrator: { name: "Integrador", color: "#A9C9DB" },
+  visual: { name: "Revisión visual", color: "#EAC487" },
 };
 export function stateIcon(state: string, ascii = false): string {
   if (ascii)

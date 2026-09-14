@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import type { Screen, Motion } from "../presentation/protocol.js";
-const raw = process.argv.slice(2),
+import { normalizeArgs } from "../i18n/es.js";
+import type { Motion, Screen } from "../presentation/protocol.js";
+const raw = normalizeArgs(process.argv.slice(2)),
   args = raw.filter((a) => a !== "--no-ui" && a !== "--tui-child");
 const [major, minor] = process.versions.node.split(".").map(Number);
 if (major !== 26 || (minor ?? 0) < 4) {
   console.error(
-    `Perfect requires Node 26.4 or newer in the 26.x line; got ${process.versions.node}. The Windows package includes its own runtime.`,
+    `Perfect requiere Node 26.4 o posterior dentro de 26.x; se encontró ${process.versions.node}. El paquete de Windows incluye su propio entorno.`,
   );
   process.exitCode = 1;
 } else {
@@ -57,7 +58,7 @@ if (major !== 26 || (minor ?? 0) < 4) {
         });
       } catch (error) {
         console.error(
-          `Perfect TUI could not start: ${String(error)}\nTraditional CLI is available with --no-ui.`,
+          `No se pudo iniciar la interfaz de Perfect: ${String(error)}\nLa CLI tradicional está disponible con --sin-interfaz.`,
         );
         process.exitCode = 1;
       }
@@ -65,7 +66,7 @@ if (major !== 26 || (minor ?? 0) < 4) {
   } else {
     if (raw.includes("--demo") && !process.stdout.isTTY) {
       console.error(
-        "Demo TUI requires an interactive terminal. Use the renderer test script for headless captures.",
+        "La demostración requiere una terminal interactiva. Para capturas sin pantalla, usá el script del renderizador.",
       );
       process.exitCode = 2;
     } else {

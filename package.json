@@ -1,6 +1,6 @@
 {
   "name": "perfect-harness",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Evidence-driven coding agents with a reactive glass terminal interface",
   "type": "module",
   "engines": {"node": ">=26.4 <27"},

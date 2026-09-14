@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { isAbsolute, extname } from "node:path";
+import { extname, isAbsolute } from "node:path";
 /** A user-clicked auth URL or an engine-verified media path, never a command string. */
 export async function openExternal(value: string): Promise<void> {
   const isUrl = /^https:\/\//i.test(value);
@@ -22,7 +22,7 @@ export async function openExternal(value: string): Promise<void> {
       )
     )
       throw new Error(
-        "Unapproved authentication origin; inspect the URL and open it manually.",
+        "Origen de autenticación no autorizado; revisá la URL y abrila manualmente.",
       );
   } else if (
     !isAbsolute(value) ||
@@ -30,8 +30,10 @@ export async function openExternal(value: string): Promise<void> {
       extname(value).toLowerCase(),
     )
   )
-    throw new Error("Only verified image/video files can be opened by the UI");
-  if (/[\x00-\x1f]/.test(value)) throw new Error("Invalid external resource");
+    throw new Error(
+      "La interfaz solo permite abrir imágenes y videos verificados",
+    );
+  if (/[\x00-\x1f]/.test(value)) throw new Error("Recurso externo inválido");
   const executable =
     process.platform === "win32"
       ? "explorer.exe"

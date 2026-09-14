@@ -1,0 +1,91 @@
+{
+  "node": "v26.4.0",
+  "platform": "linux",
+  "opentui": "0.5.9",
+  "captures": [
+    {
+      "name": "idle",
+      "source": "native OpenTUI captureSpans",
+      "data": "synthetic fixture, no real provider calls",
+      "cols": 120,
+      "rows": 36
+    },
+    {
+      "name": "running",
+      "source": "native OpenTUI captureSpans",
+      "data": "synthetic fixture, no real provider calls",
+      "cols": 160,
+      "rows": 45
+    },
+    {
+      "name": "concurrent",
+      "source": "native OpenTUI captureSpans",
+      "data": "synthetic fixture, no real provider calls",
+      "cols": 160,
+      "rows": 45
+    },
+    {
+      "name": "repair",
+      "source": "native OpenTUI captureSpans",
+      "data": "synthetic fixture, no real provider calls",
+      "cols": 120,
+      "rows": 36
+    },
+    {
+      "name": "compact",
+      "source": "native OpenTUI captureSpans",
+      "data": "synthetic fixture, no real provider calls",
+      "cols": 80,
+      "rows": 24
+    },
+    {
+      "name": "agents",
+      "source": "native OpenTUI captureSpans",
+      "data": "synthetic fixture, no real provider calls",
+      "cols": 120,
+      "rows": 36
+    },
+    {
+      "name": "plan",
+      "source": "native OpenTUI captureSpans",
+      "data": "synthetic fixture, no real provider calls",
+      "cols": 120,
+      "rows": 36
+    },
+    {
+      "name": "verification",
+      "source": "native OpenTUI captureSpans",
+      "data": "synthetic fixture, no real provider calls",
+      "cols": 120,
+      "rows": 36
+    },
+    {
+      "name": "routing",
+      "source": "native OpenTUI captureSpans",
+      "data": "synthetic fixture, no real provider calls",
+      "cols": 120,
+      "rows": 36
+    },
+    {
+      "name": "paused",
+      "source": "native OpenTUI captureSpans",
+      "data": "synthetic fixture, no real provider calls",
+      "cols": 120,
+      "rows": 36
+    },
+    {
+      "name": "done",
+      "source": "native OpenTUI captureSpans",
+      "data": "synthetic fixture, no real provider calls",
+      "cols": 120,
+      "rows": 36
+    },
+    {
+      "name": "settings",
+      "source": "native OpenTUI captureSpans",
+      "data": "synthetic fixture, no real provider calls",
+      "cols": 120,
+      "rows": 36
+    }
+  ]
+}

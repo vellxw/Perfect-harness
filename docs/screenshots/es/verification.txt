@@ -1,0 +1,36 @@
+ ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮ 
+ │                                                                                                                    │ 
+ │ ◈ Perfect / ShopFront                                                    ◌ reparando  1 activo · pruebas 4/5  DEMO │ 
+ │╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  │ 
+ ││                                                                                                                │  │ 
+ ││  Verificación · versión actual                                                                     Esc cerrar  │  │ 
+ ││                                                                                                                │  │ 
+ ││  › Compilación                                                                                                 │  │ 
+ ││   comando · aprobado                                                                                           │  │ 
+ ││  ✓ TypeScript                                                                                                  │  │ 
+ ││   comando · aprobado                                                                                           │  │ 
+ ││  ✓ Integración de API                                                                                          │  │ 
+ ││   comando · aprobado                                                                                           │  │ 
+ ││  ✓ Navegador de escritorio                                                                                     │  │ 
+ ││   navegador · aprobado                                                                                         │  │ 
+ ││  ! Aspecto en móvil                                                                                            │  │ 
+ ││   navegador · fallido                                                                                          │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││  ↑↓ elegir · Enter detalle · Esc cerrar                                                                        │  │ 
+ ││                                                                                                                │  │ 
+ │╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  │ 
+ │  /agentes /plan /verificar /cambios    Ctrl+K acciones                                            PRIVADO · 0.2.1  │ 
+ │                                                                                                                    │ 
+ ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ 

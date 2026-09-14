@@ -1,5 +1,5 @@
 export const reservationGoal =
-  "Build a responsive reservation app with a native Node.js 24 HTTP API, SQLite persistence and protection against concurrent double booking. Preserve and pass the existing tests. Use the planner, a general worker, frontend specialist, backend specialist, independent Oracle review, browser verification and an evidence Judge. Serve on PORT (default 3000). The UI must let a visitor select an available slot, enter their name and reserve it; success text must include Reservation confirmed. No external dependencies are necessary.";
+  "Build a responsive reservation app with a native Node.js 24 HTTP API, SQLite persistence and protection against concurrent double booking. Preserve and pass the existing tests. Use the planner, a general worker, frontend specialist, backend specialist, independent Oracle review, browser verification and an evidence Judge. Serve on PORT (default 3000). The UI must let a visitor select an available slot, enter their name and reserve it; success text must include Reserva confirmada. No external dependencies are necessary.";
 export const reservationTests = String.raw`
 import test from 'node:test';
 import assert from 'node:assert/strict';

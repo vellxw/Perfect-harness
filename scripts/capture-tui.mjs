@@ -51,7 +51,7 @@ for (const [name, scene, screen, cols, rows] of [
     label = 30,
     width = cols * cellW + pad * 2,
     height = rows * cellH + pad * 2 + label;
-  let drawing = `<rect width="100%" height="100%" fill="#050507"/><text x="24" y="20" fill="#7c879f" font-family="DejaVu Sans Mono,monospace" font-size="11">PERFECT · native OpenTUI renderer capture · synthetic display fixture · ${cols}×${rows}</text>`;
+  let drawing = `<rect width="100%" height="100%" fill="#050507"/><text x="24" y="20" fill="#7c879f" font-family="DejaVu Sans Mono,monospace" font-size="11">PERFECT · captura del renderizador nativo OpenTUI · datos de demostración · ${cols}×${rows}</text>`;
   for (const [row, line] of spans.lines.entries()) {
     let col = 0;
     for (const span of line.spans) {

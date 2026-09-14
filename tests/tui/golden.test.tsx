@@ -1,8 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { mount } from "./helpers.js";
+import test from "node:test";
 import type { Screen } from "../../src/presentation/protocol.js";
+import { mount } from "./helpers.js";
 
 const cases: [string, string, Screen, number, number][] = [
   ["running", "running", "home", 160, 45],
@@ -13,7 +13,7 @@ const cases: [string, string, Screen, number, number][] = [
 for (const [name, scene, screen, cols, rows] of cases) {
   test(`native terminal layout matches reviewed ${name} golden frame`, async () => {
     const expected = await readFile(
-      new URL(`../../docs/screenshots/${name}.txt`, import.meta.url),
+      new URL(`../../docs/screenshots/es/${name}.txt`, import.meta.url),
       "utf8",
     );
     const ui = await mount(scene, screen, cols, rows);

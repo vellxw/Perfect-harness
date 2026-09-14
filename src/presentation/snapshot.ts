@@ -1,36 +1,40 @@
 import { basename } from "node:path";
-import type { Goal, Event } from "../domain/model.js";
 import type { SqliteStore } from "../adapters/sqlite/store.js";
-import { goalConfig } from "../cli/context.js";
 import { acceptanceHash } from "../application/orchestrator.js";
+import { goalConfig } from "../cli/context.js";
+import type { Event, Goal } from "../domain/model.js";
+import { humanMessage } from "../i18n/messages.js";
 import {
   text,
   type UiActivity,
-  type UiSnapshot,
   type UiPreferences,
+  type UiSnapshot,
 } from "./protocol.js";
 
 const labels: Record<string, [string, UiActivity["status"]]> = {
-  "goal.created": ["Goal received", "info"],
-  "plan.generated": ["Implementation plan ready", "completed"],
-  "plan.user_authorized": ["Plan approved by you", "completed"],
-  "agent.started": ["Agent started working", "running"],
-  "agent.completed": ["Agent finished its assignment", "completed"],
-  "agent.failed": ["Agent stopped before completing", "failed"],
-  "task.created": ["Task added to the plan", "info"],
-  "task.assigned": ["Task assigned", "running"],
-  "task.accepted": ["Task accepted into candidate", "completed"],
-  "verification.started": ["Checking the candidate", "running"],
-  "verification.passed": ["Verification passed", "completed"],
-  "verification.failed": ["Verification needs attention", "failed"],
-  "repair.created": ["Repair assigned with evidence", "running"],
-  "oracle.requested": ["Independent review requested", "running"],
-  "goal.completed": ["Evidence Judge accepted the goal", "completed"],
-  "goal.paused": ["Goal paused safely", "blocked"],
-  "goal.failed": ["Goal stopped with unresolved evidence", "failed"],
-  "goal.aborted": ["Goal aborted; checkpoints preserved", "blocked"],
-  "task.integrated": ["Changes integrated", "completed"],
-  "apply.completed": ["Verified changes applied", "completed"],
+  "goal.created": ["Objetivo recibido", "info"],
+  "plan.generated": ["Plan de implementación listo", "completed"],
+  "plan.user_authorized": ["Plan aprobado por vos", "completed"],
+  "agent.started": ["El agente empezó a trabajar", "running"],
+  "agent.completed": ["El agente terminó su tarea", "completed"],
+  "agent.failed": ["El agente se detuvo antes de terminar", "failed"],
+  "task.created": ["Tarea añadida al plan", "info"],
+  "task.assigned": ["Tarea asignada", "running"],
+  "task.accepted": ["Tarea incorporada a la versión candidata", "completed"],
+  "verification.started": ["Verificando la versión candidata", "running"],
+  "verification.passed": ["Verificación aprobada", "completed"],
+  "verification.failed": ["La verificación requiere atención", "failed"],
+  "repair.created": ["Reparación asignada con evidencia", "running"],
+  "oracle.requested": ["Revisión independiente solicitada", "running"],
+  "goal.completed": [
+    "El evaluador aceptó el objetivo con evidencia",
+    "completed",
+  ],
+  "goal.paused": ["Objetivo pausado de forma segura", "blocked"],
+  "goal.failed": ["Objetivo detenido con evidencia pendiente", "failed"],
+  "goal.aborted": ["Objetivo cancelado; trabajo conservado", "blocked"],
+  "task.integrated": ["Cambios integrados", "completed"],
+  "apply.completed": ["Cambios verificados aplicados", "completed"],
 };
 export function activity(event: Event, store: SqliteStore): UiActivity | null {
   const payload = (
@@ -73,7 +77,7 @@ export function activity(event: Event, store: SqliteStore): UiActivity | null {
     sequence: event.sequence ?? 0,
     time: event.occurredAt,
     role: run?.agentDefinitionId ?? task?.assignedAgent ?? event.actor,
-    title: entry?.[0] ?? event.type.replaceAll(".", " ").replaceAll("_", " "),
+    title: entry?.[0] ?? "Actualización del objetivo",
     detail: text(
       check?.summary ?? task?.title ?? payload.reason ?? payload.state ?? "",
       400,
@@ -124,7 +128,7 @@ export function snapshot(
           : undefined,
         requests: run?.requestIds.length ?? 0,
         latencyMs: last?.latencyMs,
-        provenance: binding?.provenance ?? "configured, not tested",
+        provenance: binding?.provenance ?? "configurado, no probado",
       };
     });
   });
@@ -140,7 +144,7 @@ export function snapshot(
       title: spec.title,
       kind: spec.kind,
       status: r?.status ?? "waiting",
-      summary: text(r?.summary ?? "Not run on this candidate", 1500),
+      summary: text(r?.summary ?? "No ejecutado sobre esta versión", 1500),
       evidenceIds: r?.evidenceIds ?? [],
       revision: goal?.candidateRevision ?? "",
     };
@@ -169,7 +173,7 @@ export function snapshot(
   );
   return {
     protocol: 1,
-    version: "0.2.0",
+    version: "0.2.1",
     sequence: goal ? store.lastSequence(goal.id) : 0,
     workspace,
     workspaceName: basename(workspace),
@@ -264,7 +268,8 @@ function projectGoal(goal: Goal): NonNullable<UiSnapshot["goal"]> {
     maxIterations: goalConfig(goal).limits.maxGoalIterations,
     revision: goal.candidateRevision,
     reason:
-      text(goal.pauseReason ?? goal.terminalReason ?? "", 2000) || undefined,
+      humanMessage(text(goal.pauseReason ?? goal.terminalReason ?? "", 2000)) ||
+      undefined,
     privacy: goal.privacyClass,
     activeMs: goal.activeMs,
   };

@@ -1,0 +1,13 @@
+{
+  "version": "0.2.1",
+  "language": "es-AR",
+  "baseCommit": "28b5fd28f489d8bf674fe634871001b42ae3bbce",
+  "validatedSourceTree": "7f1a1f5da985857e00f9d3c4b1e4e289fd7a4e32",
+  "workflowRun": 34880234001,
+  "job": 104097429013,
+  "artifact": 10363175641,
+  "artifactSha256": "3255474957da167a9657246b6c43abe44a24ce262ad881ed0a743f45b1d7273d",
+  "method": "Renderizador nativo OpenTUI 0.5.9 y React; captura de celdas y colores convertida a PNG.",
+  "data": "Datos deterministas de demostración; ninguna cuenta personal ni inferencia real.",
+  "note": "Capturado después de aplicar la localización en la ejecución indicada. La referencia al commit identifica la base del flujo; validatedSourceTree identifica el código traducido realmente probado, no un commit anterior presentado como código nuevo."
+}

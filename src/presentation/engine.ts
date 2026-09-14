@@ -1,33 +1,34 @@
 import { watch, type FSWatcher } from "node:fs";
-import { mkdir, readFile, writeFile, realpath } from "node:fs/promises";
-import { join, resolve, extname } from "node:path";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { extname, join, resolve } from "node:path";
+import { GitWorkspace } from "../adapters/git/workspace.js";
+import { PiRuntime } from "../adapters/pi/runtime.js";
+import { prepareDependencies } from "../adapters/sandbox/dependencies.js";
+import { PreparedDockerRunner } from "../adapters/sandbox/prepared-runner.js";
 import { SqliteStore, onDatabaseChange } from "../adapters/sqlite/store.js";
+import { VerificationService } from "../adapters/verification/service.js";
+import { createGoal } from "../application/goals.js";
+import { Orchestrator, acceptanceHash } from "../application/orchestrator.js";
+import { goalConfig, type CliContext } from "../cli/context.js";
+import {
+  applyGoal,
+  approveCriterion,
+  approvePlan,
+  controlGoal,
+  retryTask,
+} from "../cli/control.js";
+import { doctor } from "../cli/doctor.js";
 import {
   homeDir,
   loadConfig,
   localPolicy,
   savePolicy,
 } from "../config/load.js";
-import { goalConfig, type CliContext } from "../cli/context.js";
-import {
-  controlGoal,
-  approvePlan,
-  approveCriterion,
-  retryTask,
-  applyGoal,
-} from "../cli/control.js";
-import { doctor } from "../cli/doctor.js";
-import { Orchestrator, acceptanceHash } from "../application/orchestrator.js";
-import { createGoal } from "../application/goals.js";
-import { PiRuntime } from "../adapters/pi/runtime.js";
-import { PreparedDockerRunner } from "../adapters/sandbox/prepared-runner.js";
-import { prepareDependencies } from "../adapters/sandbox/dependencies.js";
-import { GitWorkspace } from "../adapters/git/workspace.js";
-import { VerificationService } from "../adapters/verification/service.js";
-import { readEvidence } from "../tools/evidence.js";
-import { Blocked, id } from "../domain/util.js";
 import type { Goal } from "../domain/model.js";
-import { snapshot } from "./snapshot.js";
+import { Blocked, id } from "../domain/util.js";
+import { valueLabel } from "../i18n/es.js";
+import { humanMessage } from "../i18n/messages.js";
+import { readEvidence } from "../tools/evidence.js";
 import {
   UiActionSchema,
   UiPreferencesSchema,
@@ -37,6 +38,7 @@ import {
   type UiPreferences,
   type UiSnapshot,
 } from "./protocol.js";
+import { snapshot } from "./snapshot.js";
 
 /** One engine worker, no TCP server. The UI receives projections and sends validated user intents. */
 export class PresentationEngine {
@@ -95,7 +97,8 @@ export class PresentationEngine {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT")
         engine.send({
           type: "fault",
-          message: "UI preferences could not be read; using safe defaults.",
+          message:
+            "No se pudieron leer los ajustes de la interfaz; se usarán valores seguros.",
         });
     }
     engine.publish();
@@ -108,7 +111,7 @@ export class PresentationEngine {
       try {
         this.publish();
       } catch (error) {
-        this.send({ type: "fault", message: text(error) });
+        this.send({ type: "fault", message: humanMessage(text(error)) });
       }
     }, 20);
   }
@@ -143,7 +146,10 @@ export class PresentationEngine {
               .filter((g) => g.source === this.workspace)
               .at(-1);
         if (!g || g.source !== this.workspace)
-          throw new Blocked("GOAL_SCOPE", "Select a goal from this workspace");
+          throw new Blocked(
+            "GOAL_SCOPE",
+            "Seleccioná un objetivo de esta carpeta",
+          );
         return g;
       },
       print: () => {},
@@ -153,7 +159,7 @@ export class PresentationEngine {
     if (this.active || this.authAbort)
       throw new Blocked(
         "ENGINE_BUSY",
-        "Pause the active work or finish authentication first",
+        "Primero pausá el trabajo activo o terminá la autenticación",
       );
   }
   private start(goal: Goal): void {
@@ -184,7 +190,7 @@ export class PresentationEngine {
       .then(
         () => {},
         (error) => {
-          this.send({ type: "fault", message: text(error) });
+          this.send({ type: "fault", message: humanMessage(text(error)) });
         },
       )
       .finally(() => {
@@ -209,13 +215,13 @@ export class PresentationEngine {
         type: "result",
         requestId,
         ok: false,
-        message: "Invalid user action",
+        message: "Acción de usuario inválida",
       });
       return;
     }
     try {
       const ctx = this.context();
-      let message = "Updated",
+      let message = "Actualizado",
         content: string | undefined,
         path: string | undefined,
         operation: string | undefined;
@@ -233,7 +239,7 @@ export class PresentationEngine {
             this.store,
           );
           this.start(goal);
-          message = "Goal started. Your original checkout remains unchanged.";
+          message = "Objetivo iniciado. La carpeta original permanece intacta.";
           break;
         }
         case "select":
@@ -249,13 +255,15 @@ export class PresentationEngine {
         case "pause":
         case "abort":
           if (this.activeGoal === action.goalId && this.activeKind !== "goal")
-            this.activeAbort?.abort(new Error("User stopped manual operation"));
+            this.activeAbort?.abort(
+              new Error("El usuario detuvo la operación manual"),
+            );
           await controlGoal(ctx, ctx.goal(action.goalId), action.type);
-          message = "Request recorded; waiting for confirmed termination.";
+          message = "Solicitud registrada; esperando confirmar la detención.";
           break;
         case "resume":
           this.start(ctx.goal(action.goalId));
-          message = "Resuming with recovery checks";
+          message = "Reanudando con comprobaciones de recuperación";
           break;
         case "approve": {
           const goal = ctx.goal(action.goalId),
@@ -263,36 +271,39 @@ export class PresentationEngine {
           if (!plan || acceptanceHash(plan) !== action.planHash)
             throw new Blocked(
               "STALE_APPROVAL",
-              "The plan changed. Review the current plan before approving.",
+              "El plan cambió. Revisá la versión actual antes de aprobar.",
             );
           approvePlan(ctx, goal);
-          message = "Plan approved. Use Resume to continue.";
+          message = "Plan aprobado. Usá /reanudar para continuar.";
           break;
         }
         case "criterion": {
           const goal = ctx.goal(action.goalId);
           if (goal.candidateRevision !== action.revision)
-            throw new Blocked("STALE_APPROVAL", "Candidate changed");
+            throw new Blocked("STALE_APPROVAL", "La versión candidata cambió");
           approveCriterion(ctx, goal, action.criterionId);
-          message = "Human criterion approved for this candidate only";
+          message = "Criterio humano aprobado solo para esta versión";
           break;
         }
         case "apply": {
           this.idle();
           const goal = ctx.goal(action.goalId);
           if (goal.candidateRevision !== action.revision)
-            throw new Blocked("STALE_APPROVAL", "Candidate changed");
+            throw new Blocked("STALE_APPROVAL", "La versión candidata cambió");
           await applyGoal(ctx, goal, true);
-          message = "Verified candidate applied to original workspace";
+          message = "Versión verificada aplicada a la carpeta original";
           break;
         }
         case "retry": {
           const task = this.store.get("tasks", action.taskId);
           if (!task || task.goalId !== action.goalId)
-            throw new Blocked("TASK_SCOPE", "Task not in selected goal");
+            throw new Blocked(
+              "TASK_SCOPE",
+              "La tarea no pertenece al objetivo seleccionado",
+            );
           ctx.goal(action.goalId);
           await retryTask(ctx, action.taskId);
-          message = "Retry queued without resetting counters";
+          message = "Reintento en espera, sin reiniciar contadores";
           break;
         }
         case "diff": {
@@ -303,14 +314,18 @@ export class PresentationEngine {
             ),
             1000000,
           );
-          message = "Candidate diff; source checkout is untouched";
+          message =
+            "Cambios de la versión candidata; la carpeta original está intacta";
           break;
         }
         case "artifact": {
           const goal = ctx.goal(action.goalId),
             e = this.store.get("evidence", action.evidenceId);
           if (!e || e.goalId !== goal.id)
-            throw new Blocked("EVIDENCE_SCOPE", "Evidence is not in this goal");
+            throw new Blocked(
+              "EVIDENCE_SCOPE",
+              "La evidencia no pertenece a este objetivo",
+            );
           const bytes = await readEvidence(goal, e, 200_000_000);
           operation = action.operation;
           if (
@@ -328,10 +343,10 @@ export class PresentationEngine {
           )
             throw new Blocked(
               "OPEN_DENIED",
-              "Only verified images/video may be opened. Copy the path to inspect other artifacts explicitly.",
+              "Solo se pueden abrir imágenes y videos verificados. Copiá la ruta para inspeccionar otros archivos de forma explícita.",
             );
           path = e.artifactRef;
-          message = `${e.kind} · ${e.contentHash} · ${e.revision === goal.candidateRevision ? "current candidate" : "older candidate"}`;
+          message = `${valueLabel(e.kind)} · ${e.contentHash} · ${e.revision === goal.candidateRevision ? "versión actual" : "versión anterior"}`;
           break;
         }
         case "reverify": {
@@ -340,13 +355,13 @@ export class PresentationEngine {
           if (goal.state !== "PAUSED")
             throw new Blocked(
               "VERIFY_STATE",
-              "Pause a nonterminal goal before manual verification",
+              "Pausá un objetivo que no haya terminado antes de verificarlo manualmente",
             );
           const plan = this.store.get("plans", goal.activePlanId ?? "");
           if (!plan)
             throw new Blocked(
               "PLAN_MISSING",
-              "No accepted verification contract",
+              "No hay un contrato de verificación aceptado",
             );
           const config = goalConfig(goal),
             workspace = new GitWorkspace(goal.root, config),
@@ -360,7 +375,7 @@ export class PresentationEngine {
               if ((await workspace.revision()) !== goal.candidateRevision)
                 throw new Blocked(
                   "CANDIDATE_CHANGED",
-                  "Reconcile the candidate before verifying",
+                  "Reconciliá la versión candidata antes de verificar",
                 );
               const verifier = new VerificationService(
                 this.store,
@@ -378,7 +393,7 @@ export class PresentationEngine {
                   this.activeAbort!.signal,
                 );
             } catch (error) {
-              this.send({ type: "fault", message: text(error) });
+              this.send({ type: "fault", message: humanMessage(text(error)) });
             } finally {
               this.store.unlock(goal.workspaceId, owner);
               this.active = undefined;
@@ -388,7 +403,7 @@ export class PresentationEngine {
             }
           })();
           message =
-            "Verification started; only the core Judge can complete a goal";
+            "Verificación iniciada; solo el evaluador del núcleo puede completar un objetivo";
           break;
         }
         case "doctor":
@@ -399,7 +414,7 @@ export class PresentationEngine {
             action.online,
           );
           message =
-            "Diagnostics complete; provider inference has not been tested";
+            "Diagnóstico completo; todavía no se probaron inferencias del proveedor";
           break;
         case "preferences":
           this.preferences = action.preferences;
@@ -416,27 +431,31 @@ export class PresentationEngine {
             : policy.contributorWorkspaces.filter((p) => p !== this.workspace);
           await savePolicy(policy, this.home);
           message = action.allow
-            ? "Contributor consent recorded for this workspace; only public goals qualify"
-            : "Contributor consent revoked";
+            ? "Consentimiento de Contributor registrado para esta carpeta; solo admite objetivos públicos"
+            : "Consentimiento de Contributor revocado";
           break;
         }
         case "login":
           this.idle();
           void this.authenticate(action.provider);
-          message = "Authentication opened; credentials stay local";
+          message =
+            "Autenticación iniciada; las credenciales permanecen locales";
           break;
         case "auth-answer": {
           const answer = this.answers.get(action.promptId);
           if (!answer)
-            throw new Blocked("AUTH_EXPIRED", "Authentication prompt expired");
+            throw new Blocked(
+              "AUTH_EXPIRED",
+              "La solicitud de autenticación venció",
+            );
           this.answers.delete(action.promptId);
           answer(action.value);
-          message = "Authentication answer sent";
+          message = "Respuesta de autenticación enviada";
           break;
         }
         case "auth-cancel":
-          this.authAbort?.abort(new Error("Login cancelled"));
-          message = "Authentication cancelled";
+          this.authAbort?.abort(new Error("Conexión cancelada"));
+          message = "Autenticación cancelada";
           break;
         case "prepare": {
           this.idle();
@@ -462,11 +481,11 @@ export class PresentationEngine {
                 type: "result",
                 requestId,
                 ok: true,
-                message: "Approved dependency image prepared",
+                message: "Imagen de dependencias autorizada preparada",
               });
             })
             .catch((error) => {
-              this.send({ type: "fault", message: text(error) });
+              this.send({ type: "fault", message: humanMessage(text(error)) });
             })
             .finally(() => {
               this.active = undefined;
@@ -476,7 +495,7 @@ export class PresentationEngine {
               this.publish();
             });
           message =
-            "Preparing the approved dependency image; Pause cancels safely";
+            "Preparando la imagen autorizada; Pausar la detiene de forma segura";
           break;
         }
         case "refresh":
@@ -493,7 +512,12 @@ export class PresentationEngine {
         operation,
       });
     } catch (error) {
-      this.send({ type: "result", requestId, ok: false, message: text(error) });
+      this.send({
+        type: "result",
+        requestId,
+        ok: false,
+        message: humanMessage(text(error)),
+      });
       this.publish();
     }
   }
@@ -517,26 +541,32 @@ export class PresentationEngine {
             this.send({
               type: "auth",
               provider,
-              message: text(event.instructions ?? "Continue in your browser"),
+              message: humanMessage(
+                text(event.instructions ?? "Continuá en tu navegador"),
+              ),
               url: event.url,
             });
           else if (event.type === "device_code")
             this.send({
               type: "auth",
               provider,
-              message: "Authorize the device in your browser",
+              message: "Autorizá el dispositivo en tu navegador",
               url: event.verificationUri,
               code: event.userCode,
             });
           else
-            this.send({ type: "auth", provider, message: text(event.message) });
+            this.send({
+              type: "auth",
+              provider,
+              message: humanMessage(text(event.message)),
+            });
         },
         prompt: async (prompt) => {
           const promptId = id("auth-prompt");
           const value = await new Promise<string>((resolveAnswer, reject) => {
             const cancel = () => {
               this.answers.delete(promptId);
-              reject(new Error("Login cancelled"));
+              reject(new Error("Conexión cancelada"));
             };
             controller.signal.addEventListener("abort", cancel, { once: true });
             this.answers.set(promptId, (value) => {
@@ -546,12 +576,15 @@ export class PresentationEngine {
             this.send({
               type: "auth",
               provider,
-              message: text(prompt.message),
+              message: humanMessage(text(prompt.message)),
               promptId,
               secret: prompt.type === "secret",
               options:
                 prompt.type === "select"
-                  ? prompt.options.map((o) => ({ id: o.id, label: o.label }))
+                  ? prompt.options.map((o) => ({
+                      id: o.id,
+                      label: humanMessage(o.label),
+                    }))
                   : undefined,
             });
           });
@@ -559,7 +592,7 @@ export class PresentationEngine {
             const selected =
               prompt.options.find((o) => o.id === value) ??
               prompt.options[Number(value) - 1];
-            if (!selected) throw new Error("Invalid authentication choice");
+            if (!selected) throw new Error("Opción de autenticación inválida");
             return selected.id;
           }
           return value;
@@ -568,11 +601,16 @@ export class PresentationEngine {
       this.send({
         type: "auth",
         provider,
-        message: "Connected. Credentials saved outside the repository.",
+        message: "Conectado. Credenciales guardadas fuera del repositorio.",
         done: true,
       });
     } catch (error) {
-      this.send({ type: "auth", provider, message: text(error), done: true });
+      this.send({
+        type: "auth",
+        provider,
+        message: humanMessage(text(error)),
+        done: true,
+      });
     } finally {
       this.authAbort = undefined;
       this.answers.clear();
@@ -584,7 +622,7 @@ export class PresentationEngine {
     await this.actionQueue;
     this.authAbort?.abort();
     if (this.activeKind && this.activeKind !== "goal")
-      this.activeAbort?.abort(new Error("UI closed"));
+      this.activeAbort?.abort(new Error("Interfaz cerrada"));
     if (this.active && this.activeGoal) {
       await controlGoal(
         this.context(),

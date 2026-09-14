@@ -7,7 +7,7 @@
 [Setup]
 AppId={{F4D924BE-7843-4CF7-BA6D-7B207D000200}
 AppName=Perfect Harness
-AppVersion=0.2.0
+AppVersion=0.2.1
 AppPublisher=Perfect Harness
 AppPublisherURL=https://github.com/vellxw/Perfect-harness
 DefaultDirName={localappdata}\Programs\PerfectHarness
@@ -27,9 +27,14 @@ WizardStyle=modern
 ChangesEnvironment=yes
 CloseApplications=yes
 RestartApplications=no
+ShowLanguageDialog=no
+
+[Languages]
+Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
+
 [Tasks]
-Name: desktopicon; Description: "Create a desktop shortcut"; Flags: unchecked
-Name: addpath; Description: "Add Perfect to your user PATH"; Flags: checkedonce
+Name: desktopicon; Description: "Crear un acceso directo en el escritorio"; Flags: unchecked
+Name: addpath; Description: "Añadir Perfect al PATH del usuario"; Flags: checkedonce
 [Files]
 Source: "{#Payload}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Dirs]
@@ -39,7 +44,7 @@ Name: "{group}\Perfect Harness"; Filename: "{app}\Perfect.exe"; Parameters: "--w
 Name: "{autodesktop}\Perfect Harness"; Filename: "{app}\Perfect.exe"; Parameters: "--window"; WorkingDir: "{userdocs}\Perfect Projects\Workspace"; Tasks: desktopicon
 [Run]
 Filename: "{app}\Perfect.exe"; Parameters: "--install-profile"; Flags: runhidden waituntilterminated
-Filename: "{app}\Perfect.exe"; Parameters: "--window"; Description: "Open Perfect Harness"; WorkingDir: "{userdocs}\Perfect Projects\Workspace"; Flags: postinstall nowait skipifsilent
+Filename: "{app}\Perfect.exe"; Parameters: "--window"; Description: "Abrir Perfect Harness"; WorkingDir: "{userdocs}\Perfect Projects\Workspace"; Flags: postinstall nowait skipifsilent
 [UninstallRun]
 Filename: "{app}\Perfect.exe"; Parameters: "--remove-profile"; Flags: runhidden waituntilterminated; RunOnceId: "PerfectTerminalProfile"
 [Code]

@@ -1,0 +1,36 @@
+ ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮ 
+ │                                                                                                                    │ 
+ │ ◈ Perfect / ShopFront                                                    ○ inactivo  0 activos · pruebas 0/0  DEMO │ 
+ │╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  │ 
+ ││                                                                                                                │  │ 
+ ││  Ajustes                                                                                           Esc cerrar  │  │ 
+ ││                                                                                                                │  │ 
+ ││  › Animaciones                                                                                                 │  │ 
+ ││   desactivadas                                                                                                 │  │ 
+ ││  ○ Alto contraste                                                                                              │  │ 
+ ││   normal                                                                                                       │  │ 
+ ││  ○ Fondo de la terminal                                                                                        │  │ 
+ ││   transparente                                                                                                 │  │ 
+ ││  ○ Conectar xAI                                                                                                │  │ 
+ ││   OAuth de la suscripción                                                                                      │  │ 
+ ││  ○ Conectar ChatGPT / Codex                                                                                    │  │ 
+ ││   OAuth de la suscripción                                                                                      │  │ 
+ ││  ○ Conectar OpenCode                                                                                           │  │ 
+ ││   Clave API de Muse Contributor                                                                                │  │ 
+ ││  ○ Privacidad de Contributor                                                                                   │  │ 
+ ││   Consentimiento por carpeta, nunca automático                                                                 │  │ 
+ ││  ○ Revisar este equipo                                                                                         │  │ 
+ ││   No se envían inferencias                                                                                     │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││  ↑↓ elegir · Enter detalle · Esc cerrar                                                                        │  │ 
+ ││                                                                                                                │  │ 
+ │╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  │ 
+ │  /agentes /plan /verificar /cambios    Ctrl+K acciones                                            PRIVADO · 0.2.1  │ 
+ │                                                                                                                    │ 
+ ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ 

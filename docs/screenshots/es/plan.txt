@@ -1,0 +1,36 @@
+ ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮ 
+ │                                                                                                                    │ 
+ │ ◈ Perfect / ShopFront                                                   ◌ ejecutando  1 activo · pruebas 4/5  DEMO │ 
+ │╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  │ 
+ ││                                                                                                                │  │ 
+ ││  Plan                                                                                              Esc cerrar  │  │ 
+ ││                                                                                                                │  │ 
+ ││  Pantalla de pago con contratos previos, implementación paralela y verificación independiente.                 │  │ 
+ ││  Plan v2 · aprobado · 2 criterios                                                                              │  │ 
+ ││  Se muestran todas las dependencias, sin duplicar tareas compartidas.                                          │  │ 
+ ││                                                                                                                │  │ 
+ ││  › Explorar el proyecto original                                                                               │  │ 
+ ││   Asistente · intento 1/3                                                                                      │  │ 
+ ││  ✓   ↳ Definir los contratos de la API                                                                         │  │ 
+ ││   Asistente · intento 1/3 · después de discover                                                                │  │ 
+ ││  ✓     ↳ Implementar el servicio de pagos                                                                      │  │ 
+ ││   Servidor · intento 1/3 · después de contracts                                                                │  │ 
+ ││  ◌     ↳ Construir la pantalla de pago adaptable                                                               │  │ 
+ ││   Interfaz · intento 2/3 · después de contracts                                                                │  │ 
+ ││  ○       ↳ Integrar la versión candidata                                                                       │  │ 
+ ││   Integrador · intento 1/3 · después de backend-api, frontend-checkout                                         │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││  ↑↓ tareas · Enter detalle · A aprobar el plan                                                                 │  │ 
+ ││                                                                                                                │  │ 
+ │╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  │ 
+ │  /agentes /plan /verificar /cambios    Ctrl+K acciones                                            PRIVADO · 0.2.1  │ 
+ │                                                                                                                    │ 
+ ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ 

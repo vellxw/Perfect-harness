@@ -2,21 +2,21 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { deflateSync } from "node:zlib";
 import { z } from "zod";
-import type { PerfectConfig } from "../config/schema.js";
-import type { Role } from "../domain/model.js";
-import type { StateStore } from "../ports/state-store.js";
 import { PiRuntime } from "../adapters/pi/runtime.js";
 import { PreparedDockerRunner } from "../adapters/sandbox/prepared-runner.js";
 import { AgentExecutor } from "../application/agent-executor.js";
-import { Orchestrator } from "../application/orchestrator.js";
 import { createGoal } from "../application/goals.js";
+import { Orchestrator } from "../application/orchestrator.js";
+import type { PerfectConfig } from "../config/schema.js";
 import { transition } from "../domain/goal-state-machine.js";
+import type { Role } from "../domain/model.js";
+import { errorText, now } from "../domain/util.js";
 import {
-  seedReservationSource,
   ReservationDemoRuntime,
   reservationGoal,
+  seedReservationSource,
 } from "../examples/reservations.js";
-import { errorText, now } from "../domain/util.js";
+import type { StateStore } from "../ports/state-store.js";
 
 function colorPng(rgb: [number, number, number]): string {
   const crc = (data: Buffer) => {
@@ -162,7 +162,7 @@ export async function providerSmoke(input: {
         role,
         status: "PASS",
         detail:
-          "Real inference, structured submission, observed tool execution and image probe passed. Unreported metadata remains unknown.",
+          "Inferencia real, respuesta estructurada, herramienta observada y prueba de imagen aprobadas. Los metadatos no informados siguen siendo desconocidos.",
         model: result.run.routeBinding.model,
         provider: result.run.routeBinding.provider,
         reasoningSent: last?.reasoningSent,
@@ -181,7 +181,7 @@ export async function providerSmoke(input: {
     transition(
       current,
       "ABORTED",
-      "Diagnostic sessions completed; this was not a coding goal",
+      "Sesiones de diagnóstico completadas; no era un objetivo de programación",
     ),
     "smoke.completed",
   );
@@ -251,7 +251,7 @@ export async function fullstackSmoke(input: {
     observedRoles: observed,
     missingRoles: missing,
     notice: input.mock
-      ? "Providers and reviews were scripted; Git, tools, Docker, API tests and browser verification were real."
-      : "Inspect recorded provider metadata; no fallback route was permitted.",
+      ? "Los proveedores y revisores fueron simulados; Git, herramientas, Docker, pruebas de API y navegador fueron reales."
+      : "Revisá los metadatos registrados del proveedor; no se permitió ninguna ruta alternativa.",
   };
 }

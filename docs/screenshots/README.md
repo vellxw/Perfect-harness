@@ -1,21 +1,21 @@
-# Actual Perfect UI captures
+# Capturas reales de Perfect
 
-These are captures of Perfect Harness, not screenshots of the reservation fixture it builds.
+Estas capturas muestran **Perfect Harness**, no solamente la aplicación de reservas que el motor puede construir.
 
-## Native renderer frames
+## Versión en español
 
-`idle`, `running`, `concurrent`, `repair`, `compact`, `agents`, `plan`, `verification`, `routing`, `paused`, `done` and `settings` are produced by the real OpenTUI/React app. `captureSpans()` supplies cells, colors and text; the capture script rasterizes those spans to PNG. The `.txt` files retain the exact character grid. Data is synthetic and visibly marked DEMO. They are not OS screenshots and do not prove that Grok, Muse or Astra ran.
+En `es/` están las vistas de inicio, ejecución, concurrencia, reparación, terminal compacta, agentes, plan, verificación, modelos, pausa, completado y ajustes de la versión 0.2.1. El renderizador OpenTUI/React real produce las celdas y sus colores; el script las convierte a PNG. Los archivos `.txt` conservan la cuadrícula exacta.
 
-Four reviewed character frames (running, compact, agents, done) are golden-test baselines. CI compares current output before generating new capture artifacts; tests do not overwrite their own expected output.
+Los datos son sintéticos y están identificados como **DEMO**. No son capturas del sistema operativo y no prueban inferencias de Grok, Muse o Astra. Las cuatro cuadrículas revisadas —ejecución, compacta, agentes y completado— se comparan en las pruebas sin sobrescribir la referencia esperada. `es/revision.json` identifica la ejecución que produjo este conjunto inicial.
 
-## Operating-system captures
+## Capturas históricas
 
-- `windows-desktop/windows-terminal-idle.png`
-- `windows-desktop/windows-terminal-running.png`
-- `linux-desktop/xterm-repair.png`
+Los archivos en la raíz y las carpetas `windows-desktop/` y `linux-desktop/` conservan la versión anterior, en inglés, y su procedencia original. No fueron editados para aparentar que estaban traducidos. El README principal enlaza al conjunto español.
 
-These are real pixel captures of host terminal windows running the packaged/executed app with synthetic display fixtures. The Windows capture uses the real bundled `Perfect.exe` launch route and Microsoft Windows Terminal. The hosted OS is **Windows Server 2025 build 26100**, not a Windows 11 desktop certification. Each folder records the OS, dimensions and method in `provenance.json`.
+Las imágenes de `windows-desktop/` son capturas de píxeles de Windows Terminal ejecutando el paquete de Perfect. `linux-desktop/xterm-repair.png` es una captura real de xterm. El sistema Windows utilizado es **Windows Server 2025 build 26100**, no una certificación de Windows 11.
 
-`commit-provenance.json` records the exact source commit, Actions run and artifact hash of the committed capture set. Later animation-only changes may not change the motion-off character grids; current CI produces a fresh artifact for each commit rather than silently rewriting the historical provenance.
+Los flujos permanentes producen capturas nuevas para cada commit. En el flujo de Windows, consultá el archivo `windows-terminal-desktop` y su `provenance.json`; si informa `BLOCKED`, la captura no está validada. El conjunto histórico versionado no sustituye estas pruebas nuevas.
 
-The actual conceptual reference is in `../design/perfect-v2-direction.webp`. It is a generative direction image, explicitly not an implementation screenshot. Terminal cells cannot reproduce arbitrary pixel glass refraction.
+## Referencia conceptual
+
+`../design/perfect-v2-direction.webp` es la imagen generativa de dirección de diseño aprobada, no una captura de implementación. La cuadrícula de una terminal no puede reproducir refracción arbitraria por píxel.

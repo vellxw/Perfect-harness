@@ -1,37 +1,45 @@
-# Reactive terminal architecture
+# Arquitectura reactiva de la terminal
 
-## Boundaries
+## Límites entre capas
 
-`Perfect Core → PresentationEngine → private process IPC → EngineClient → OpenTUI/React`.
+`Perfect Core → PresentationEngine → IPC privado entre procesos → EngineClient → OpenTUI/React`.
 
-The original domain, orchestrator, routing, budgets, ownership, Judge and sandbox remain authoritative. `UiActionSchema` accepts explicit user intents, not arbitrary method names or goal-state writes. No UI action can set DONE. Plan approvals include the displayed plan hash; apply and human-criterion approvals include the candidate revision. The core validates them again before mutation.
+El dominio, el orquestador, las rutas de modelos, los presupuestos, la asignación de archivos, el evaluador y los contenedores aislados siguen siendo autoritativos. `UiActionSchema` admite intenciones explícitas, no nombres arbitrarios de métodos ni escrituras del estado del objetivo. Ninguna acción de la interfaz puede establecer `DONE`. Aprobar un plan incluye su hash visible; aplicar cambios o aprobar un criterio humano incluye la revisión candidata. El núcleo vuelve a validarlos antes de modificar estado.
 
-`perfect` on an interactive terminal starts the TUI. Classic subcommands and JSON output bypass it; non-TTY invocation prints CLI help instead of escape sequences. Node experimental FFI is enabled for the OpenTUI process. Pi and SQLite run in a separate local engine process, keeping synchronous database work and provider orchestration away from keyboard rendering. There is no HTTP server or web dashboard.
+`perfect` abre la interfaz cuando se ejecuta en una terminal interactiva. Los subcomandos tradicionales y `--json` la omiten. Sin una terminal interactiva, se muestra ayuda y no secuencias de control. FFI experimental de Node se habilita en el proceso de OpenTUI. Pi y SQLite se ejecutan en otro proceso local para separar la base de datos y los proveedores de la respuesta al teclado. No hay servidor HTTP ni panel web.
 
-## Events and projections
+## Eventos y vistas derivadas
 
-SQLite retains V1 schema version 1. The driver changed from better-sqlite3 to Node DatabaseSync after regression tests. Transactions use BEGIN IMMEDIATE and nested savepoints. Domain-state and event changes remain atomic; subscribers wake only after the outer transaction commits. Rollback does not publish speculative state.
+SQLite conserva la versión 1 del esquema de V1. El controlador cambió de better-sqlite3 a `DatabaseSync` después de las pruebas de regresión. Las transacciones usan `BEGIN IMMEDIATE` y puntos de guardado anidados. Los cambios del dominio y sus eventos son atómicos; los suscriptores se despiertan solo al confirmar la transacción exterior. Una reversión no publica estado especulativo.
 
-The presentation engine subscribes to post-commit wakeups and file notifications for changes made by another CLI process. Notifications coalesce for 20ms; snapshots are published only when their serialized content changes. There is no always-on one-second screen clearing loop. File notifications are a local wakeup mechanism, not distributed coordination; explicit refresh/reconnect reconstructs state from SQLite.
+El motor de presentación recibe notificaciones posteriores a cada transacción y avisos del sistema de archivos cuando otro proceso de la CLI cambia el estado. Agrupa notificaciones durante 20 ms y publica una vista solo si cambia su contenido serializado. No existe un ciclo permanente que borre toda la pantalla cada segundo. Estas notificaciones locales no son coordinación distribuida; actualizar o reconectar reconstruye el estado desde SQLite.
 
-Projection limits: 500 task rows, 200 evidence records, 1000 source events reduced to the last 120 human activity entries. Details remain available through the traditional CLI and evidence store. Rows are windowed to the viewport. Many-to-many DAG dependencies are retained rather than pretending every child has exactly one parent.
+Las vistas limitan la carga a 500 tareas, 200 registros de evidencia y 1.000 eventos de origen reducidos a las últimas 120 entradas de actividad. Los detalles permanecen disponibles en la CLI tradicional y el almacén de evidencia. Las filas se ajustan a la ventana visible. Se conservan las dependencias múltiples del grafo, sin fingir que cada tarea tiene un único padre.
 
-## Actions and lifecycle
+## Acciones y ciclo de vida
 
-User actions are validated and serialized before execution, preventing duplicate goal-start races. Long-running goals, manual verification and dependency preparation have tracked operation kinds and cancellation controllers. Pause/abort of manually started work propagates cancellation; closing the UI pauses a goal and waits for safe completion instead of destroying checkpoints. A crashed renderer leaves recovery to the same core mechanisms; reconnect never infers success.
+Las acciones se validan y serializan antes de ejecutarse para impedir inicios duplicados. Los objetivos prolongados, las verificaciones manuales y la preparación de dependencias mantienen su tipo de operación y mecanismo de cancelación. Pausar o cancelar propaga la orden a las herramientas activas. Cerrar la interfaz pausa el objetivo y espera un punto seguro, en lugar de borrar el trabajo. Un cierre inesperado deja la recuperación a los mecanismos del núcleo; reconectar no implica éxito.
 
-Authentication messages travel over inherited IPC. Secret entry uses a separate masked buffer and does not place the credential in the visible input, display snapshot, domain events or logs. A cancelled authentication prompt rejects the underlying provider flow. Diagnostic setup does not send an inference unless a separate smoke is explicitly requested.
+La autenticación circula por IPC heredado. Los secretos usan un campo enmascarado separado y no entran en la vista visible, el estado de presentación, los eventos del dominio ni los registros. Cancelar una solicitud interrumpe el flujo del proveedor. El diagnóstico no envía inferencias; una prueba real requiere una acción explícita.
 
-## Visual layer
+## Capa visual
 
-One frame, a compact header/current goal, chronological activity, a rail only on wide terminals, and a persistent composer. Overlays expose agents/routing, plan/tasks, current-revision verification, evidence, diff, cost, logs, setup and preferences. Arrow keys/Enter and slash commands are sufficient; mouse selection is optional. Ctrl+J provides a newline alternative for terminals that cannot distinguish Shift+Enter.
+Una superficie principal reúne encabezado, objetivo, actividad cronológica, panel lateral solo en terminales anchas y un campo de escritura permanente. Los paneles superpuestos muestran agentes, plan, tareas, verificaciones de la revisión actual, evidencia, cambios, consumo, registros, diagnóstico y ajustes. Flechas, Enter y comandos son suficientes; el mouse es opcional. Ctrl+J ofrece una nueva línea cuando la terminal no distingue Shift+Enter.
 
-Material tokens follow the approved obsidian/lavender direction. Window blur is provided by the host terminal, not OpenTUI text cells. Motion currently consists of finite eased overlay transitions and activity spinners that stop when idle. Reduced/off preferences and remote/CI auto-detection are supported. This is not pixel-level parity with the generated design reference.
+Los colores mantienen la dirección obsidiana y lavanda. El desenfoque de ventana depende de la terminal anfitriona, no de celdas OpenTUI. Las animaciones son transiciones breves y finitas, e indicadores de actividad que se detienen al quedar inactivo. Se admiten animaciones reducidas o desactivadas y detección automática de conexiones remotas y CI. No es una reproducción por píxeles de la referencia generada.
 
-## Security
+## Español y compatibilidad
 
-The UI receives sanitized text with OSC/CSI/control sequences stripped. It cannot silently update snapshots, model routing or evidence. Artifact IDs are resolved in the selected goal, hash-validated and constrained to its artifact directory. Images/video may be opened after a user action; arbitrary HTML, executables, scripts and archives are not auto-launched. Auth URLs are restricted to configured official provider origins. Contributor consent and public/private classification remain separate gates.
+La versión 0.2.1 localiza las etiquetas, explicaciones, ayuda, confirmaciones y comandos visibles. `src/i18n/es.ts` resuelve nombres españoles hacia acciones canónicas; `src/i18n/messages.ts` traduce mensajes conocidos al mostrarlos. No se traduce indiscriminadamente el contenido del dominio ni se añaden llamadas a modelos para traducir.
 
-## Testing
+Los argumentos posteriores a `--`, el texto del objetivo, rutas, credenciales, claves JSON, enums, modelos y niveles literales mantienen su identidad. Escribir `CANCELAR` en una confirmación produce el permiso interno `ABORT` únicamente para la acción y el objetivo mostrados. Los planes y explicaciones nuevos se solicitan en español, preservando los contratos estructurados. La CLI humana tiene etiquetas españolas; `--json` conserva el esquema original.
 
-Tests cover the real native renderer at 80×24, 100×30, 120×36 and 160×45, overlays, keyboard submission/newlines, typed abort, resize, unknown metadata, DAG joins, terminal escape sanitation, database commit/savepoints and idle notifications. The stress script uses 20k display events, 500 tasks and 1000 state updates. Its timing is explicit native-renderer dispatch-to-frame, not photon latency or an OS performance guarantee.
+## Seguridad
+
+Se eliminan secuencias OSC, CSI y controles de los textos de presentación y la salida humana localizada. No se ejecutan instrucciones recibidas en registros. La interfaz no puede actualizar silenciosamente referencias visuales, modelos ni evidencia. Los archivos se resuelven dentro del objetivo seleccionado, se valida su hash y se limita su ubicación. Imágenes y videos pueden abrirse mediante una acción; HTML, ejecutables, scripts y archivos comprimidos no se abren automáticamente. Las URLs de autenticación se limitan a orígenes oficiales configurados. Consentimiento Contributor y clasificación pública/privada siguen siendo autorizaciones independientes.
+
+## Pruebas
+
+Se usa el renderizador nativo real en 80×24, 100×30, 120×36 y 160×45. Se comprueban paneles, teclado, líneas múltiples, cancelación escrita, cambio de tamaño, metadatos desconocidos, dependencias compartidas, saneamiento de controles, transacciones, puntos de guardado y notificaciones en reposo. La localización añade alias españoles/originales, tildes y eñes, confirmaciones y conservación de JSON.
+
+La prueba de carga utiliza 20.000 eventos visibles, 500 tareas y 1.000 actualizaciones. Mide el despacho al renderizador y su siguiente imagen, no la latencia física de la pantalla ni una garantía del sistema operativo.

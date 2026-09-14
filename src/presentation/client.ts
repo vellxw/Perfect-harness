@@ -10,10 +10,10 @@ import {
 export function emptySnapshot(workspace = ""): UiSnapshot {
   return {
     protocol: 1,
-    version: "0.2.0",
+    version: "0.2.1",
     sequence: 0,
     workspace,
-    workspaceName: workspace.split(/[\\/]/).at(-1) || "Workspace",
+    workspaceName: workspace.split(/[\\/]/).at(-1) || "Carpeta de trabajo",
     connected: false,
     busy: false,
     demo: false,
@@ -72,7 +72,7 @@ export class EngineClient implements UiClient {
     this.child.on("exit", (code) => {
       if (!this.exiting)
         this.fail(
-          `Engine disconnected (exit ${code ?? "unknown"}). Reopen Perfect to recover; no success was inferred.`,
+          `Motor desconectado (salida ${code ?? "desconocida"}). Volvé a abrir Perfect para recuperar el trabajo; no se asumió un resultado exitoso.`,
         );
     });
     this.child.send?.({ type: "initialize", options });
@@ -97,7 +97,7 @@ export class EngineClient implements UiClient {
   };
   dispatch = (action: UiAction) => {
     if (!this.child.connected) {
-      this.fail("Engine is not connected");
+      this.fail("El motor no está conectado");
       return;
     }
     this.child.send?.({

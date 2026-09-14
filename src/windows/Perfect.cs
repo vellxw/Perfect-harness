@@ -7,13 +7,13 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 [assembly: AssemblyTitle("Perfect Harness")]
-[assembly: AssemblyDescription("Evidence-driven coding agents · Glass TUI")]
+[assembly: AssemblyDescription("Agentes de programación con evidencia · Interfaz de terminal")]
 [assembly: AssemblyCompany("Perfect Harness")]
 [assembly: AssemblyProduct("Perfect Harness")]
 [assembly: AssemblyCopyright("Perfect Harness contributors")]
-[assembly: AssemblyVersion("0.2.0.0")]
-[assembly: AssemblyFileVersion("0.2.0.0")]
-[assembly: AssemblyInformationalVersion("0.2.0")]
+[assembly: AssemblyVersion("0.2.1.0")]
+[assembly: AssemblyFileVersion("0.2.1.0")]
+[assembly: AssemblyInformationalVersion("0.2.1")]
 
 internal static class Perfect {
  [DllImport("kernel32.dll")] static extern uint GetConsoleProcessList(uint[] list,uint count);
@@ -49,32 +49,32 @@ internal static class Perfect {
  static void RemoveProfile(){if(File.Exists(Fragment)&&File.ReadAllText(Fragment).IndexOf(EscapeJson(Exe),StringComparison.OrdinalIgnoreCase)>=0){File.Delete(Fragment);if(!Directory.EnumerateFileSystemEntries(Path.GetDirectoryName(Fragment)).Any())Directory.Delete(Path.GetDirectoryName(Fragment));}}
  static string FindTerminal(){
   string custom=Environment.GetEnvironmentVariable("PERFECT_WT_PATH");
-  if(!String.IsNullOrWhiteSpace(custom)){if(!Path.IsPathRooted(custom)||!File.Exists(custom))throw new IOException("PERFECT_WT_PATH must name an existing absolute Windows Terminal executable.");return custom;}
+  if(!String.IsNullOrWhiteSpace(custom)){if(!Path.IsPathRooted(custom)||!File.Exists(custom))throw new IOException("PERFECT_WT_PATH debe indicar la ruta absoluta de un ejecutable existente de Windows Terminal.");return custom;}
   string standard=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Microsoft","WindowsApps","wt.exe");
   return File.Exists(standard)?standard:null;
  }
  static int LaunchWindow(string[] args){
   string terminal=FindTerminal();
-  if(terminal==null){MessageBox.Show("Perfect uses Windows Terminal for its visual interface. Install Windows Terminal from Microsoft, then open Perfect again.\n\nThe classic CLI also works from an existing terminal. Your project has not been modified.","Perfect Harness",MessageBoxButtons.OK,MessageBoxIcon.Information);return 2;}
+  if(terminal==null){MessageBox.Show("Perfect usa Windows Terminal para su interfaz visual. Instalá Windows Terminal de Microsoft y volvé a abrir Perfect.\n\nLa CLI tradicional también funciona desde una terminal existente. Tu proyecto no fue modificado.","Perfect Harness",MessageBoxButtons.OK,MessageBoxIcon.Information);return 2;}
   RegisterProfile();
   string work=Environment.CurrentDirectory;
   if(String.Equals(work.TrimEnd('\\'),Root.TrimEnd('\\'),StringComparison.OrdinalIgnoreCase)||!Directory.Exists(work))work=Workspace;
   var command=new StringBuilder("-w new new-tab -p ").Append(Quote("Perfect Harness")).Append(" -d ").Append(Quote(work)).Append(" --title ").Append(Quote("Perfect Harness")).Append(" ").Append(Quote(Exe)).Append(" --tui-child");
   foreach(string arg in args)command.Append(" ").Append(Quote(arg));
   var start=new ProcessStartInfo(terminal,command.ToString());start.UseShellExecute=false;start.WorkingDirectory=work;start.CreateNoWindow=true;
-  using(var process=Process.Start(start)){if(process==null)throw new IOException("Windows Terminal did not start.");}
+  using(var process=Process.Start(start)){if(process==null)throw new IOException("Windows Terminal no se inició.");}
   IntPtr console=GetConsoleWindow();if(console!=IntPtr.Zero)ShowWindow(console,0);
   return 0;
  }
  static int RunNode(string[] args){
   string node=Path.Combine(Root,"runtime","node.exe"),entry=Path.Combine(Root,"app","dist","cli","index.js");
-  if(!File.Exists(node)||!File.Exists(entry))throw new IOException("The package is incomplete. Extract/install the entire Perfect folder, not only Perfect.exe.");
+  if(!File.Exists(node)||!File.Exists(entry))throw new IOException("El paquete está incompleto. Extraé o instalá toda la carpeta de Perfect, no solo Perfect.exe.");
   var command=new StringBuilder("--experimental-ffi ").Append(Quote(entry));foreach(string arg in args)command.Append(" ").Append(Quote(arg));
   var start=new ProcessStartInfo(node,command.ToString());start.UseShellExecute=false;start.WorkingDirectory=Environment.CurrentDirectory;
   // Application code cannot inject Node startup options through a project .env.
   start.EnvironmentVariables.Remove("NODE_OPTIONS");
   var animation=new ANIMATIONINFO();animation.cbSize=(uint)Marshal.SizeOf(typeof(ANIMATIONINFO));
   if(SystemParametersInfo(0x0048,animation.cbSize,ref animation,0)&&animation.iMinAnimate==0)start.EnvironmentVariables["PERFECT_REDUCED_MOTION"]="1";
-  using(var process=Process.Start(start)){if(process==null)throw new IOException("Bundled runtime did not start.");ConsoleCancelEventHandler handler=(sender,e)=>{e.Cancel=true;};Console.CancelKeyPress+=handler;try{process.WaitForExit();return process.ExitCode;}finally{Console.CancelKeyPress-=handler;}}
+  using(var process=Process.Start(start)){if(process==null)throw new IOException("El entorno incluido no se inició.");ConsoleCancelEventHandler handler=(sender,e)=>{e.Cancel=true;};Console.CancelKeyPress+=handler;try{process.WaitForExit();return process.ExitCode;}finally{Console.CancelKeyPress-=handler;}}
  }
 }

@@ -1,10 +1,11 @@
 import { mkdir, realpath } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { SqliteStore } from "../adapters/sqlite/store.js";
-import { ConfigSchema, type PerfectConfig } from "../config/schema.js";
 import { homeDir, loadConfig } from "../config/load.js";
+import { ConfigSchema, type PerfectConfig } from "../config/schema.js";
 import type { Goal } from "../domain/model.js";
 import { Blocked } from "../domain/util.js";
+import { humanData } from "./spanish.js";
 
 export interface GlobalOptions {
   home?: string;
@@ -50,9 +51,9 @@ export async function withContext<T>(
     },
     print: (value, text) =>
       console.log(
-        options.json || text === undefined
+        options.json
           ? JSON.stringify(value, null, 2)
-          : text,
+          : (text ?? humanData(value)),
       ),
   };
   try {

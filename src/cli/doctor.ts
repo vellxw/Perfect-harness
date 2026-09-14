@@ -1,12 +1,12 @@
-import { access, mkdir, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
+import { access, mkdir, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
-import type { PerfectConfig } from "../config/schema.js";
+import { processRun } from "../adapters/git/process.js";
 import { PiRuntime } from "../adapters/pi/runtime.js";
 import { PI_VERSION } from "../adapters/pi/session.js";
-import { processRun } from "../adapters/git/process.js";
 import { localPolicy } from "../config/load.js";
+import type { PerfectConfig } from "../config/schema.js";
 import { errorText } from "../domain/util.js";
 export interface DoctorCheck {
   name: string;
@@ -22,23 +22,27 @@ export async function doctor(
   const checks: DoctorCheck[] = [];
   checks.push({
     name: "node",
-    status: process.versions.node.split(".")[0] === "26" && Number(process.versions.node.split(".")[1]) >= 4 ? "PASS" : "BLOCKED",
-    detail: `Node ${process.versions.node}; supported runtime is Node 26.4+ (26.x), pinned for OpenTUI FFI`,
+    status:
+      process.versions.node.split(".")[0] === "26" &&
+      Number(process.versions.node.split(".")[1]) >= 4
+        ? "PASS"
+        : "BLOCKED",
+    detail: `Node ${process.versions.node}; se requiere Node 26.4+ (26.x), fijado para OpenTUI FFI`,
   });
   checks.push({
     name: "platform",
     status: process.platform === "linux" ? "PASS" : "WARN",
     detail:
       process.platform === "linux"
-        ? "Linux/WSL2 is the validated platform"
-        : "Linux/WSL2 is the V1 validated execution platform",
+        ? "Linux/WSL2 es la plataforma de ejecución validada"
+        : "Linux/WSL2 es la plataforma de ejecución validada del núcleo V1",
   });
   if (process.getuid?.() === 0)
     checks.push({
       name: "user",
       status: "WARN",
       detail:
-        "Run Perfect as an unprivileged user; do not run coding agents as host root",
+        "Ejecutá Perfect sin privilegios elevados; no uses agentes como administrador del sistema",
     });
   const require = createRequire(import.meta.url);
   try {
@@ -49,7 +53,7 @@ export async function doctor(
     checks.push({
       name: "pi-sdk",
       status: metadata.version === PI_VERSION ? "PASS" : "BLOCKED",
-      detail: `Installed ${metadata.version}, pinned adapter ${PI_VERSION}`,
+      detail: `Instalado ${metadata.version}; adaptador fijado ${PI_VERSION}`,
     });
   } catch (error) {
     checks.push({
@@ -66,7 +70,7 @@ export async function doctor(
       name: "filesystem",
       status: "PASS",
       detail:
-        "Workspace readable/writable; separate local state directory writable",
+        "Carpeta de trabajo accesible; carpeta separada de estado local con permiso de escritura",
     });
   } catch (error) {
     checks.push({
@@ -97,14 +101,14 @@ export async function doctor(
       name: "sandbox",
       status: docker ? "PASS" : "BLOCKED",
       detail: docker
-        ? `Docker daemon ${result.stdout.trim()}`
-        : "Docker daemon unavailable; there is no host-shell fallback",
+        ? `Servicio de Docker ${result.stdout.trim()}`
+        : "El servicio de Docker no está disponible; no se ejecutarán comandos en el equipo como alternativa",
     });
   } catch {
     checks.push({
       name: "sandbox",
       status: "BLOCKED",
-      detail: "Docker is not installed or not reachable",
+      detail: "Docker no está instalado o no es accesible",
     });
   }
   for (const image of [config.sandbox.image, config.sandbox.browserImage]) {
@@ -112,7 +116,7 @@ export async function doctor(
       checks.push({
         name: `image:${image}`,
         status: "NOT_TESTED",
-        detail: "Docker unavailable",
+        detail: "Docker no disponible",
       });
       continue;
     }
@@ -127,7 +131,7 @@ export async function doctor(
       detail:
         result.code === 0
           ? result.stdout.trim()
-          : `Pull the approved image explicitly: docker pull ${image}`,
+          : `Descargá la imagen autorizada explícitamente: docker pull ${image}`,
     });
   }
   const pi = new PiRuntime(home, config),
@@ -140,7 +144,7 @@ export async function doctor(
         checks.push({
           name: `route:${role}`,
           status: "BLOCKED",
-          detail: `Not in installed catalog: ${definition.provider}/${definition.model}`,
+          detail: `No está en el catálogo instalado: ${definition.provider}/${definition.model}`,
         });
         continue;
       }
@@ -158,7 +162,7 @@ export async function doctor(
       checks.push({
         name: `route:${role}`,
         status: supported ? "PASS" : "BLOCKED",
-        detail: `Catalog only: ${definition.provider}/${definition.model}, requested ${definition.reasoning}, mapped ${native}. Effective inference is not tested.`,
+        detail: `Solo catálogo: ${definition.provider}/${definition.model}; solicitado ${definition.reasoning}, seleccionado ${native}. La inferencia real no fue probada.`,
       });
       const auth = await runtime.checkAuth(definition.provider, {
         signal: AbortSignal.timeout(15000),
@@ -172,7 +176,7 @@ export async function doctor(
             : "PASS",
         detail: auth
           ? `Configured ${auth.type}; required ${definition.auth}. Account ${definition.accountRef}.`
-          : `Run perfect login ${definition.provider}`,
+          : `Ejecutá perfect conectar ${definition.provider}`,
       });
       if (online && auth) {
         await runtime.getAuth(definition.provider, {
@@ -182,7 +186,7 @@ export async function doctor(
           name: `auth-online:${role}`,
           status: "PASS",
           detail:
-            "Credential resolution/refresh succeeded; this does not prove inference access or quota",
+            "Credenciales resueltas o renovadas; esto no demuestra acceso a inferencias ni cuota disponible",
         });
       }
     } catch (error) {
@@ -199,12 +203,12 @@ export async function doctor(
       ? "PASS"
       : "WARN",
     detail:
-      "Muse Contributor requires explicit consent for this workspace AND public goal classification; prompts/responses may be used for training",
+      "Muse Contributor requiere consentimiento de esta carpeta Y un objetivo público; los mensajes y respuestas pueden usarse para entrenamiento",
   });
   checks.push({
     name: "real-provider-inference",
     status: "NOT_TESTED",
-    detail: "Use perfect smoke. Doctor never sends inference requests.",
+    detail: "Usá perfect prueba. El diagnóstico nunca envía inferencias.",
   });
   return checks;
 }

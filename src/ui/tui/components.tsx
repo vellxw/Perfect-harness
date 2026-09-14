@@ -1,17 +1,18 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useKeyboard, usePaste } from "@opentui/react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { stateLabel, valueLabel } from "../../i18n/es.js";
 import type {
+  Motion,
   UiAgent,
   UiSnapshot,
-  Motion,
 } from "../../presentation/protocol.js";
-import { glass as g, roles, stateColor, stateIcon } from "./theme/tokens.js";
 import {
-  useSpinner,
+  interpolateColor,
   motionEnabled,
   useEntrance,
-  interpolateColor,
+  useSpinner,
 } from "./motion.js";
+import { glass as g, roles, stateColor, stateIcon } from "./theme/tokens.js";
 import { wrapLines } from "./views.js";
 
 export function Status({ state, motion }: { state: string; motion: Motion }) {
@@ -22,7 +23,7 @@ export function Status({ state, motion }: { state: string; motion: Motion }) {
     transition = useEntrance(state, motionEnabled(motion), 160);
   return (
     <text fg={interpolateColor(g.muted, stateColor(state), transition)}>
-      {live ? spinner : stateIcon(state)} {state.toLowerCase()}
+      {live ? spinner : stateIcon(state)} {stateLabel(state)}
     </text>
   );
 }
@@ -62,8 +63,11 @@ export function TopBar({
         />
         {!compact && (
           <text fg={g.muted}>
-            {s.agents.filter((a) => a.status === "running").length} active ·
-            checks {s.verification.passed}/{s.verification.total}
+            {s.agents.filter((a) => a.status === "running").length}{" "}
+            {s.agents.filter((a) => a.status === "running").length === 1
+              ? "activo"
+              : "activos"}{" "}
+            · pruebas {s.verification.passed}/{s.verification.total}
           </text>
         )}
         {s.demo && <text fg={g.warning}>DEMO</text>}
@@ -87,24 +91,24 @@ export function CurrentGoal({
       gap={compact ? 0 : 1}
       flexShrink={0}
     >
-      <text fg={g.muted}>{goal ? "CURRENT GOAL" : "YOUR NEXT IDEA"}</text>
+      <text fg={g.muted}>{goal ? "OBJETIVO ACTUAL" : "TU PRÓXIMA IDEA"}</text>
       <text fg={g.text} maxHeight={compact ? 2 : 3}>
-        <strong>{goal?.request ?? "What do you want to build?"}</strong>
+        <strong>{goal?.request ?? "¿Qué querés construir?"}</strong>
       </text>
       {goal ? (
         <box flexDirection="row" justifyContent="space-between">
           <text fg={g.secondary}>
-            Iteration{" "}
+            Iteración{" "}
             <span fg={g.text}>
               {goal.iteration} / {goal.maxIterations}
             </span>
             <span fg={g.muted}>
               {" "}
-              · {goal.privacy} · {goal.revision.slice(0, 8)}
+              · {valueLabel(goal.privacy)} · {goal.revision.slice(0, 8)}
             </span>
           </text>
           <text fg={g.secondary}>
-            Verification{" "}
+            Verificación{" "}
             <span fg={g.highlight}>
               {s.verification.passed} / {s.verification.total}
             </span>
@@ -113,8 +117,8 @@ export function CurrentGoal({
       ) : (
         <text fg={g.secondary}>
           {s.connected
-            ? "Describe a goal below. Perfect plans, builds and verifies it."
-            : "Connecting to the local engine…"}
+            ? "Describí un objetivo. Perfect lo planifica, lo construye y lo verifica."
+            : "Conectando con el motor local…"}
         </text>
       )}
       {goal?.reason && (
@@ -127,7 +131,9 @@ export function CurrentGoal({
       )}
       {s.demo && (
         <text fg={g.muted}>
-          Synthetic display data · no accounts, code changes or inference calls
+          {
+            "Datos de demostración · sin cuentas, cambios de código ni inferencias"
+          }
         </text>
       )}
     </box>
@@ -157,7 +163,7 @@ export function AgentRail({
       flexDirection="column"
       flexShrink={0}
     >
-      <text fg={g.muted}>AGENTS</text>
+      <text fg={g.muted}>AGENTES</text>
       <box height={1} />
       {visible.slice(0, Math.max(2, Math.floor((rows - 4) / 4))).map((a) => (
         <box key={a.id} flexDirection="column" height={4} flexShrink={0}>
@@ -169,7 +175,7 @@ export function AgentRail({
         </box>
       ))}
       <box flexGrow={1} />
-      <text fg={g.muted}>/agents for routing</text>
+      <text fg={g.muted}>{"/agentes: ver modelos"}</text>
     </box>
   );
 }
@@ -230,7 +236,7 @@ export function Plate({
         <text fg={g.text}>
           <strong>{title}</strong>
         </text>
-        <text fg={g.muted}>Esc close</text>
+        <text fg={g.muted}>{"Esc cerrar"}</text>
       </box>
       {children}
       {footer && (
@@ -350,7 +356,7 @@ export function SecretEntry({
       <text fg={g.text}>
         {length
           ? "•".repeat(Math.min(length, 48))
-          : "Paste your key. It will not be displayed."}
+          : "Pegá tu clave. No se mostrará."}
       </text>
     </box>
   );

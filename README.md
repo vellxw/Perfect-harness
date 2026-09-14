@@ -1,28 +1,32 @@
 # Perfect Harness
 
-**Build until the evidence says done.**
+**Construí hasta que la evidencia demuestre que está listo.**
 
-A local coding harness built on Pi SDK, with a reactive, keyboard-first black-glass terminal interface. Describe a goal, inspect the plan, watch specialized agents work, and accept a result only after the evidence checks pass.
+Agentes de programación locales sobre Pi SDK, con una interfaz de terminal reactiva, diseñada para el teclado y con estética de vidrio negro. Describí un objetivo, revisá el plan, observá el trabajo de los especialistas y aceptá el resultado solo después de aprobar las verificaciones.
 
-![Perfect terminal interface — actual OpenTUI renderer, synthetic display fixture](docs/screenshots/running.png)
+## Versión 0.2.1 · Español
 
-This image is produced by the real TUI renderer with deterministic demonstration data. It is not a generative mockup and does not claim authenticated model activity. The pixel-glass concept is a design reference, not a promise that a terminal can draw arbitrary refraction.
+La interfaz, la ayuda, las acciones, las confirmaciones y el instalador se presentan en español. Los comandos originales siguen funcionando. Los nombres de modelos y proveedores, niveles de razonamiento, claves JSON, identificadores, código, rutas y evidencia original no se traducen ni se sustituyen.
 
-## Install
+![Perfect en español: renderizador OpenTUI real con datos de demostración](docs/screenshots/es/running.png)
 
-The V2 implementation is on `feat/perfect-harness-v2-tui-windows`. V1 and its separate PR are preserved.
+Esta imagen proviene del renderizador real de la aplicación, con datos deterministas identificados como **DEMO**. No es una imagen generada ni demuestra actividad de cuentas personales. El concepto de vidrio es una referencia de diseño: las celdas de una terminal no pueden dibujar refracciones arbitrarias de píxeles. Las capturas históricas de la versión anterior se conservan por separado con su procedencia.
+
+## Instalación
+
+La V2 está en `feat/perfect-harness-v2-tui-windows`. Se conservan la V1 y su solicitud de revisión independiente.
 
 ### Windows 11 x64
 
-Download the `Perfect-Harness-Windows-x64` artifact from a successful **Windows package** workflow for the desired commit. It contains `Perfect-Harness-Setup-x64.exe`, a portable ZIP and SHA256 checksums.
+Descargá el archivo de instalación de una ejecución exitosa del flujo **Windows package**, verificando el commit y la versión elegidos. El paquete contiene `Perfect-Harness-Setup-x64.exe`, un ZIP portable completo y las sumas de verificación SHA256. La versión 0.2.1 usa el instalador en español.
 
-The installer is per-user and does not require administrator privileges. It installs the icon, desktop/Start-menu launch experience and a separate Windows Terminal fragment. PATH integration is optional and reversible. Node is bundled; a global Node installation is not required. The ZIP must be extracted in full: `Perfect.exe` is a small native launcher, not a single-file copy of all dependencies.
+La instalación es por usuario, sin privilegios de administrador. Incluye icono, acceso en Inicio, acceso opcional al escritorio y un perfil independiente de Windows Terminal. La integración con el PATH es opcional y reversible. Node está incluido: no hace falta instalarlo globalmente. Extraé el ZIP completo; `Perfect.exe` es un iniciador nativo pequeño y necesita los archivos que lo acompañan.
 
-Install Windows Terminal for the visual window. Git and a working Docker Linux-container engine are still required for real coding execution; the installer does not silently enable virtualization, install Docker or relax sandbox rules. The launcher and installer are **unsigned** until a publisher supplies an Authenticode certificate. See [Windows packaging and validation](docs/windows.md).
+Windows Terminal es necesario para abrir la ventana visual dedicada. Git y un motor de Docker capaz de ejecutar contenedores Linux siguen siendo necesarios para trabajar sobre código real. No se instalan silenciosamente ni se reducen las protecciones del entorno aislado. El ejecutable y el instalador **no tienen firma Authenticode**. Consultá [instalación, compilación y validación en Windows](docs/windows.md).
 
-### From source
+### Desde el código fuente
 
-Use Node **26.4.0** (26.x) and Git:
+Usá Node **26.4.0** de la serie 26.x y Git:
 
 ```sh
 git clone --branch feat/perfect-harness-v2-tui-windows https://github.com/vellxw/Perfect-harness.git
@@ -33,13 +37,19 @@ npm link
 perfect
 ```
 
-OpenTUI's Node runtime needs experimental FFI. The entry point enables that flag for the TUI only; the packaged Windows launcher supplies it. Pi remains pinned to 0.85.1. The SQLite adapter uses `node:sqlite` and keeps the V1 database format.
+OpenTUI requiere FFI experimental en Node. La entrada lo habilita para la interfaz y el iniciador de Windows proporciona ese parámetro. Pi sigue fijado en 0.85.1. SQLite utiliza `node:sqlite` y conserva el formato de la base de datos de V1. La traducción no migra ni borra tus proyectos, cuentas o estado local.
 
-## Quick start
+## Primeros pasos
 
-Open `perfect`. First-run diagnostics help you connect accounts. Type a goal in the composer; Enter submits it. Goals are private by default. When the plan is ready, inspect `/plan`, then `/approve`, then `/resume`.
+Abrí `perfect`. El diagnóstico inicial te orienta para conectar las cuentas. Escribí lo que querés construir y presioná Enter. Los objetivos son privados por defecto. Cuando el plan esté listo, revisá `/plan`, aprobalo con `/aprobar` y continuá con `/reanudar`.
 
-Try the interface without accounts or code changes:
+Para seleccionar tu proyecto:
+
+```powershell
+perfect --carpeta "C:\Proyectos\Mi aplicación"
+```
+
+Dentro de la interfaz también podés usar `/carpeta` seguido de la ruta. Para explorarla sin cuentas ni cambios en tu código:
 
 ```sh
 perfect --demo running
@@ -47,76 +57,81 @@ perfect --demo repair
 perfect --demo done
 ```
 
-These are clearly marked **DEMO**. To verify real account access, use the separate provider smoke tests after login; seeing a model name in the UI does not prove access.
+Los nombres de estos escenarios son identificadores técnicos; su contenido se muestra en español. Las demostraciones están marcadas **DEMO**. Ver un nombre de modelo no demuestra acceso a una cuenta: eso se comprueba mediante una prueba real y explícita después de conectar el proveedor.
 
-## Providers
+## Proveedores
 
-| Role | Configured route | Reasoning |
+| Rol visible | Ruta configurada | Razonamiento literal |
 |---|---|---|
-| Planner | `xai/grok-4.6` | `xhigh` |
-| General / integrator | `xai/grok-4.6` | `medium` |
-| Frontend | `opencode/muse-spark-1.3-contributor-free` | `xhigh`, not Max |
-| Backend | `openai-codex/gpt-6-astra` | `high` |
-| Oracle | `openai-codex/gpt-6-astra` | `xhigh`, read-only |
+| Planificador | `xai/grok-4.6` | `xhigh` |
+| Asistente / integrador | `xai/grok-4.6` | `medium` |
+| Interfaz | `opencode/muse-spark-1.3-contributor-free` | `xhigh`, no Max |
+| Servidor | `openai-codex/gpt-6-astra` | `high` |
+| Revisor experto | `openai-codex/gpt-6-astra` | `xhigh`, solo lectura |
 
 ```sh
-perfect login xai
-perfect login openai-codex
-perfect login opencode
-perfect doctor --online
-perfect smoke --allow-contributor
+perfect conectar xai
+perfect conectar openai-codex
+perfect conectar opencode
+perfect diagnostico --en-linea
+perfect prueba --permitir-contributor
 ```
 
-OAuth and API keys are entered locally. Credentials never belong in GitHub. Contributor requires explicit per-workspace consent and public code; it may allow prompts/responses to be used for training. `/contributor` explains this before authorization. `/public` affects only the next goal; it does not silently authorize sharing. No model or billing fallback is silent. See [authentication](docs/authentication.md) and [provider compatibility](docs/provider-compatibility.md).
+Las claves API y autorizaciones OAuth se introducen localmente. Nunca deben copiarse a GitHub. Contributor exige consentimiento explícito por carpeta y contenido público; los mensajes y respuestas pueden utilizarse para entrenamiento. `/contribuir` lo explica antes de pedir autorización. `/publico` solo afecta al próximo objetivo y no autoriza por sí mismo a compartirlo. `/contribuir revocar` revoca el consentimiento para futuras solicitudes; no retira información ya enviada.
 
-## Terminal controls
+No hay cambios silenciosos de modelo ni de modalidad de cobro. Consultá [autenticación](docs/authentication.md) y [compatibilidad de proveedores](docs/provider-compatibility.md). Las instrucciones o errores externos que un proveedor emita sin traducción se conservan para no ocultar información relevante.
 
-| Action | Control |
+## Controles de la terminal
+
+| Acción | Control |
 |---|---|
-| Submit a goal | Enter |
-| New line | Shift+Enter when supported; Ctrl+J portable alternative |
-| Browse commands | `/` |
-| Quick actions | Ctrl+K |
-| Inspect activity | Tab, arrows, Enter |
-| Agents / plan / verification / diff | Alt+A / Alt+P / Alt+V / Alt+D, or slash commands |
-| Close a panel | Escape |
-| Exit safely | `/exit` or Ctrl+C; active work pauses first |
+| Enviar un objetivo | Enter |
+| Nueva línea | Shift+Enter cuando se admite; Ctrl+J como alternativa |
+| Buscar comandos | `/` |
+| Acciones rápidas | Ctrl+K |
+| Inspeccionar actividad | Tab, flechas y Enter |
+| Agentes / plan / verificación / cambios | Alt+A / Alt+P / Alt+V / Alt+D |
+| Cerrar un panel | Escape |
+| Salir de forma segura | `/salir` o Ctrl+C; primero se pausa el trabajo activo |
 
-`/agents`, `/plan`, `/tasks`, `/verify`, `/artifacts`, `/diff`, `/routing`, `/cost`, `/logs`, `/doctor` and `/settings` expose detail without permanent dashboard clutter. In artifacts, Enter inspects verified text, O opens verified image/video, and C copies the verified path. Other artifact formats are not auto-executed.
+`/agentes`, `/plan`, `/tareas`, `/verificar`, `/archivos`, `/cambios`, `/modelos`, `/consumo`, `/registros`, `/diagnostico` y `/ajustes` muestran los detalles sin llenar la pantalla de paneles permanentes. En archivos, Enter inspecciona texto verificado, O abre una imagen o video verificado y C copia su ruta. Los demás formatos no se ejecutan automáticamente.
 
-Destructive actions require a typed confirmation. Approvals are tied to the exact plan/candidate. Unknown reasoning metadata remains unknown. Iterations are limits, not percentage-complete estimates. The agent rail collapses as the terminal narrows; 80x24 remains keyboard-usable.
+Las operaciones sensibles requieren escribir una confirmación: `APROBAR`, `APLICAR`, `CANCELAR` o `COMPARTIR`, según la acción. Un Enter vacío no concede permiso. La autorización sigue vinculada al plan o versión exactos. Un nivel de razonamiento no informado sigue siendo desconocido. La iteración es un contador de límites, no un porcentaje estimado de avance. La interfaz se adapta al ancho y conserva el uso por teclado en 80×24.
 
-The traditional CLI is preserved:
+La CLI tradicional también está disponible en español:
 
 ```sh
-perfect status
-perfect status --json
-perfect --no-ui goal "Build the feature"
-perfect pause
-perfect resume
-perfect diff
-perfect apply --yes
+perfect estado
+perfect estado --json
+perfect --sin-interfaz objetivo "Construí la funcionalidad"
+perfect pausar
+perfect reanudar
+perfect cambios
+perfect aplicar --si
+perfect ayuda
 ```
 
-The TUI is a client of the same engine, not a second Judge. [TUI architecture](docs/tui-architecture.md) explains the event and IPC boundaries.
+Para aprobar un plan desde la CLI usá `perfect aprobar-plan`; `perfect aprobar <id-criterio>` conserva la aprobación de un criterio humano individual. Dentro de la interfaz, `/aprobar` abre la revisión del plan.
 
-## How it works
+Los nombres originales (`goal`, `status`, `agents`, `resume`, `doctor`, entre otros) y sus opciones originales siguen funcionando. `--json` conserva las claves y estados del protocolo: por ejemplo, `DONE` continúa siendo `DONE` en JSON, aunque la interfaz muestre «completado». La interfaz es un cliente del mismo motor, no un segundo evaluador. [Arquitectura de la interfaz](docs/tui-architecture.md).
+
+## Funcionamiento
 
 ```text
-goal → discovery → plan → task DAG → isolated workers
-     → integration → real verification → independent review
-     → evidence Judge → repair / replan / pause / DONE
+objetivo → exploración → plan → grafo de tareas → agentes aislados
+         → integración → verificación real → revisión independiente
+         → evaluador de evidencia → reparación / nuevo plan / pausa / completado
 ```
 
-The original checkout is preserved. Managed worktrees have explicit ownership, commands run in isolated containers, evidence is bound to a specific revision, and the controller—not an LLM saying “finished”—decides DONE. Apply is explicit and checks for divergence. [Architecture](docs/architecture.md), [goal loop](docs/goal-loop.md), [recovery](docs/recovery.md).
+La carpeta original se conserva intacta. Las copias de trabajo tienen áreas asignadas, los comandos se ejecutan en contenedores aislados y la evidencia se vincula a una revisión concreta. El controlador, no un modelo que diga «terminé», decide cuándo se cumple el objetivo. Aplicar los cambios requiere autorización y comprobación de divergencias. [Arquitectura](docs/architecture.md), [ciclo de objetivos](docs/goal-loop.md), [recuperación](docs/recovery.md).
 
-## Security
+## Seguridad
 
-No host-shell fallback, no secrets in context, no remote push from product goals by default. The UI cannot write DONE or modify model bindings. Sensitive input is masked and sent only through private local IPC. Opening an artifact requires hash validation and a restricted media type. [Security model](SECURITY.md), [SECURITY.md](SECURITY.md).
+No se ejecutan comandos directamente en el equipo como alternativa a un Docker ausente. No se incluyen secretos en el contexto ni se publican cambios remotos desde los objetivos por defecto. La interfaz no puede escribir `DONE` ni modificar las rutas de los modelos. Las credenciales se enmascaran y solo viajan por comunicación local privada. Abrir un archivo requiere validar su hash y tipo. [Modelo de seguridad](SECURITY.md).
 
-An executable does not remove the need for Git/Docker/provider access. Windows Terminal owns Acrylic/Mica; terminal cells do not provide pixel-level blur. No Electron, Tauri, browser dashboard or new backend service is used.
+Tener un ejecutable no elimina los requisitos de Git, Docker y acceso a proveedores. Acrylic y Mica dependen de Windows Terminal; las celdas no ofrecen desenfoque por píxel. No se utiliza Electron, Tauri, una interfaz web ni un servicio de servidor nuevo.
 
-## Verification and development
+## Verificación y desarrollo
 
 ```sh
 npm run typecheck
@@ -129,6 +144,8 @@ node --experimental-ffi scripts/capture-tui.mjs
 node --experimental-ffi scripts/benchmark-tui.mjs
 ```
 
-The native matrix tests Linux and Windows, including real Pi SDK against controlled fake provider transport and the actual OpenTUI renderer. Docker end-to-end tests separately execute the fullstack repair loop and Remotion render. No personal providers run in CI. Benchmark reports distinguish explicit native-renderer latency from end-to-end desktop latency.
+La matriz nativa comprueba Linux y Windows, incluyendo sesiones del SDK real de Pi con transporte simulado y el renderizador real de OpenTUI. Los casos de Docker ejecutan por separado el ciclo integral de reservas y reparación visual, y el renderizado de Remotion. No se utilizan cuentas personales en CI.
 
-[Design direction](docs/design/perfect-v2.md) · [Captures](docs/screenshots/README.md) · [Windows](docs/windows.md) · [Contributing](CONTRIBUTING.md).
+La localización añade pruebas de comandos españoles y originales, texto con tildes y eñes, confirmaciones, metadatos intactos y pantallas en español. Los informes distinguen la latencia del renderizador de la latencia completa del escritorio. Los datos de demostración no equivalen a inferencias reales, y Windows Server 2025 no equivale a una prueba personal de Windows 11.
+
+[Dirección de diseño](docs/design/perfect-v2.md) · [Capturas y procedencia](docs/screenshots/README.md) · [Windows](docs/windows.md) · [Contribuciones](CONTRIBUTING.md).

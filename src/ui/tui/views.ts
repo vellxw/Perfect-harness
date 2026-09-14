@@ -1,3 +1,12 @@
+import {
+  commandName,
+  fold,
+  reasoningLabel,
+  roleLabel,
+  stateLabel,
+  usdLabel,
+  valueLabel,
+} from "../../i18n/es.js";
 import type {
   Screen,
   UiSnapshot,
@@ -19,92 +28,110 @@ export interface PaletteItem {
 export const commands: PaletteItem[] = [
   {
     name: "goal",
-    description: "Start a goal without touching the original checkout",
-    args: "Describe what to build",
+    description: "Iniciar un objetivo sin tocar la carpeta original",
+    args: "Describí qué construir",
   },
   {
     name: "agents",
-    description: "Inspect the actual agents and model routing",
+    description: "Inspeccionar los agentes, modelos y proveedores reales",
   },
   {
     name: "plan",
-    description: "Review architecture, acceptance criteria and dependencies",
+    description: "Revisar la arquitectura, los criterios y las dependencias",
   },
-  { name: "tasks", description: "All tasks, attempts and ownership" },
+  {
+    name: "tasks",
+    description: "Ver todas las tareas, los intentos y las áreas asignadas",
+  },
   {
     name: "verify",
-    description: "Checks and evidence on the current candidate",
+    description: "Ver comprobaciones y evidencia de la versión actual",
   },
   {
     name: "artifacts",
-    description: "Screenshots, renders, traces and reports",
+    description: "Capturas, renderizados, trazas e informes",
   },
-  { name: "diff", description: "Review the candidate changes" },
+  { name: "diff", description: "Revisar los cambios de la versión candidata" },
   {
     name: "routing",
-    description: "Requested, sent and reported model identity",
+    description: "Identidad del modelo solicitada, enviada e informada",
   },
   {
     name: "cost",
-    description: "Observed usage, uncertain requests and billing",
+    description: "Uso observado, solicitudes inciertas y facturación",
   },
   {
     name: "logs",
-    description: "Recent structured activity; expand with Enter",
+    description: "Actividad reciente; Enter muestra los detalles",
   },
-  { name: "pause", description: "Stop scheduling and preserve checkpoints" },
-  { name: "resume", description: "Recover and resume the current goal" },
-  { name: "approve", description: "Approve the exact plan currently shown" },
+  { name: "pause", description: "Pausar nuevas tareas y conservar el trabajo" },
+  { name: "resume", description: "Recuperar y reanudar el objetivo actual" },
+  {
+    name: "approve",
+    description: "Aprobar exactamente el plan que se muestra",
+  },
   {
     name: "retry",
-    description: "Retry a failed task without resetting limits",
+    description: "Reintentar una tarea fallida sin reiniciar los límites",
     args: "task-id",
   },
-  { name: "abort", description: "Stop the goal with explicit confirmation" },
+  {
+    name: "abort",
+    description: "Cancelar el objetivo con confirmación explícita",
+  },
   {
     name: "apply",
-    description: "Apply a verified DONE candidate after confirmation",
+    description: "Aplicar una versión completada y verificada tras confirmar",
   },
   {
     name: "reverify",
-    description: "Re-run the accepted checks on a paused goal",
+    description: "Repetir las comprobaciones de un objetivo en pausa",
   },
   {
     name: "doctor",
-    description: "Check this computer without sending an inference",
+    description: "Revisar este equipo sin enviar inferencias",
   },
-  { name: "settings", description: "Motion, contrast and privacy" },
-  { name: "projects", description: "Recent goals in this workspace" },
+  { name: "settings", description: "Animaciones, contraste y privacidad" },
+  { name: "projects", description: "Objetivos recientes de esta carpeta" },
   {
     name: "workspace",
-    description: "Choose a local source folder",
+    description: "Elegir una carpeta local de trabajo",
     args: "path",
   },
   {
     name: "login",
-    description: "Connect a provider locally",
+    description: "Conectar un proveedor de forma local",
     args: "xai | openai-codex | opencode",
   },
   {
     name: "contributor",
-    description: "Review Muse Contributor data-sharing consent",
+    description: "Revisar el consentimiento de Muse Contributor",
   },
   {
     name: "public",
-    description: "Declare the next goal suitable for public processing",
+    description: "Declarar público el próximo objetivo",
   },
-  { name: "private", description: "Keep the next goal private (default)" },
+  {
+    name: "private",
+    description: "Mantener privado el próximo objetivo (predeterminado)",
+  },
   {
     name: "prepare",
-    description: "Approve public npm downloads for a paused goal",
+    description: "Autorizar paquetes públicos de npm para un objetivo en pausa",
   },
-  { name: "help", description: "Keyboard shortcuts and safety controls" },
-  { name: "exit", description: "Pause active work safely and close Perfect" },
+  { name: "help", description: "Atajos de teclado y controles de seguridad" },
+  {
+    name: "exit",
+    description: "Pausar el trabajo de forma segura y cerrar Perfect",
+  },
 ];
 export function filterCommands(query: string): PaletteItem[] {
-  const q = query.replace(/^\//, "").split(/\s/)[0]!.toLowerCase();
+  const q = fold(query.replace(/^\//, "").split(/\s/)[0]!);
   return commands.filter(
-    (c) => c.name.includes(q) || c.description.toLowerCase().includes(q),
+    (c) =>
+      fold(c.name).includes(q) ||
+      fold(commandName(c.name)).includes(q) ||
+      fold(c.description).includes(q),
   );
 }
 export function orderedTasks(
@@ -137,26 +164,26 @@ export function viewRows(s: UiSnapshot, screen: Screen): Row[] {
     case "routing":
       return s.agents.map((a) => ({
         id: a.id,
-        title: `${a.role} · ${a.status}`,
-        detail: `${a.provider}/${a.model} · ${a.selected}`,
+        title: `${roleLabel(a.role)} · ${stateLabel(a.status)}`,
+        detail: `${a.provider}/${a.model} · ${reasoningLabel(a.selected)}`,
         status: a.status,
         body: [
-          `ROLE        ${a.role}`,
-          `PROVIDER    ${a.provider}`,
-          `ACCOUNT     ${a.account}`,
-          `MODEL       ${a.model}`,
-          `REPORTED    ${a.modelReported ?? "unknown (not exposed)"}`,
-          `REQUESTED   ${a.requested}`,
-          `SELECTED    ${a.selected}`,
-          `SENT        ${a.sent ?? "not observed"}`,
-          `REPORTED    ${a.reported ?? "unknown (not exposed)"}`,
-          `TASK        ${a.task ?? "none"}`,
-          `REQUESTS    ${a.requests}`,
-          `TOKENS      ${a.tokens?.toLocaleString() ?? "unknown"}`,
-          `LATENCY     ${a.latencyMs === undefined ? "unknown" : `${a.latencyMs} ms`}`,
-          `PROVENANCE  ${a.provenance}`,
+          `ROL         ${roleLabel(a.role)}`,
+          `PROVEEDOR   ${a.provider}`,
+          `CUENTA      ${a.account}`,
+          `MODELO      ${a.model}`,
+          `INFORMADO   ${a.modelReported ?? "desconocido (el proveedor no lo expone)"}`,
+          `SOLICITADO  ${reasoningLabel(a.requested)}`,
+          `SELECCIONADO ${reasoningLabel(a.selected)}`,
+          `ENVIADO     ${a.sent ?? "no observado"}`,
+          `INFORMADO   ${a.reported ?? "desconocido (el proveedor no lo expone)"}`,
+          `TAREA       ${a.task ?? "ninguno"}`,
+          `SOLICITUDES ${a.requests}`,
+          `TOKENS      ${a.tokens?.toLocaleString("es-AR") ?? "desconocido"}`,
+          `LATENCIA    ${a.latencyMs === undefined ? "desconocido" : `${a.latencyMs} ms`}`,
+          `PROCEDENCIA ${a.provenance}`,
           "",
-          "A configured model is not evidence of a completed inference.",
+          "Un modelo configurado no demuestra que se haya ejecutado una inferencia.",
         ].join("\n"),
       }));
     case "plan":
@@ -164,46 +191,46 @@ export function viewRows(s: UiSnapshot, screen: Screen): Row[] {
       return orderedTasks(s.tasks).map(({ task: t, depth }) => ({
         id: t.id,
         title: `${"  ".repeat(Math.min(depth, 6))}${depth ? "↳ " : ""}${t.title}`,
-        detail: `${t.role} · attempt ${t.attempt}/${t.maxAttempts}${t.dependencies.length ? ` · after ${t.dependencies.join(", ")}` : ""}`,
+        detail: `${roleLabel(t.role)} · intento ${t.attempt}/${t.maxAttempts}${t.dependencies.length ? ` · después de ${t.dependencies.join(", ")}` : ""}`,
         status: t.status,
         body: [
           t.description,
           "",
-          `Dependencies: ${t.dependencies.join(", ") || "none"}`,
-          `Ownership: ${t.surfaces.join(", ") || "read-only"}`,
-          `Status: ${t.status}`,
-          `Attempt ${t.attempt}/${t.maxAttempts}`,
+          `Dependencias: ${t.dependencies.join(", ") || "ninguno"}`,
+          `Área asignada: ${t.surfaces.join(", ") || "solo lectura"}`,
+          `Estado: ${stateLabel(t.status)}`,
+          `Intento ${t.attempt}/${t.maxAttempts}`,
         ].join("\n"),
       }));
     case "verify":
       return s.checks.map((c) => ({
         id: c.id,
         title: c.title,
-        detail: `${c.kind} · ${c.status}`,
+        detail: `${valueLabel(c.kind)} · ${stateLabel(c.status)}`,
         status: c.status,
-        body: `${c.summary}\n\nCandidate: ${c.revision}\nEvidence: ${c.evidenceIds.join(", ") || "not produced"}\n\nUse /artifacts to inspect the original evidence.`,
+        body: `${c.summary}\n\nVersión candidata: ${c.revision}\nEvidencia: ${c.evidenceIds.join(", ") || "no generada"}\n\nUsá /archivos para inspeccionar la evidencia original.`,
       }));
     case "artifacts":
       return s.artifacts.map((a) => ({
         id: a.id,
         title: a.name,
-        detail: `${a.kind} · ${a.current ? "current candidate" : "older candidate"}`,
+        detail: `${valueLabel(a.kind)} · ${a.current ? "versión actual" : "versión anterior"}`,
         status: a.current ? "completed" : "waiting",
-        body: `Kind: ${a.kind}\nCandidate: ${a.revision}\nSHA256: ${a.hash}\n\nEnter inspects verified text. O opens a verified image/video. C copies the verified path. Other formats require explicit external inspection.`,
+        body: `Tipo: ${valueLabel(a.kind)}\nVersión candidata: ${a.revision}\nSHA256: ${a.hash}\n\nEnter inspecciona texto verificado. O abre imágenes o videos verificados. C copia la ruta verificada. Otros formatos requieren inspección externa explícita.`,
       }));
     case "cost":
       return s.accounts.map((a) => ({
         id: a.account,
         title: a.account,
-        detail: `${a.tokens.toLocaleString()} reported tokens · ${a.uncertain} uncertain requests`,
+        detail: `${a.tokens.toLocaleString("es-AR")} tokens informados · ${a.uncertain} solicitudes inciertas`,
         status: "info",
-        body: `Reported tokens: ${a.tokens.toLocaleString()}\nRequests with unknown usage: ${a.uncertain}\nObserved charge: ${a.charge === undefined ? "not reported" : `USD ${a.charge.toFixed(4)}`}\nEstimated metered charge: ${a.estimate === undefined ? "not applicable / unknown" : `USD ${a.estimate.toFixed(4)}`}\n\nSubscription quota is not a per-token invoice. Unknown does not mean zero.`,
+        body: `Tokens informados: ${a.tokens.toLocaleString("es-AR")}\nSolicitudes con uso desconocido: ${a.uncertain}\nCargo observado: ${a.charge === undefined ? "no informado" : usdLabel(a.charge)}\nCargo por consumo estimado: ${a.estimate === undefined ? "no corresponde / desconocido" : usdLabel(a.estimate)}\n\nLa cuota de una suscripción no es una factura por token. Desconocido no significa cero.`,
       }));
     case "doctor":
       return s.diagnostics.map((d) => ({
         id: d.name,
         title: d.name,
-        detail: d.status,
+        detail: stateLabel(d.status),
         status:
           d.status === "PASS"
             ? "passed"
@@ -216,77 +243,77 @@ export function viewRows(s: UiSnapshot, screen: Screen): Row[] {
       return s.recentGoals.map((g) => ({
         id: g.id,
         title: g.request,
-        detail: g.state,
+        detail: stateLabel(g.state),
         status: g.state,
-        body: `${g.id}\n${g.state}`,
+        body: `${g.id}\n${stateLabel(g.state)}`,
       }));
     case "settings":
       return [
         {
           id: "motion",
-          title: "Motion",
-          detail: s.preferences.ui.motion,
+          title: "Animaciones",
+          detail: valueLabel(s.preferences.ui.motion),
           status: "info",
-          body: "Auto reduces motion on remote, CI and constrained terminals. Animations stop when idle.",
+          body: "El modo automático reduce las animaciones en conexiones remotas, CI y terminales limitadas. Se detienen al quedar inactivo.",
         },
         {
           id: "contrast",
-          title: "High contrast",
-          detail: s.preferences.ui.contrast,
+          title: "Alto contraste",
+          detail: valueLabel(s.preferences.ui.contrast),
           status: "info",
-          body: "Increases muted text contrast. States always have labels and symbols.",
+          body: "Aumenta el contraste del texto secundario. Los estados siempre incluyen etiquetas y símbolos.",
         },
         {
           id: "transparent",
-          title: "Terminal background",
-          detail: s.preferences.ui.transparent ? "transparent" : "solid",
+          title: "Fondo de la terminal",
+          detail: s.preferences.ui.transparent ? "transparente" : "sólido",
           status: "info",
-          body: "Window blur is provided by Windows Terminal Acrylic, not by terminal cells.",
+          body: "El desenfoque depende de Acrylic de Windows Terminal, no de las celdas de texto.",
         },
         {
           id: "login-xai",
-          title: "Connect xAI",
-          detail: "Subscription OAuth",
+          title: "Conectar xAI",
+          detail: "OAuth de la suscripción",
           status: "info",
-          body: "Authenticate locally; no token is stored in the repository.",
+          body: "Autenticación local: ningún token se guarda en el repositorio.",
         },
         {
           id: "login-openai-codex",
-          title: "Connect ChatGPT / Codex",
-          detail: "Subscription OAuth",
+          title: "Conectar ChatGPT / Codex",
+          detail: "OAuth de la suscripción",
           status: "info",
-          body: "Authenticate locally using the configured Pi provider.",
+          body: "Autenticación local mediante el proveedor de Pi configurado.",
         },
         {
           id: "login-opencode",
-          title: "Connect OpenCode",
-          detail: "Muse Contributor API key",
+          title: "Conectar OpenCode",
+          detail: "Clave API de Muse Contributor",
           status: "info",
-          body: "Contributor content may be used for training; workspace consent is separate.",
+          body: "El contenido de Contributor puede usarse para entrenamiento. El consentimiento de la carpeta es independiente.",
         },
         {
           id: "contributor",
-          title: "Contributor privacy",
-          detail: "Consent is per workspace, never automatic",
+          title: "Privacidad de Contributor",
+          detail: "Consentimiento por carpeta, nunca automático",
           status: "waiting",
-          body: "Only public goals may use Contributor. Never share secrets or confidential code.",
+          body: "Solo los objetivos públicos pueden usar Contributor. Nunca compartas secretos ni código confidencial.",
         },
         {
           id: "doctor",
-          title: "Check this computer",
-          detail: "No inference is sent",
+          title: "Revisar este equipo",
+          detail: "No se envían inferencias",
           status: "info",
-          body: "Inspect runtime, Git, Docker, browser images and configured providers.",
+          body: "Revisar el entorno, Git, Docker, las imágenes del navegador y los proveedores configurados.",
         },
       ];
     case "home":
     case "logs":
       return s.activity.map((a) => ({
         id: a.id,
-        title: `${a.role} · ${a.title}`,
+        title: `${roleLabel(a.role)} · ${a.title}`,
         detail: a.detail,
         status: a.status,
-        body: `${a.title}\n${a.detail}\n\n${a.time}\nEvent ${a.sequence}: ${a.rawType}`,
+        body: `${a.title}\n${a.detail}\n\n${a.time}\nEvento original ${a.sequence}: ${a.rawType}`,
       }));
     default:
       return [];

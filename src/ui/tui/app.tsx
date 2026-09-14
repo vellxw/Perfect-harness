@@ -1,3 +1,9 @@
+import type { TextareaRenderable } from "@opentui/core";
+import {
+  useKeyboard,
+  useRenderer,
+  useTerminalDimensions,
+} from "@opentui/react";
 import {
   useCallback,
   useEffect,
@@ -6,30 +12,25 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import {
-  useKeyboard,
-  useRenderer,
-  useTerminalDimensions,
-} from "@opentui/react";
-import type { TextareaRenderable } from "@opentui/core";
+import { canonicalCommand, commandName, screenLabel } from "../../i18n/es.js";
 import type { UiClient } from "../../presentation/client.js";
 import {
   text,
-  type UiAction,
-  type Screen,
   type AuthMessage,
   type Motion,
+  type Screen,
+  type UiAction,
 } from "../../presentation/protocol.js";
-import { glass as g, roles, stateIcon, stateColor } from "./theme/tokens.js";
 import {
-  TopBar,
-  CurrentGoal,
   AgentRail,
   AgentStrip,
-  Plate,
+  CurrentGoal,
   Document,
+  Plate,
   SecretEntry,
+  TopBar,
 } from "./components.js";
+import { glass as g, roles, stateColor, stateIcon } from "./theme/tokens.js";
 import {
   commands,
   filterCommands,
@@ -71,7 +72,8 @@ const screens: Screen[] = [
   "settings",
   "projects",
 ];
-const help = `PERFECT · KEYBOARD\n\nEnter             Submit a goal or selected action\nShift+Enter       New line (when terminal reports modifiers)\nCtrl+J            Portable new line\n/                 Search commands\nCtrl+K            Quick actions\nTab               Switch between activity and composer\nUp / Down         Select an item in the focused panel\nPageUp / PageDown Scroll details or activity\nEnter on a row    Inspect details\nAlt+A / Alt+P     Agents / Plan\nAlt+V / Alt+D     Verification / Diff\nEsc               Close an overlay or return to composer\nCtrl+C            Close safely; active work is paused first\n\nARTIFACTS\nEnter inspects text. O opens a verified image/video. C copies its verified path. Traces and other files are never auto-executed.\n\nAPPROVALS\n/approve shows the exact plan and criteria before confirmation. /apply requires DONE and the same verified candidate. /abort preserves checkpoints.\n\nPRIVACY\nGoals are private by default. /public affects the next goal only. Contributor requires separate workspace consent. No fallback changes a model or billing mode silently.\n\nTERMINAL MATERIAL\nTranslucency and Acrylic come from the terminal window. This application does not pretend to draw pixel-level blur or refraction in text cells.`;
+const help =
+  "PERFECT · TECLADO\n\nEnter             Enviar el objetivo o ejecutar una acción\nShift+Enter       Nueva línea (si la terminal lo admite)\nCtrl+J            Nueva línea compatible\n/                 Buscar comandos\nCtrl+K            Acciones rápidas\nTab               Alternar entre actividad y escritura\n↑ / ↓             Elegir un elemento del panel\nPgUp / PgDn       Recorrer actividad o detalles\nEnter en una fila Inspeccionar los detalles\nAlt+A / Alt+P     Agentes / Plan\nAlt+V / Alt+D     Verificación / Cambios\nEsc               Cerrar un panel o volver a escribir\nCtrl+C            Cerrar de forma segura; primero se pausa el trabajo\n\nARCHIVOS\nEnter inspecciona texto. O abre una imagen o video verificado. C copia la ruta verificada. Las trazas y otros archivos no se ejecutan automáticamente.\n\nAPROBACIONES\n/aprobar muestra el plan exacto y sus criterios. /aplicar requiere un objetivo completado y la misma versión verificada. /cancelar conserva el trabajo. Las confirmaciones se escriben expresamente; Enter vacío no autoriza nada.\n\nPRIVACIDAD\nLos objetivos son privados de forma predeterminada. /publico afecta solo al siguiente. Contributor exige un consentimiento separado por carpeta. Nunca se cambia el modelo ni el modo de cobro silenciosamente.\n\nTERMINAL\nLa transparencia y Acrylic dependen de Windows Terminal. No se simula un desenfoque de píxeles en las celdas de texto.\n\nIDIOMA Y COMPATIBILIDAD\nLa aplicación está en español. Los comandos originales también funcionan. Los nombres de modelos, claves JSON, código, rutas y registros externos conservan su forma original para no modificar la evidencia.";
 export function App({
   client,
   initialScreen = "home",
@@ -135,31 +137,33 @@ export function App({
           notify(message.message);
           if (message.content !== undefined)
             showDocument(
-              message.operation ? "Evidence" : "Candidate diff",
+              message.operation
+                ? "Evidencia"
+                : "Cambios de la versión candidata",
               message.content,
               message.path,
             );
           else if (message.path && message.operation === "inspect")
             showDocument(
-              "Verified artifact",
-              `${message.message}\n\n${message.path}\n\nUse O in /artifacts to open an image or video.`,
+              "Archivo verificado",
+              `${message.message}\n\n${message.path}\n\nUsá O en /archivos para abrir una imagen o un video.`,
               message.path,
             );
           if (message.path && message.operation === "copy") {
             const copied = renderer.copyToClipboardOSC52(message.path);
             notify(
               copied
-                ? "Verified artifact path copied"
-                : "Clipboard unavailable; the path is shown instead",
+                ? "Ruta del archivo verificado copiada"
+                : "Portapapeles no disponible; se muestra la ruta",
             );
-            if (!copied) showDocument("Artifact path", message.path);
+            if (!copied) showDocument("Ruta del archivo", message.path);
           }
           if (message.path && message.operation === "open") {
             if (openExternal)
               void openExternal(message.path).catch((error) =>
                 notify(String(error)),
               );
-            else notify("External opening is unavailable in this renderer");
+            else notify("Este renderizador no permite abrir archivos externos");
           }
         }
       }),
@@ -224,7 +228,7 @@ export function App({
   };
   const requireGoal = () => {
     if (!s.goal) {
-      notify("Start or select a goal first");
+      notify("Primero iniciá o seleccioná un objetivo");
       return undefined;
     }
     return s.goal;
@@ -244,12 +248,18 @@ export function App({
   };
   const requestContributor = () =>
     setConfirmation({
-      title: "Muse Contributor · data sharing",
-      phrase: "SHARE",
-      body: `Contributor requests may be used for training. Only enable this for public code you are authorized to share. Secrets and confidential projects remain prohibited.\n\nWorkspace:\n${s.workspace}\n\nType SHARE to enable consent for this workspace. Use /contributor revoke to revoke it.`,
+      title: "Muse Contributor · compartir datos",
+      phrase: "COMPARTIR",
+      body: `Los mensajes de Contributor pueden usarse para entrenamiento. Habilitalo solo para código público que tengas permiso de compartir. Los secretos y proyectos confidenciales siguen prohibidos.\n\nCarpeta:\n${s.workspace}\n\nEscribí COMPARTIR para autorizar esta carpeta. Usá /contribuir revocar para revocar el permiso.`,
       action: { type: "contributor", allow: true },
     });
   const command = (name: string, rest = "") => {
+    name = canonicalCommand(name);
+    if (name === "status" || name === "home") {
+      navigate("home");
+      setFocus("composer");
+      return;
+    }
     setQuick(false);
     if (screens.includes(name as Screen)) {
       navigate(name as Screen);
@@ -268,13 +278,13 @@ export function App({
         break;
       case "goal":
         if (!rest.trim()) {
-          setComposer("/goal ");
+          setComposer("/objetivo ");
           setFocus("composer");
           return;
         }
         if (s.busy) {
           notify(
-            "An execution is active. Pause it before starting another goal.",
+            "Hay una ejecución activa. Pausala antes de iniciar otro objetivo.",
           );
           return;
         }
@@ -291,32 +301,32 @@ export function App({
       case "approve":
         if (requireGoal() && s.plan)
           setConfirmation({
-            title: "Approve implementation plan",
-            phrase: "APPROVE",
-            body: `Plan v${s.plan.version}\n${s.plan.summary}\n\nACCEPTANCE CRITERIA\n${s.plan.criteria.map((c) => `• ${c.description}`).join("\n")}\n\n${s.plan.risks.join("\n")}\n\nThis approves this exact plan, not future scope changes.`,
+            title: "Aprobar el plan de implementación",
+            phrase: "APROBAR",
+            body: `Plan v${s.plan.version}\n${s.plan.summary}\n\nCRITERIOS DE ACEPTACIÓN\n${s.plan.criteria.map((c) => `• ${c.description}`).join("\n")}\n\n${s.plan.risks.join("\n")}\n\nSe aprueba este plan exacto, no cambios futuros de alcance.`,
             action: {
               type: "approve",
               goalId: goal!.id,
               planHash: s.plan.hash,
             },
           });
-        else notify("No plan is ready for approval");
+        else notify("No hay un plan listo para aprobar");
         break;
       case "abort":
         if (requireGoal())
           setConfirmation({
-            title: "Abort this goal?",
-            phrase: "ABORT",
-            body: "The current execution will stop. Checkpoints and evidence are preserved. This does not delete your work.",
+            title: "¿Cancelar este objetivo?",
+            phrase: "CANCELAR",
+            body: "La ejecución actual se detendrá. Se conservarán los puntos de recuperación y la evidencia. Tu trabajo no se borrará.",
             action: { type: "abort", goalId: goal!.id, confirmation: "ABORT" },
           });
         break;
       case "apply":
         if (requireGoal())
           setConfirmation({
-            title: "Apply verified changes?",
-            phrase: "APPLY",
-            body: `Candidate ${goal!.revision}\n\nThis writes the verified delta into the original workspace. Perfect will refuse if the goal is not DONE, the candidate changed, or your original checkout diverged.\n\n${s.workspace}`,
+            title: "¿Aplicar los cambios verificados?",
+            phrase: "APLICAR",
+            body: `Versión candidata ${goal!.revision}\n\nSe aplicarán los cambios verificados a la carpeta original. Perfect lo impedirá si el objetivo no está completado, si la versión candidata cambió o si la carpeta original fue modificada.\n\n${s.workspace}`,
             action: {
               type: "apply",
               goalId: goal!.id,
@@ -328,14 +338,14 @@ export function App({
       case "retry":
         if (!rest) {
           navigate("tasks");
-          notify("Select a failed task, then press R to retry");
+          notify("Seleccioná una tarea fallida y presioná R para reintentar");
         } else if (requireGoal())
           mutate({ type: "retry", goalId: goal!.id, taskId: rest.trim() });
         break;
       case "workspace":
         if (!rest) {
-          notify("Use /workspace followed by a folder path");
-          setComposer("/workspace ");
+          notify("Usá /carpeta seguido de la ruta de una carpeta");
+          setComposer("/carpeta ");
           return;
         }
         mutate({ type: "workspace", path: rest.replace(/^"(.*)"$/, "$1") });
@@ -351,34 +361,37 @@ export function App({
           });
         } else {
           navigate("settings");
-          notify("Choose a provider to connect");
+          notify("Elegí el proveedor que querés conectar");
         }
         break;
       case "contributor":
-        if (rest === "revoke") mutate({ type: "contributor", allow: false });
+        if (["revoke", "revocar"].includes(rest))
+          mutate({ type: "contributor", allow: false });
         else requestContributor();
         break;
       case "public":
         setConfirmation({
-          title: "Public processing for the next goal",
-          phrase: "PUBLIC",
-          body: "Declare the next goal and its source suitable for public/Contributor processing. This does not enable Contributor consent by itself. Never use it for private client code, secrets or personal data.",
+          title: "Procesamiento público del próximo objetivo",
+          phrase: "PUBLICO",
+          body: "Declarás que el próximo objetivo y su código pueden procesarse en una ruta pública/Contributor. Esto no habilita por sí solo el consentimiento. No lo uses con código privado de clientes, secretos ni datos personales.",
           local: () => {
             setPublicGoal(true);
-            notify("Next goal: public. Workspace consent is still required.");
+            notify(
+              "Próximo objetivo: público. Aún se necesita consentimiento para esta carpeta.",
+            );
           },
         });
         break;
       case "private":
         setPublicGoal(false);
-        notify("Next goal: private");
+        notify("Próximo objetivo: privado");
         break;
       case "prepare":
         if (requireGoal())
           setConfirmation({
-            title: "Prepare dependencies with network access",
-            phrase: "DOWNLOAD",
-            body: "Download public npm packages from the candidate manifests into an isolated image. No npm lifecycle scripts or private registry credentials are allowed. Pause the goal first. The UI will show the result when preparation finishes.",
+            title: "Preparar dependencias con acceso a la red",
+            phrase: "DESCARGAR",
+            body: "Se descargarán paquetes públicos de npm en una imagen aislada a partir de los manifiestos de la versión candidata. No se permiten scripts de instalación ni credenciales de registros privados. Primero pausá el objetivo. El resultado aparecerá al terminar.",
             action: {
               type: "prepare",
               goalId: goal!.id,
@@ -388,14 +401,16 @@ export function App({
           });
         break;
       case "help":
-        showDocument("Perfect · keyboard and safety", help);
+        showDocument("Perfect · teclado y seguridad", help);
         break;
       case "exit":
         setClosing(true);
         onExit();
         break;
       default:
-        notify(`Unknown command /${name}. Type / to browse actions.`);
+        notify(
+          `Comando desconocido /${name}. Escribí / para ver las acciones.`,
+        );
     }
   };
   const submit = () => {
@@ -403,7 +418,7 @@ export function App({
       const item = palette[Math.min(paletteIndex, palette.length - 1)];
       if (item) {
         if (item.args) {
-          setComposer(`/${item.name} `);
+          setComposer(`/${commandName(item.name)} `);
           setQuick(false);
         } else {
           clearComposer();
@@ -415,7 +430,7 @@ export function App({
     const value = (input.current?.plainText ?? query).trim();
     if (!value) return;
     if (value.length > 100000) {
-      notify("Prompt exceeds the 100,000 character limit");
+      notify("El mensaje supera el límite de 100.000 caracteres");
       return;
     }
     if (history.current.at(-1) !== value)
@@ -734,12 +749,12 @@ export function App({
           >
             <box height={2} flexDirection="row" justifyContent="space-between">
               <text fg={muted}>
-                {s.goal ? "ACTIVITY" : "START WITH A GOAL"}
+                {s.goal ? "ACTIVIDAD" : "EMPEZÁ CON UN OBJETIVO"}
               </text>
               <text fg={muted}>
                 {focus === "feed"
-                  ? "↑↓ select · Enter inspect"
-                  : "Tab to inspect"}
+                  ? "↑↓ elegir · Enter ver"
+                  : "Tab para inspeccionar"}
               </text>
             </box>
             {!rows.length && screen === "home" ? (
@@ -750,16 +765,19 @@ export function App({
                 paddingBottom={2}
               >
                 <text fg={g.highlight}>
-                  Plan clearly. Build carefully. Verify the result.
+                  {
+                    "Planificá con claridad. Construí con cuidado. Verificá el resultado."
+                  }
                 </text>
                 <box height={1} />
                 <text fg={g.secondary}>
-                  Your code stays in its original folder until you apply a
-                  verified result.
+                  {
+                    "Tu código permanece intacto hasta que apliques un resultado verificado."
+                  }
                 </text>
                 <box height={1} />
                 <text fg={muted}>
-                  /workspace choose folder /doctor setup /login connect
+                  {"/carpeta elegir carpeta · /diagnostico revisar · /conectar"}
                 </text>
               </box>
             ) : (
@@ -796,7 +814,7 @@ export function App({
                   </text>
                   <text fg={g.secondary} height={1}>
                     {" "}
-                    {row.detail || "Enter to inspect"}
+                    {row.detail || "Enter para inspeccionar"}
                   </text>
                 </box>
               ))
@@ -845,8 +863,8 @@ export function App({
               }
               placeholder={
                 s.busy
-                  ? "Working…  / for actions"
-                  : "Ask Perfect what to build…  / for actions"
+                  ? "Trabajando…  / acciones"
+                  : "Pedile a Perfect qué construir…  / acciones"
               }
               placeholderColor={muted}
               textColor={g.text}
@@ -871,15 +889,15 @@ export function App({
             alignItems="center"
           >
             <text fg={muted}>
-              /agents /plan /verify /diff
-              {width >= 100 ? "    Ctrl+K actions" : ""}
+              /agentes /plan /verificar /cambios
+              {width >= 100 ? "    Ctrl+K acciones" : ""}
             </text>
             <text fg={publicGoal ? g.warning : muted}>
               {closing
-                ? "Pausing safely…"
+                ? "Pausando de forma segura…"
                 : !s.connected
-                  ? "engine offline"
-                  : `${publicGoal ? "PUBLIC" : "PRIVATE"} · ${s.version}`}
+                  ? "motor sin conexión"
+                  : `${publicGoal ? "PÚBLICO" : "PRIVADO"} · ${s.version}`}
             </text>
           </box>
         </box>
@@ -888,20 +906,20 @@ export function App({
         <Plate
           title={
             screen === "verify"
-              ? "Verification · current candidate"
-              : screen.charAt(0).toUpperCase() + screen.slice(1)
+              ? "Verificación · versión actual"
+              : screenLabel(screen)
           }
           width={width}
           height={height}
           motion={motion}
           footer={
             screen === "artifacts"
-              ? "↑↓ select · Enter inspect · O open image/video · C copy path"
+              ? "↑↓ elegir · Enter ver · O abrir · C copiar ruta"
               : screen === "plan"
-                ? "↑↓ tasks · Enter details · A approve exact plan"
+                ? "↑↓ tareas · Enter detalle · A aprobar el plan"
                 : screen === "doctor" && !s.preferences.ui.onboarded
-                  ? "C continue to provider setup · Esc return"
-                  : "↑↓ select · Enter details · Esc close"
+                  ? "C configurar proveedores · Esc volver"
+                  : "↑↓ elegir · Enter detalle · Esc cerrar"
           }
         >
           {screen === "plan" && s.plan && (
@@ -909,19 +927,21 @@ export function App({
               <text fg={g.text}>{s.plan.summary}</text>
               <text fg={s.plan.approved ? g.success : g.warning}>
                 Plan v{s.plan.version} ·{" "}
-                {s.plan.approved ? "approved" : "approval required"} ·{" "}
-                {s.plan.criteria.length} criteria
+                {s.plan.approved ? "aprobado" : "falta aprobación"} ·{" "}
+                {s.plan.criteria.length} criterios
               </text>
               <text fg={muted}>
-                All dependencies are listed; shared children are not duplicated.
+                {
+                  "Se muestran todas las dependencias, sin duplicar tareas compartidas."
+                }
               </text>
             </box>
           )}
           {!rows.length && (
             <text fg={g.secondary}>
               {screen === "doctor"
-                ? "Checking this computer…"
-                : "Nothing has been recorded here yet."}
+                ? "Revisando este equipo…"
+                : "Todavía no hay registros en esta sección."}
             </text>
           )}
           {modalRows.rows.map((row, i) => (
@@ -955,29 +975,34 @@ export function App({
       )}
       {screen === "login" && (
         <Plate
-          title="Connect your provider"
+          title="Conectá tu proveedor"
           width={width}
           height={height}
           motion={motion}
-          footer="Credentials stay outside Git and are never shown in telemetry."
+          footer="Las credenciales quedan fuera de Git y no aparecen en la telemetría."
         >
           <text fg={g.text}>
-            {auth?.provider ?? "Preparing authentication…"}
+            {auth?.provider ?? "Preparando la autenticación…"}
           </text>
           <box height={1} />
           <text fg={g.secondary}>
             {auth?.message ??
-              "Use /login xai, /login openai-codex or /login opencode."}
+              "Usá /conectar xai, /conectar openai-codex o /conectar opencode."}
           </text>
           {auth?.url && (
             <box flexDirection="column" paddingY={1}>
               <text fg={g.accent}>{text(auth.url, 2000)}</text>
               <text fg={g.muted}>
-                O open the authorization page in your browser
+                {"O abrir la autorización en tu navegador"}
               </text>
             </box>
           )}
-          {auth?.code && <text fg={g.highlight}>Device code: {auth.code}</text>}
+          {auth?.code && (
+            <text fg={g.highlight}>
+              {"Código del dispositivo:"}
+              {auth.code}
+            </text>
+          )}
           {auth?.options?.map((o, i) => (
             <text key={o.id} fg={g.secondary}>
               {i + 1}. {o.label}
@@ -1006,7 +1031,7 @@ export function App({
               <input
                 key={auth.promptId}
                 focused
-                placeholder="Paste the authorization value and press Enter"
+                placeholder="Pegá el valor de autorización y presioná Enter"
                 onSubmit={(value) => {
                   if (typeof value !== "string") return;
                   mutate({
@@ -1020,7 +1045,9 @@ export function App({
             ))}
           {auth?.done && (
             <text fg={g.muted}>
-              Esc returns to Perfect. /doctor checks the configured connection.
+              {
+                "Esc vuelve a Perfect. /diagnostico revisa la conexión configurada."
+              }
             </text>
           )}
           <box flexGrow={1} />
@@ -1028,15 +1055,15 @@ export function App({
       )}
       {paletteOpen && !confirmation && (
         <Plate
-          title={quick ? "Quick actions" : "Commands"}
+          title={quick ? "Acciones rápidas" : "Comandos"}
           width={width}
           height={height}
           motion={motion}
-          footer="Type to filter · ↑↓ select · Enter run · Esc close"
+          footer="Escribí para filtrar · ↑↓ elegir · Enter ejecutar · Esc cerrar"
         >
           {paletteRows.rows.map((item, i) => (
             <box
-              key={item.name}
+              key={commandName(item.name)}
               height={2}
               flexShrink={0}
               flexDirection="row"
@@ -1049,7 +1076,7 @@ export function App({
             >
               <text fg={g.highlight} width={17}>
                 {paletteRows.offset + i === paletteIndex ? "›" : " "} /
-                {item.name}
+                {commandName(item.name)}
               </text>
               <text fg={g.secondary} flexGrow={1}>
                 {item.description}
@@ -1065,7 +1092,7 @@ export function App({
           width={width}
           height={height}
           motion={motion}
-          footer="↑↓ / PgUp PgDn scroll · N/P next/previous diff file · Esc close"
+          footer="↑↓ / PgUp PgDn mover · N/P archivo siguiente/anterior · Esc cerrar"
         >
           <Document
             content={document.content}
@@ -1120,14 +1147,14 @@ function Confirm({
       width={width}
       height={height}
       motion={motion}
-      footer="Esc cancels · Confirmation is bound to the exact plan/candidate"
+      footer="Esc cancela · Solo se autoriza este plan o esta versión"
     >
       <Document
         content={c.body}
         width={width - 14}
         height={Math.max(3, height - 17)}
       />
-      <text fg={g.warning}>Type {c.phrase} to confirm</text>
+      <text fg={g.warning}>Escribí {c.phrase} para confirmar</text>
       <box
         height={3}
         border

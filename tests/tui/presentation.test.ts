@@ -1,11 +1,11 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, realpath } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
 import {
-  SqliteStore,
   onDatabaseChange,
+  SqliteStore,
 } from "../../src/adapters/sqlite/store.js";
 import { PresentationEngine } from "../../src/presentation/engine.js";
 import {
@@ -14,13 +14,13 @@ import {
   type UiMessage,
 } from "../../src/presentation/protocol.js";
 import { demoSnapshot } from "../../src/ui/tui/demo.js";
+import { motionEnabled } from "../../src/ui/tui/motion.js";
 import {
-  viewRows,
+  filterCommands,
   orderedTasks,
   viewportRows,
-  filterCommands,
+  viewRows,
 } from "../../src/ui/tui/views.js";
-import { motionEnabled } from "../../src/ui/tui/motion.js";
 
 test("SQLite wakeups occur after commit and never after rollback", async () => {
   const root = await mkdtemp(join(tmpdir(), "perfect-ui-store-")),
@@ -106,8 +106,8 @@ test("terminal control sequences are data, never executable output", () => {
 });
 test("routing does not turn absent service metadata into a confirmation", () => {
   const rows = viewRows(demoSnapshot(), "routing");
-  assert.match(rows[0]!.body, /unknown \(not exposed\)/);
-  assert.match(rows[0]!.body, /PROVENANCE  mock/);
+  assert.match(rows[0]!.body, /desconocido \(el proveedor no lo expone\)/);
+  assert.match(rows[0]!.body, /PROCEDENCIA mock/);
 });
 test("task ordering retains a join and its complete dependencies", () => {
   const tasks = demoSnapshot().tasks,

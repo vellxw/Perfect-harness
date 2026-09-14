@@ -1,30 +1,36 @@
-# Validation — core, TUI and Windows distribution
+# Validación del núcleo, la interfaz y Windows
 
-## Independent layers
+## Capas independientes
 
-1. Deterministic core tests: states, DAG, scheduling, ownership, budgets, retries, Judge, recovery and errors.
-2. SDK contracts: actual Pi sessions against controlled SSE transport, with tools, explicit routing, cancellation and reported metadata. Not personal-provider inference.
-3. Presentation tests: actual private IPC child lifecycle, persisted preferences, post-commit events, cross-workspace action rejection, and a real UI goal action entering the core and pausing without accounts. No network request is substituted for authentication.
-4. Native TUI tests: OpenTUI renderer, keyboard, compositor layout, palettes, all detail views, masked secrets, resize, typed abort, long plan approvals and four reviewed golden character frames.
-5. Docker E2E: real Git/code/API/SQLite/browser, failure/repair/Judge, plus Remotion frames and H.264 video. Only provider decisions/reviews are scripted.
-6. Windows package smoke: launcher metadata/icon, version without external Node, Terminal fragment, clean per-user installation, PATH and uninstall. Actual Terminal screenshots are a separate provenance-bearing output.
+1. Núcleo determinista: estados, grafo de tareas, planificación de ejecución, áreas asignadas, presupuestos, reintentos, evaluador, recuperación y errores.
+2. Contratos del SDK: sesiones reales de Pi contra un transporte SSE controlado, con herramientas, rutas explícitas, cancelación y metadatos. No son inferencias de cuentas personales.
+3. Presentación: ciclo real del proceso hijo mediante IPC privado, preferencias guardadas, eventos posteriores a transacciones, rechazo de acciones entre carpetas y un objetivo iniciado desde la interfaz que se pausa al no tener cuentas.
+4. Interfaz nativa: OpenTUI real, teclado, distribución, paletas, vistas, secretos enmascarados, cambio de tamaño, cancelación escrita, aprobación de planes extensos y cuatro referencias de cuadrículas de texto.
+5. Extremo a extremo en Docker: Git, código, API, SQLite, navegador, fallo, reparación y evaluador reales; además fotogramas Remotion y video H.264. Solo se simulan decisiones y revisiones de proveedores.
+6. Paquete Windows: metadatos, icono, versión sin Node externo, perfil de terminal, instalación limpia por usuario, PATH y desinstalación. Las capturas reales de Windows Terminal son una salida independiente con procedencia.
 
-`npm test` contains 118 cases after the final regression additions: 116 execute without Docker and two skip explicitly. The Linux Docker workflow runs those two rather than treating skips as success. The native matrix runs the same tests on Linux and Windows; do not double-count the same cases as distinct coverage. This is suite composition, not a claim that an unobserved Actions run passed.
+La versión 0.2.0 tenía 118 casos. La localización 0.2.1 añade 21 y conserva los controles funcionales: **139 casos; 137 ejecutables sin Docker y dos omitidos explícitamente cuando no existe ese entorno**. El flujo de Docker ejecuta esos dos casos, en lugar de tratarlos como aprobados por omisión. Linux y Windows repiten la misma suite; no se cuentan dos veces como cobertura distinta. Estas cifras describen la composición de la suite, no garantizan una ejecución que no se haya observado.
 
-## CI outputs and interpretation
+## Verificación del idioma
 
-The native workflow performs reproducible install, typecheck, lint, config-schema synchronization, tests, build and clean package installation. It publishes native UI captures and performance observations separately per OS. The Docker workflow publishes fullstack and Remotion evidence. The Windows package workflow publishes the installer, full-folder ZIP, checksum manifest and desktop capture provenance.
+Las pruebas cubren los comandos españoles y sus nombres anteriores, argumentos literales, rutas, tildes y eñes, conservación de claves JSON y enums, niveles de razonamiento reales, mensajes desconocidos, todas las vistas principales y confirmaciones españolas que no amplían permisos. La salida humana también elimina secuencias de control de terminal sin modificar el dato original.
 
-Verify the **exact HEAD commit** of the intended branch/PR. Old green checks cannot validate new code. A Windows Server 2025 runner is not a Windows 11 user-session test. DEMO/synthetic screenshots are not authenticated model runs. A capture status of BLOCKED is not a screenshot.
+Las cuatro referencias de texto para la versión española se guardan en `docs/screenshots/es`. Se actualizaron por la petición explícita de traducir, no para ocultar fallos. La CI compara las referencias antes de producir capturas nuevas; las pruebas no sobrescriben sus resultados esperados.
 
-## Performance measurement
+## Resultados e interpretación de CI
 
-`scripts/benchmark-tui.mjs` measures keyboard dispatch to an explicitly requested native-renderer frame. It is not end-to-end keyboard-to-screen/OS latency. The startup field includes a deliberate 100ms settling wait after module imports; it is **not cold-launch timing**. Idle CPU is sampled over one second. The stress case creates 20,000 display events, 500 tasks, 1,000 coalesced updates and repeated resizes. Heap delta during that allocation-heavy run is not proof of either a memory leak or leak-freedom.
+La matriz nativa realiza instalación reproducible, comprobación de tipos, estilo, sincronización del esquema, pruebas, compilación e instalación limpia del paquete. Publica capturas y mediciones por sistema operativo. Docker publica la evidencia integral y de Remotion. El flujo Windows publica instalador, ZIP completo, sumas de verificación y procedencia de las capturas.
 
-Committed observations in `docs/validation/native-benchmark.json` belong to their recorded source capture set; newer platform observations are in the exact CI run artifacts. The 16ms/50ms targets are goals, not fabricated certifications.
+Comprobá el **HEAD exacto** de la rama o PR. Un resultado verde anterior no valida código nuevo. Windows Server 2025 no equivale a una sesión personal de Windows 11. Una captura DEMO no prueba autenticación de modelos. Un resultado `BLOCKED` no equivale a una captura válida.
 
-## Security and known boundaries
+## Medición de rendimiento
 
-The UI cannot set DONE, rewrite bindings or auto-approve criteria. Terminal escape sequences are treated as data. Artifact opening validates scope/hash/type. Consent and privacy cannot silently downgrade. There is no shell-host fallback. Unsigned executable checksums show integrity, not publisher identity. No OAuth, API keys, signing certificate or private key is present in CI or release source.
+`scripts/benchmark-tui.mjs` mide desde el despacho del teclado hasta una imagen solicitada explícitamente al renderizador. No mide la latencia completa hasta el monitor. El campo de inicio incluye una espera deliberada de 100 ms después de importar módulos; **no es una medición de arranque en frío**. El consumo en reposo se muestrea durante un segundo.
 
-Real account smoke is local. Windows 11 visual/keyboard/Docker acceptance remains a manual prerequisite for broad Windows certification. Pixel-level refraction from the design image is not implemented by terminal cells; Acrylic belongs to Windows Terminal. Inline image protocols are optional and the V2 uses verified external media opening as its dependable fallback.
+La carga usa 20.000 eventos, 500 tareas, 1.000 actualizaciones agrupadas y cambios repetidos de tamaño. La variación de memoria en una ejecución con muchas asignaciones no demuestra por sí sola una fuga ni su ausencia. Los informes versionados pertenecen al conjunto de capturas que identifica su procedencia; los resultados posteriores están en los archivos del commit de CI correspondiente. Los objetivos de 16 ms y 50 ms no son certificaciones inventadas.
+
+## Seguridad y límites
+
+La interfaz no puede establecer `DONE`, sustituir identidades de modelos ni aprobar criterios automáticamente. Las secuencias de terminal son datos. Los archivos se validan por alcance, hash y tipo. La privacidad y los consentimientos no se reducen silenciosamente. No hay ejecución directa en el equipo como alternativa al contenedor. Los checksums de un ejecutable sin firma prueban integridad, no identidad del editor.
+
+Las pruebas con cuentas reales son locales. La aceptación de teclado, aspecto y Docker en Windows 11 sigue requiriendo comprobación local. La refracción por píxel del diseño no existe en las celdas: Acrylic pertenece a Windows Terminal. Las imágenes dentro de la terminal son opcionales; abrir externamente archivos verificados es la alternativa implementada. No se incluyen cuentas OAuth, claves API ni certificados privados en CI.

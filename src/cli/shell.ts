@@ -1,4 +1,6 @@
 import { createInterface } from "node:readline/promises";
+import { normalizeArgs } from "../i18n/es.js";
+import { humanMessage } from "../i18n/messages.js";
 import type { GlobalOptions } from "./context.js";
 
 /** Parse shell-like quoting only. Never invoke a system shell or expand substitutions. */
@@ -56,22 +58,22 @@ export async function shell(options: GlobalOptions): Promise<void> {
   ];
   let active: Promise<number> | undefined;
   console.log(
-    'Perfect Harness · /goal "..." · /status · /pause · /resume · /exit',
+    'Perfect Harness · /objetivo "..." · /estado · /pausar · /reanudar · /salir',
   );
   try {
     for await (const line of rl) {
       const value = line.trim();
       if (!value) continue;
-      if (value === "/exit" || value === "exit") {
-        controller.abort(new Error("Shell closed"));
+      if (["/exit", "exit", "/salir", "salir"].includes(value)) {
+        controller.abort(new Error("Consola cerrada"));
         break;
       }
       try {
-        const args = splitArguments(value.replace(/^\//, ""));
+        const args = normalizeArgs(splitArguments(value.replace(/^\//, "")));
         if (["goal", "resume", "smoke"].includes(args[0] ?? "")) {
           if (active) {
             console.log(
-              "An execution is already active. Use /status, /pause or /abort.",
+              "Ya hay una ejecución activa. Usá /estado, /pausar o /cancelar.",
             );
             continue;
           }
@@ -84,11 +86,13 @@ export async function shell(options: GlobalOptions): Promise<void> {
           });
         } else await main([...common, ...args]);
       } catch (error) {
-        console.error(error instanceof Error ? error.message : String(error));
+        console.error(
+          humanMessage(error instanceof Error ? error.message : String(error)),
+        );
       }
     }
   } finally {
-    controller.abort(new Error("Shell closed"));
+    controller.abort(new Error("Consola cerrada"));
     await active;
     rl.close();
   }
