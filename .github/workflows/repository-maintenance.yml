@@ -1,0 +1,35 @@
+name: Repository maintenance (temporary)
+on:
+  push:
+    branches: [feat/perfect-harness-v1]
+    paths:
+      - scripts/repository-maintenance.mjs
+      - .github/workflows/repository-maintenance.yml
+permissions:
+  contents: write
+jobs:
+  prepare:
+    if: github.repository == 'vellxw/Perfect-harness' && github.ref == 'refs/heads/feat/perfect-harness-v1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/perfect-harness-v1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install
+      - name: Generate lockfile, schemas and diagnostic improvements
+        run: node --import tsx scripts/repository-maintenance.mjs
+      - name: Format maintained source files
+        run: npx prettier --write --no-error-on-unmatched-pattern 'src/**/*.ts' 'tests/**/*.ts' 'scripts/*.mjs' '*.json' '*.md' '.github/workflows/*.yml'
+      - name: Commit only generated and reviewed repository changes
+        run: |
+          git config user.name 'Perfect Harness Maintenance'
+          git config user.email 'perfect-harness@users.noreply.github.com'
+          git add package-lock.json perfect.config.example.json perfect.config.schema.json src tests scripts package.json tsconfig.json tsconfig.build.json .github/workflows
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore: lock dependencies, generate configuration schemas and format source'
+            git push origin HEAD:feat/perfect-harness-v1
+          fi
