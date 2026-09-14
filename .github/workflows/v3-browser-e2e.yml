@@ -1,0 +1,38 @@
+name: V3 navegador interactivo y núcleo aislado
+on:
+  push:
+    branches: [feat/perfect-harness-v3-integraciones]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: v3-browser-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - run: npm run build
+      - name: Preparar imágenes de prueba explícitas
+        run: |
+          docker pull node:24-bookworm-slim
+          docker pull mcr.microsoft.com/playwright:v1.63.0-noble
+      - name: Ejecutar navegador MCP y regresiones de extremo a extremo
+        run: npm run test:e2e
+        env:
+          PERFECT_TEST_DOCKER: '1'
+          PERFECT_ARTIFACT_DIR: test-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: V3-Navegador-y-Verificacion
+          path: test-results
+          retention-days: 14
