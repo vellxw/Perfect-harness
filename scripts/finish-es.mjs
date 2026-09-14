@@ -1,13 +1,14 @@
 import fs from 'node:fs';
 function patch(path,before,after,required=true){const source=fs.readFileSync(path,'utf8');if(!source.includes(before)){if(required)throw Error(`Falta ancla de integración en ${path}: ${before.slice(0,160)}`);return;}fs.writeFileSync(path,source.replaceAll(before,after));}
 function prepend(path,text){fs.writeFileSync(path,text+'\n'+fs.readFileSync(path,'utf8'));}
-prepend('src/cli/main.ts','import { configureSpanishHelp } from "./spanish.js";');
+prepend('src/cli/main.ts','import { configureSpanishHelp, humanData } from "./spanish.js";');
 patch('src/cli/main.ts','  if (argv.length === 0) argv = ["--help"];','  configureSpanishHelp(program);\n  if (argv.length === 0) argv = ["--help"];');
+patch('src/cli/main.ts','${event.sequence} ${event.occurredAt} ${event.type} ${JSON.stringify(event.payload)}','${event.sequence} ${event.occurredAt} · Evento ${event.type}\\n${humanData(event.payload)}');
 prepend('src/cli/context.ts','import { humanData } from "./spanish.js";');
 patch('src/cli/context.ts','options.json || text === undefined\n          ? JSON.stringify(value, null, 2)\n          : text','options.json ? JSON.stringify(value, null, 2) : text ?? humanData(value)');
 prepend('src/cli/shell.ts','import { normalizeArgs } from "../i18n/es.js";\nimport { humanMessage } from "../i18n/messages.js";');
 patch('src/cli/shell.ts','value === "/exit" || value === "exit"','["/exit", "exit", "/salir", "salir"].includes(value)');
-patch('src/cli/shell.ts','const args = splitArguments(value.replace(/^\//, ""));','const args = normalizeArgs(splitArguments(value.replace(/^\//, "")));');
+patch('src/cli/shell.ts',String.raw`const args = splitArguments(value.replace(/^\//, ""));`,String.raw`const args = normalizeArgs(splitArguments(value.replace(/^\//, "")));`);
 patch('src/cli/shell.ts','console.error(error instanceof Error ? error.message : String(error));','console.error(humanMessage(error instanceof Error ? error.message : String(error)));');
 prepend('src/cli/login.ts','import { humanMessage } from "../i18n/messages.js";');
 patch('src/cli/login.ts','`${message}: `','`${humanMessage(message)}: `');
@@ -23,6 +24,14 @@ patch('src/ui/tui/app.tsx','${roles[item.role]?.name ?? item.role}','${roles[ite
 patch('src/ui/tui/approval.tsx','>Lines {','>Líneas {');patch('src/ui/tui/approval.tsx','>Type {c.phrase} to confirm<','>Escribí {c.phrase} para confirmar<');
 patch('src/ui/tui/demo.ts','"Build"','"Compilación"');
 patch('tests/tui/approval.test.tsx','Criterion ','Criterio ');patch('tests/tui/approval.test.tsx','preserve this acceptance condition.','conservar esta condición de aceptación.');patch('tests/tui/approval.test.tsx','"Exact plan"','"Plan exacto"');patch('tests/tui/approval.test.tsx','"APPROVE"','"APROBAR"');
+const extension='src/pi-extension/index.ts';
+prepend(extension,'import { normalizeArgs, commandName } from "../i18n/es.js";\nimport { humanMessage } from "../i18n/messages.js";');
+patch(extension,'const invoke = async (args: string[], ctx: ExtensionCommandContext) => {','const invoke = async (args: string[], ctx: ExtensionCommandContext) => {\n    args = normalizeArgs(args);');
+patch(extension,'pi.registerCommand("goal", {','for (const name of ["goal", "objetivo"]) pi.registerCommand(name, {');
+patch(extension,'Usage: /goal <description>','Uso: /objetivo <descripción>');
+patch(extension,'Perfect ${args[0]} started. Status remains available in the standalone CLI.','Perfect: ${commandName(args[0]!)} iniciado. El estado sigue disponible en la CLI independiente.');
+patch(extension,'Perfect exited ${code}','Perfect terminó con código ${code}');
+patch(extension,'error instanceof Error ? error.message : String(error)','humanMessage(error instanceof Error ? error.message : String(error))');
 // Traducción del contenido demostrativo, no del protocolo HTTP ni de los selectores de aceptación.
 const frontend='src/examples/reservation-frontend.ts';
 for(const [a,b] of [
@@ -31,11 +40,9 @@ for(const [a,b] of [
 patch('src/examples/reservation-tests.ts','Reservation confirmed','Reserva confirmada');patch('src/examples/reservations.ts','Reservation confirmed','Reserva confirmada');
 const backend='src/examples/reservation-backend.ts';
 for(const [a,b] of [['JSON required','Se requiere JSON'],['Body too large','Contenido demasiado grande'],['Invalid JSON','JSON inválido'],['Invalid name or slot','Nombre u horario inválido'],['Slot already reserved','El horario ya está reservado'],['Not found','No encontrado'],['Internal error','Error interno'],['Reservation server ready','Servidor de reservas listo']])patch(backend,a,b);
-// Datos de demostración en español; los comentarios históricos y la evidencia ajena no se reescriben.
 const example='src/examples/reservations.ts';
 for(const [a,b] of [
  ['Build and independently verify a persistent responsive reservation application.','Construir y verificar independientemente una aplicación de reservas adaptable y persistente.'],['Native Node HTTP server and SQLite unique slot constraint','Servidor HTTP nativo de Node y restricción de horario único en SQLite'],['Static responsive frontend using the JSON API','Interfaz estática adaptable que consume la API JSON'],['Immutable API tests plus browser interaction and visual inspection','Pruebas de API inmutables, interacción en navegador e inspección visual'],['Concurrent requests must never double-book a slot','Las solicitudes concurrentes nunca deben duplicar una reserva'],['API validates input, rejects concurrent double booking and preserves reservations after restart','La API valida datos, rechaza reservas simultáneas duplicadas y conserva las reservas después de reiniciar'],['The booking form works in desktop and mobile viewports without horizontal overflow','El formulario de reservas funciona en escritorio y móvil sin desborde horizontal'],['Validation, concurrency and persistence tests','Pruebas de validación, concurrencia y persistencia'],['Frontend JavaScript syntax build','Compilación de sintaxis JavaScript de la interfaz'],['Responsive booking interaction','Interacción de reservas adaptable'],['Document API contract','Documentar el contrato de la API'],['Create package metadata and document the shared reservation API contract.','Crear los metadatos del paquete y documentar el contrato compartido de la API.'],['Implement reservation API','Implementar la API de reservas'],['Implement the native HTTP server, strict validation, SQLite persistence and a unique constraint for concurrency safety.','Implementar el servidor HTTP nativo, validación estricta, persistencia SQLite y una restricción única para la concurrencia.'],['Implement responsive booking UI','Implementar la interfaz de reservas adaptable'],['Implement an accessible responsive form in public/ consuming the shared API contract, with clear loading, error and confirmation states.','Implementar un formulario accesible y adaptable en public/ que use la API compartida, con estados claros de carga, error y confirmación.'],['Scripted mock review exercises routing only; no real model judgment was performed.','La revisión simulada solo prueba la asignación de rutas; ningún modelo real emitió un juicio.'],['Scripted smoke (not a real inference)','Prueba simulada (no es una inferencia real)'],
 ])patch(example,a,b);
-// Encabezados de captura: la procedencia técnica y el modo DEMO continúan siendo explícitos.
 patch('scripts/capture-tui.mjs','native OpenTUI renderer capture','captura del renderizador nativo OpenTUI');patch('scripts/capture-tui.mjs','synthetic display fixture','datos de demostración');
-console.log('Ayuda, comandos españoles, salidas humanas, confirmaciones y ejemplos integrados.');
+console.log('Ayuda, comandos españoles, salidas humanas, confirmaciones, extensión y ejemplos integrados.');
