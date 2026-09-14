@@ -87,9 +87,7 @@ export function validateDependencyLock(value: unknown): void {
   };
   visit(value, 0);
 }
-export async function dependencyDescriptor(
-  workspace: string,
-): Promise<{
+export async function dependencyDescriptor(workspace: string): Promise<{
   needed: boolean;
   packageText: string;
   lockText?: string;
@@ -155,11 +153,12 @@ const installer = String.raw`
 import {mkdir,readFile,writeFile,copyFile,rm} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 await mkdir('/opt/deps',{recursive:true});
+await writeFile('/tmp/perfect-user.npmrc','');await writeFile('/tmp/perfect-global.npmrc','');
 const manifest=JSON.parse(await readFile('/manifest.json','utf8'));
 delete manifest.scripts;delete manifest.publishConfig;delete manifest.config;
 await writeFile('/opt/deps/package.json',JSON.stringify(manifest));
 let locked=false;try{await copyFile('/lock.json','/opt/deps/package-lock.json');locked=true;}catch(error){if(error.code!=='ENOENT')throw error;}
-const child=spawn('npm',[locked?'ci':'install','--ignore-scripts','--no-audit','--no-fund','--registry=https://registry.npmjs.org'],{cwd:'/opt/deps',stdio:'inherit',env:{PATH:process.env.PATH,HOME:'/tmp',CI:'1',NPM_CONFIG_IGNORE_SCRIPTS:'true',NPM_CONFIG_CACHE:'/tmp/npm-cache',NPM_CONFIG_USERCONFIG:'/dev/null',NPM_CONFIG_GLOBALCONFIG:'/dev/null'}});
+const child=spawn('npm',[locked?'ci':'install','--ignore-scripts','--no-audit','--no-fund','--registry=https://registry.npmjs.org'],{cwd:'/opt/deps',stdio:'inherit',env:{PATH:process.env.PATH,HOME:'/tmp',CI:'1',NPM_CONFIG_IGNORE_SCRIPTS:'true',NPM_CONFIG_CACHE:'/tmp/npm-cache',NPM_CONFIG_USERCONFIG:'/tmp/perfect-user.npmrc',NPM_CONFIG_GLOBALCONFIG:'/tmp/perfect-global.npmrc'}});
 const code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',value=>resolve(value??1));});
 await rm('/tmp/npm-cache',{recursive:true,force:true});process.exitCode=code;
 `;

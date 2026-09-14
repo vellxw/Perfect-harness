@@ -317,6 +317,7 @@ export class AgentExecutor {
           images: input.images,
           beforeRequest: async (requestId, tokens, cost) => {
             if (
+              route.provenance !== "mock" &&
               definition.model.includes("contributor") &&
               !(await this.consentGranted())
             )

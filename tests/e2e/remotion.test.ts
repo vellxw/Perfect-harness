@@ -7,6 +7,7 @@ import {
   readFile,
   rm,
   copyFile,
+  readdir,
 } from "node:fs/promises";
 import { join, resolve, basename } from "node:path";
 import { tmpdir } from "node:os";
@@ -117,6 +118,14 @@ registerRoot(()=> <Composition id="Motion" component={Scene} width={320} height=
         if (process.env.PERFECT_ARTIFACT_DIR) {
           const out = resolve(process.env.PERFECT_ARTIFACT_DIR, "remotion");
           await mkdir(out, { recursive: true });
+          for (const dir of await readdir(join(home, "preparations")).catch(
+            () => [],
+          )) {
+            const log = join(home, "preparations", dir, "install.log");
+            await copyFile(log, join(out, dir + "-install.log")).catch(
+              () => {},
+            );
+          }
           for (const e of store.list("evidence", goalId))
             await copyFile(
               e.artifactRef,
