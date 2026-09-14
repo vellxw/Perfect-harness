@@ -1,3 +1,4 @@
+import type { IntegrationObservation } from "./integrations.js";
 import type {
   AgentDefinition,
   AgentRun,
@@ -39,6 +40,9 @@ export interface AgentServices {
   research?(url: string): Promise<string>;
 }
 export interface AgentRequest {
+  sourceWorkspace?: string;
+  goalRoot?: string;
+  observeIntegration?: (observation: IntegrationObservation) => Promise<void>;
   run: AgentRun;
   context: ContextPackage;
   cwd: string;

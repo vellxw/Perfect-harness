@@ -1,3 +1,4 @@
+import { recordIntegrationEvidence } from "./integration-evidence.js";
 import { join } from "node:path";
 import { readFile, lstat } from "node:fs/promises";
 import { safePath, sensitive } from "../tools/paths.js";
@@ -308,6 +309,10 @@ export class AgentExecutor {
           run,
           context,
           cwd: input.workspace,
+          sourceWorkspace: input.goal.source,
+          goalRoot: input.goal.root,
+          observeIntegration: (observation) =>
+            recordIntegrationEvidence(this.store, input.goal, run, observation),
           controlDir: join(input.goal.root, "runs", run.id),
           signal,
           services,

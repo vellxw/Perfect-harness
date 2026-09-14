@@ -54,7 +54,7 @@
     "@modelcontextprotocol/server": "2.0.0",
     "@opentui/core": "0.5.9",
     "@opentui/react": "0.5.9",
-    "ajv": "8.17.1",
+    "ajv": "8.18.0",
     "commander": "14.0.0",
     "playwright": "1.63.0",
     "react": "19.2.0",
