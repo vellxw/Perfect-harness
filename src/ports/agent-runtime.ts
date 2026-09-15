@@ -11,6 +11,7 @@ import type {
 export interface AgentServices {
   skillGuard?(): void;
   skills?: {
+    run?(id: string, resource: string, args: string[]): Promise<unknown>;
     list(): { id: string; description: string; loaded: boolean }[];
     load(id: string): string;
     read(id: string, resource: string): string;

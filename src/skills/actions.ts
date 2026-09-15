@@ -12,6 +12,7 @@ import { GithubSkillSchema } from "./remote.js";
 
 const revision = { expectedHash: Sha256 };
 export const StudioActionSchema = z.discriminatedUnion("command", [
+  z.object({ command: z.literal("capabilities") }).strict(),
   z.object({ command: z.literal("status") }).strict(),
   z
     .object({

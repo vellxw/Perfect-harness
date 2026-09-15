@@ -1,3 +1,4 @@
+import { registerUnityCommands } from "./unity.js";
 import { registerSkills } from "./skills.js";
 import { Command, CommanderError } from "commander";
 import { readFile, writeFile } from "node:fs/promises";
@@ -109,6 +110,7 @@ export async function main(
       exitCode = goalExit(finished);
     });
   registerSkills(program, context);
+  registerUnityCommands(program, context);
   registerIntegrations(program, globals);
   registerPrepare(program, context);
   program

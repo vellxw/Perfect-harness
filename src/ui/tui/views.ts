@@ -29,6 +29,14 @@ export interface PaletteItem {
 }
 export const commands: PaletteItem[] = [
   {
+    name: "unity",
+    description: "Conectar el Editor al MCP local con proyecto autorizado",
+  },
+  {
+    name: "capacidades",
+    description: "Comprobar Blender, PostgreSQL y requisitos de editores",
+  },
+  {
     name: "skills",
     description: "Activar, desactivar y asignar habilidades por equipo",
   },

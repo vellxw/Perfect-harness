@@ -1,3 +1,4 @@
+import { SkillScriptSchema } from "../../skills/scripts.js";
 import { z } from "zod";
 import { Type } from "typebox";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
@@ -214,5 +215,21 @@ export function buildTools(
       ),
     );
   }
+  if (request.services.skills?.run)
+    tools.push(
+      define(
+        "skill_run",
+        "Ejecutar un script de una habilidad cargada dentro del sandbox. No se importa código generado ni se amplían permisos.",
+        Type.Object({
+          id: Type.String(),
+          resource: Type.String(),
+          args: Type.Optional(Type.Array(Type.String())),
+        }),
+        async (raw) => {
+          const a = SkillScriptSchema.parse(raw);
+          return request.services.skills!.run!(a.id, a.resource, a.args);
+        },
+      ),
+    );
   return tools;
 }

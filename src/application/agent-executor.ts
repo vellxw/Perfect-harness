@@ -1,3 +1,5 @@
+import { executeSkillScript } from "../skills/scripts.js";
+import { assertNativeProfile } from "../modes/capabilities.js";
 import { SkillsRegistry } from "../skills/registry.js";
 import { SkillSession } from "../skills/session.js";
 import { resolveProfile, profileDefinition } from "../agents/profiles.js";
@@ -74,6 +76,7 @@ export class AgentExecutor {
     task: Task | undefined,
     signal: AbortSignal,
   ): Promise<void> {
+    assertNativeProfile(this.profile(goal, role, task).profile.id);
     await this.runtime.resolve(
       this.definition(goal, role, task),
       effectivePrivacy(goal.privacyClass, task?.privacyClass),
@@ -309,6 +312,22 @@ export class AgentExecutor {
           list: () => skillSession.list(),
           load: (skillId) => skillSession.load(skillId),
           read: (skillId, resource) => skillSession.read(skillId, resource),
+          ...(!definition.readOnly && services.command
+            ? {
+                run: (skillId: string, resource: string, args: string[]) =>
+                  executeSkillScript({
+                    goal: input.goal,
+                    workspace: input.workspace,
+                    release: skillSession.authorizedRelease(skillId),
+                    resource,
+                    args,
+                    config: this.config,
+                    runner: this.runner,
+                    signal,
+                    guard: () => skillSession.guard(),
+                  }),
+              }
+            : {}),
         };
       const procedures =
         input.role === "planner"

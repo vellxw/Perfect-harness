@@ -266,6 +266,16 @@ export class SkillSession {
       "skill.loaded",
     );
   }
+  authorizedRelease(skillId: string): SkillRelease {
+    this.guard();
+    const release = this.loaded.get(skillId);
+    if (!release || !this.allowed(release))
+      throw new Blocked(
+        "SKILL_NOT_LOADED",
+        "Cargá primero la habilidad autorizada",
+      );
+    return release;
+  }
   summary() {
     return {
       ids: [...this.loaded.keys()],

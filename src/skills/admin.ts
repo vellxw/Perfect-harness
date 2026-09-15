@@ -1,3 +1,4 @@
+import { studioCapabilities } from "../modes/capabilities.js";
 import { mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { PerfectConfig } from "../config/schema.js";
@@ -199,6 +200,11 @@ export class StudioAdmin {
       };
     };
     switch (action.command) {
+      case "capabilities":
+        return {
+          message: "Capacidades locales de los estudios",
+          content: JSON.stringify(await studioCapabilities(), null, 2),
+        };
       case "status":
         return {
           message: "Habilidades y equipos",

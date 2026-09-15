@@ -542,6 +542,14 @@ export function studioCommand(
     modos: "modes",
     modes: "modes",
   };
+  if (name === "capacidades")
+    return { action: action({ command: "capabilities" }) };
+  if (name === "unity")
+    return {
+      notice:
+        "Conexión segura: perfect unity inspeccionar <descriptor>; luego conectar con fingerprint y perfiles. El token se ingresa localmente en /integraciones. Consultá docs/unity.md.",
+      screen: "integrations",
+    };
   if (names[name])
     return { screen: names[name], action: action({ command: "status" }) };
   if (["juegos", "motion"].includes(name)) {

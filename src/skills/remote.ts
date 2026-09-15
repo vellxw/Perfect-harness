@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { Blocked } from "../domain/util.js";
 import { releaseFromFiles, safeResource, sha, parseSkill } from "./importer.js";
@@ -177,6 +178,15 @@ export async function importGithubSkill(
         "El importador gratuito no admite contenido Pro",
       );
     const bytes = await fetchBytes(rawFile(entry.path), signal);
+    const actual = createHash("sha1")
+      .update(Buffer.from(`blob ${bytes.length}\0`))
+      .update(bytes)
+      .digest("hex");
+    if (actual !== entry.sha)
+      throw new Blocked(
+        "SKILL_REMOTE_INTEGRITY",
+        "El contenido no coincide con el árbol fijado",
+      );
     if ((total += bytes.length) > 5_000_000)
       throw new Blocked("SKILL_SIZE", "Paquete demasiado grande");
     files[name] = bytes;
@@ -185,6 +195,20 @@ export async function importGithubSkill(
   for (const path of input.licenseFiles) {
     safeResource(path);
     const bytes = await fetchBytes(rawFile(path), signal, 300000);
+    const entry = tree.tree.find((e) => e.path === path);
+    if (
+      !entry ||
+      entry.type !== "blob" ||
+      !["100644", "100755"].includes(entry.mode) ||
+      createHash("sha1")
+        .update(Buffer.from(`blob ${bytes.length}\0`))
+        .update(bytes)
+        .digest("hex") !== entry.sha
+    )
+      throw new Blocked(
+        "SKILL_LICENSE_INTEGRITY",
+        "La licencia no coincide con la versión fijada",
+      );
     licenseTexts.push(bytes.toString("utf8"));
     files[`licenses/${sha(path).slice(0, 12)}.txt`] = bytes;
   }

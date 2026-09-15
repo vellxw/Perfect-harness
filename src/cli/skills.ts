@@ -44,15 +44,13 @@ export function registerSkills(
         };
       }),
     );
-  root
-    .command("modo <modo>")
-    .action((mode: string) =>
-      run(async (ctx, a) => ({
-        command: "skill-mode",
-        mode,
-        expectedHash: a.registry.get(ctx.workspace, await ctx.config()).hash,
-      })),
-    );
+  root.command("modo <modo>").action((mode: string) =>
+    run(async (ctx, a) => ({
+      command: "skill-mode",
+      mode,
+      expectedHash: a.registry.get(ctx.workspace, await ctx.config()).hash,
+    })),
+  );
   root
     .command("paquete <id> <estado>")
     .option("--yes", "Confirmar activación")
@@ -143,6 +141,9 @@ export function registerSkills(
           : { command: "import-github", input, confirmation: "IMPORTAR" };
       }),
     );
+  root
+    .command("capacidades")
+    .action(() => run(async () => ({ command: "capabilities" })));
   root.command("lock").action(() => run(async () => ({ command: "lock" })));
   root
     .command("adoptar <goalId>")
