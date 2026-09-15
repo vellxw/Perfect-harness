@@ -4,3 +4,7 @@ const old="const change=(p,a,b)=>{const s=fs.readFileSync(p,'utf8');if(s.split(a
 if(!source.includes(old))throw Error('Source patch helper changed');
 const next="const change=(p,a,b)=>{if(a===b)return;const s=fs.readFileSync(p,'utf8'),count=s.split(a).length-1;const scoped=p==='src/ui/tui/studio-view.ts'&&a==='  if (screen === \\\"skills\\\") {';if(count!==1&&!(scoped&&count===2))throw Error('Expected source anchor: '+p+' '+a.slice(0,120)+' count='+count);fs.writeFileSync(p,s.replace(a,b));};";
 source=source.replace(old,next);fs.writeFileSync(path,source);await import('./v4-finish-source.mjs');
+const fix=(p,a,b)=>{const s=fs.readFileSync(p,'utf8');if(s.split(a).length!==2)throw Error('Fix anchor '+p+' '+a);fs.writeFileSync(p,s.replace(a,b));};
+fix('src/skills/experiments.ts','attempts: trial.attempts + 1,','attempts: current.attempts + 1,');
+fix('src/ui/tui/skill-wizard.ts','{type:"create-skill-brief",brief}','{type:"create-skill-brief",brief,confirmation:"CREAR"}');
+fix('src/presentation/protocol.ts','confirmation:z.literal("CREAR").default("CREAR")','confirmation:z.literal("CREAR")');
