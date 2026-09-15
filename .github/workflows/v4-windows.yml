@@ -40,8 +40,14 @@ jobs:
           try {
             npm ci
             if($LASTEXITCODE -ne 0){throw 'Previous install failed'}
-            try { ./scripts/package-windows.ps1 -Installer *> $log }
-            catch { Get-Content $log -Tail 60; throw }
+            try {
+              # Keep the historical application source unchanged. Compile its historical installer with the pinned modern compiler.
+              ./scripts/package-windows.ps1 *> $log
+              $payload=(Resolve-Path 'release/Perfect-Harness-Windows-x64').Path
+              $output=(Resolve-Path release).Path
+              & $env:PERFECT_ISCC /Qp "/DPayload=$payload" "/DOutput=$output" build/windows/perfect.iss *>> $log
+              if($LASTEXITCODE -ne 0){throw 'Previous installer compilation failed'}
+            } catch { Get-Content $log -Tail 60; throw }
             Copy-Item release/Perfect-Harness-Setup-x64.exe "$env:RUNNER_TEMP/Perfect-Previous-0.3.0.exe"
             Get-Content $log -Tail 5
           } finally {Pop-Location}

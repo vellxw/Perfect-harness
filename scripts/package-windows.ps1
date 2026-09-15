@@ -68,9 +68,10 @@ if (Test-Path $zip) { Remove-Item $zip }
 Compress-Archive -Path $out -DestinationPath $zip -CompressionLevel Optimal
 $distributed = @($zip)
 if ($Installer) {
-  $iscc = Get-ChildItem "${env:ProgramFiles(x86)}\Inno Setup*\ISCC.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-  if (-not $iscc) { throw 'Install the official Inno Setup compiler explicitly first.' }
-  & $iscc.FullName "/DPayload=$out" "/DOutput=$root\release" "/DAppVersion=$version" (Join-Path $root 'build\windows\perfect.iss')
+  $compiler=$env:PERFECT_ISCC
+  if(-not $compiler){$compiler=Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 7\ISCC.exe'}
+  if(-not(Test-Path $compiler)){throw 'Prepare Inno Setup 7 explicitly, or set PERFECT_ISCC to its verified compiler.'}
+  & $compiler /Qp "/DPayload=$out" "/DOutput=$root\release" "/DAppVersion=$version" (Join-Path $root 'build\windows\perfect.iss')
   if ($LASTEXITCODE -ne 0) { throw 'Installer build failed' }
   $distributed += Join-Path $root 'release\Perfect-Harness-Setup-x64.exe'
 }

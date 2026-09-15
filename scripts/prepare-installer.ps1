@@ -12,8 +12,10 @@ $p=Start-Process $download -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/N
 if($p.ExitCode -ne 0){throw "Inno Setup preparation failed: $($p.ExitCode)"}
 $compiler=Join-Path $directory 'ISCC.exe'
 if(-not(Test-Path $compiler)){throw 'Pinned compiler is absent'}
-$actual=[Diagnostics.FileVersionInfo]::GetVersionInfo($compiler)
-if($actual.FileMajorPart -ne 7 -or $actual.FileMinorPart -ne 0 -or $actual.FileBuildPart -ne 2){throw 'Wrong Inno Setup compiler version'}
-$selected=Get-ChildItem "${env:ProgramFiles(x86)}/Inno Setup*/ISCC.exe" | Select-Object -First 1
-if($selected.FullName -ne $compiler){throw 'A different compiler would shadow pinned Inno Setup 7'}
-Write-Host "Pinned compiler verified: $($actual.FileVersion); supports long Node dependency paths"
+# ISCC executable metadata is not the compiler engine version. Validate the engine's own banner.
+$banner=(& $compiler '/?' 2>&1 | Out-String)
+Write-Host $banner
+if($banner -notmatch 'Compiler engine version:\s*Inno Setup 7\.0\.2\b'){throw 'Wrong Inno Setup compiler engine version'}
+$env:PERFECT_ISCC=$compiler
+if($env:GITHUB_ENV){"PERFECT_ISCC=$compiler" | Out-File $env:GITHUB_ENV -Append -Encoding utf8}
+Write-Host 'Pinned Inno Setup 7.0.2 compiler verified; explicit path prevents shadowing by preinstalled 6.x'
