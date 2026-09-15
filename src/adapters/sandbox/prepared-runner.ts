@@ -1,3 +1,4 @@
+import { BlenderRunner } from "../blender/runner.js";
 import { PostgresRunner } from "./postgres.js";
 import { join } from "node:path";
 import type { PerfectConfig } from "../../config/schema.js";
@@ -39,6 +40,25 @@ export class PreparedDockerRunner implements ExecutionRunner {
         this.store,
         join(this.directory, "postgres"),
       ).run(request, command),
+    );
+  }
+  blender(
+    request: ExecutionRequest,
+    spec: {
+      script: string;
+      sourceFile: string;
+      width: number;
+      height: number;
+      timeoutMs: number;
+      maxBytes: number;
+    },
+  ): Promise<ExecutionOutput> {
+    return this.admission.use(request.signal, () =>
+      new BlenderRunner(
+        this.config,
+        this.store,
+        join(this.directory, "blender"),
+      ).run(request, spec),
     );
   }
   available(): Promise<boolean> {

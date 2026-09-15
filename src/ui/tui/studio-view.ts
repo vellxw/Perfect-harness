@@ -1,3 +1,4 @@
+import type { SkillWizard } from "./skill-wizard.js";
 import type {
   UiSnapshot,
   Screen,
@@ -9,6 +10,7 @@ import { splitArguments } from "../../cli/shell.js";
 import { text } from "../../presentation/protocol.js";
 
 export interface StudioIntent {
+  wizard?: SkillWizard;
   screen?: Screen;
   subject?: string;
   title?: string;
@@ -21,6 +23,8 @@ export interface StudioIntent {
 }
 const action = (a: StudioAction): UiAction => ({ type: "studio", action: a });
 export const studioScreens = [
+  "skill-trials",
+  "trial-detail",
   "skills",
   "teams",
   "profiles",
@@ -65,7 +69,63 @@ export function studioRows(s: UiSnapshot, screen: string, subject = ""): Row[] {
     ];
   const cfg = p.config,
     result: Row[] = [];
-  if (screen === "skills") {
+  if (screen === "skill-trials") {
+    for (const trial of p.trials)
+      result.push(
+        row(
+          "trial:" + trial.trialId,
+          trial.profileId + " · " + trial.status,
+          trial.pairs.map((p) => p.verdict).join(", "),
+          JSON.stringify(trial, null, 2),
+        ),
+      );
+    if (!p.trials.length)
+      result.push(
+        row(
+          "help",
+          "Sin evaluaciones",
+          "Seleccioná una habilidad y proponé una comparación A/B",
+          HELP,
+        ),
+      );
+  } else if (screen === "trial-detail") {
+    const trial = p.trials.find((t) => t.trialId === subject);
+    if (!trial) return [];
+    result.push(
+      row(
+        "trial-report",
+        "Ver informe y evidencia",
+        trial.status,
+        JSON.stringify(trial, null, 2),
+      ),
+    );
+    if (trial.status === "proposed" || trial.status === "interrupted")
+      result.push(
+        row(
+          "trial-authorize",
+          "Autorizar la evaluación",
+          "Solo versiones inspeccionadas; no aprueba producción",
+          JSON.stringify(trial, null, 2),
+        ),
+      );
+    if (trial.status === "authorized")
+      result.push(
+        row(
+          "trial-run",
+          "Ejecutar evaluación real",
+          `${trial.budget.maxRequests} requests · ${trial.budget.maxTokens} tokens como límite`,
+          JSON.stringify(trial, null, 2),
+        ),
+      );
+    if (trial.status === "running")
+      result.push(
+        row(
+          "trial-cancel",
+          "Cancelar evaluación",
+          "Conserva evidencia y presupuesto ya utilizado",
+        ),
+      );
+  } else if (screen === "skills") {
     result.push(
       row(
         "master",
@@ -311,6 +371,57 @@ export function studioRows(s: UiSnapshot, screen: string, subject = ""): Row[] {
       ),
     );
   }
+  if (screen === "skills") {
+    result.push(
+      row(
+        "collect-draft",
+        "Recopilar borrador terminado",
+        "Desde una goal del creador verificada por Judge",
+      ),
+    );
+    result.push(
+      row(
+        "trials",
+        "Evaluaciones A/B",
+        "Respuestas y código con ejecución independiente",
+      ),
+    );
+  }
+  if (screen === "skill-detail") {
+    const skill = p.skills.find((v) => v.releaseId === subject);
+    if (skill) {
+      const selected = p.control.manual.some(
+        (x) => x.releaseId === skill.releaseId && x.hash === skill.hash,
+      );
+      result.splice(
+        2,
+        0,
+        row(
+          "manual-select",
+          selected ? "Quitar selección manual" : "Seleccionar manualmente",
+          selected
+            ? "Esta versión está seleccionada"
+            : "Solo para sus equipos autorizados",
+          JSON.stringify(skill.pins, null, 2),
+          selected,
+        ),
+      );
+      result.push(
+        row(
+          "evaluate-response",
+          "Proponer A/B de respuestas",
+          "Autoriza un borrador sin activarlo en producción",
+        ),
+      );
+      result.push(
+        row(
+          "evaluate-code",
+          "Proponer A/B de código",
+          "Comprobaciones reales en sandbox, sin acceso al grader",
+        ),
+      );
+    }
+  }
   return result;
 }
 function confirmed(
@@ -329,6 +440,92 @@ export function studioRowIntent(
 ): StudioIntent | undefined {
   const p = s.studio;
   if (!p) return { action: action({ command: "status" }) };
+  if (screen === "skills" && id === "creator") return { wizard: "create" };
+  if (screen === "skills" && id === "collect-draft")
+    return { wizard: "collect" };
+  if (screen === "skills" && id === "trials") return { screen: "skill-trials" };
+  if (screen === "skill-trials" && id.startsWith("trial:"))
+    return { screen: "trial-detail", subject: id.slice(6) };
+  if (screen === "trial-detail") {
+    const trial = p.trials.find((t) => t.trialId === subject);
+    if (!trial) return;
+    if (id === "trial-report")
+      return {
+        action: action({ command: "trial-report", trialId: trial.trialId }),
+      };
+    if (id === "trial-cancel")
+      return {
+        action: action({ command: "trial-cancel", trialId: trial.trialId }),
+      };
+    if (id === "trial-run")
+      return confirmed(
+        {
+          command: "trial-run",
+          trialId: trial.trialId,
+          confirmation: "EJECUTAR",
+        },
+        "Ejecutar A/B",
+        JSON.stringify(trial, null, 2) +
+          "\nConsume cuota de la cuenta elegida. No cambia modelo ni aprueba automáticamente.",
+        "EJECUTAR",
+      );
+    if (id === "trial-authorize") {
+      const versions = [trial.releaseId, trial.baselineReleaseId].filter(
+        Boolean,
+      );
+      const inspected = versions.map(
+        (rid) => p.skills.find((s) => s.releaseId === rid)?.inspectionId,
+      );
+      if (inspected.some((i) => !i))
+        return {
+          notice: "Inspeccioná primero cada versión desde /habilidades.",
+        };
+      return confirmed(
+        {
+          command: "trial-authorize",
+          trialId: trial.trialId,
+          specHash: trial.specHash,
+          inspectionIds: inspected as string[],
+          confirmation: "EVALUAR",
+        },
+        "Autorizar contrato A/B",
+        JSON.stringify(trial, null, 2) +
+          "\nNo activa la habilidad en producción.",
+        "EVALUAR",
+      );
+    }
+  }
+  if (screen === "skill-detail") {
+    const skill = p.skills.find((v) => v.releaseId === subject);
+    if (!skill) return;
+    if (id === "manual-select") {
+      if (!skill.reviewed || !skill.enabled)
+        return {
+          notice:
+            "Revisá y habilitá esta versión antes de seleccionarla. Para evaluar el borrador usá A/B.",
+        };
+      const selected = !p.control.manual.some(
+        (x) => x.releaseId === skill.releaseId && x.hash === skill.hash,
+      );
+      return confirmed(
+        {
+          command: "manual-select",
+          releaseId: skill.releaseId,
+          hash: skill.hash,
+          selected,
+          expectedEpoch: p.control.epoch,
+          pins: selected ? skill.pins : [],
+          confirmation: "SELECCIONAR",
+        },
+        "Cambiar selección manual",
+        JSON.stringify(selected ? skill.pins : [], null, 2) +
+          "\nLas exclusiones de equipo prevalecen. Se reinician sesiones afectadas.",
+        "SELECCIONAR",
+      );
+    }
+    if (id === "evaluate-response" || id === "evaluate-code")
+      return { wizard: id };
+  }
   const c = p.config,
     expectedHash = p.hash;
   if (screen === "skills") {
@@ -550,6 +747,9 @@ export function studioCommand(
         "Conexión segura: perfect unity inspeccionar <descriptor>; luego conectar con fingerprint y perfiles. El token se ingresa localmente en /integraciones. Consultá docs/unity.md.",
       screen: "integrations",
     };
+  if (name === "evaluaciones")
+    return { screen: "skill-trials", action: action({ command: "status" }) };
+  if (name === "crear-skill") return { wizard: "create" };
   if (names[name])
     return { screen: names[name], action: action({ command: "status" }) };
   if (["juegos", "motion"].includes(name)) {

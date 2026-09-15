@@ -103,11 +103,22 @@ export const VerificationSpecSchema = z
   .object({
     id: Id,
     title: z.string(),
-    kind: z.enum(["command", "browser", "remotion", "postgres"]),
+    kind: z.enum(["command", "browser", "remotion", "postgres", "blender"]),
     criteriaIds: z.array(Id).min(1),
     mandatory: z.boolean().default(true),
     command: CommandSchema.optional(),
     scenario: VisualScenarioSchema.optional(),
+    blender: z
+      .object({
+        script: z.string().min(1),
+        sourceFile: z.string().default("source.blend"),
+        width: z.number().int().min(128).max(1920).default(640),
+        height: z.number().int().min(128).max(1080).default(480),
+        timeoutMs: z.number().int().min(1000).max(1200000).default(240000),
+        maxBytes: z.number().int().min(100000).max(32000000).default(16000000),
+      })
+      .strict()
+      .optional(),
     remotion: z
       .object({
         composition: z.string(),
@@ -126,6 +137,11 @@ export const VerificationSpecSchema = z
   .superRefine((s, ctx) => {
     if ((s.kind === "command" || s.kind === "postgres") && !s.command)
       ctx.addIssue({ code: "custom", message: "Command required" });
+    if (s.kind === "blender" && !s.blender)
+      ctx.addIssue({
+        code: "custom",
+        message: "Blender specification required",
+      });
     if (s.kind === "browser" && !s.scenario)
       ctx.addIssue({ code: "custom", message: "Scenario required" });
     if (s.kind === "remotion" && !s.remotion)

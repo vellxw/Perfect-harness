@@ -1,3 +1,5 @@
+import { GuidedForm, type FormSpec } from "./form.js";
+import { skillWizard } from "./skill-wizard.js";
 import {
   studioScreens,
   studioCommand,
@@ -105,6 +107,7 @@ export function App({
     rail = width >= 130 && height >= 30;
   const [studioSubject, setStudioSubject] = useState("");
   const [bindingProfile, setBindingProfile] = useState<string>();
+  const [wizard, setWizard] = useState<FormSpec>();
   const [screen, setScreen] = useState<Screen>(initialScreen),
     [selected, setSelected] = useState(0),
     [focus, setFocus] = useState<"composer" | "feed">("composer");
@@ -308,6 +311,24 @@ export function App({
     }
   };
   const applyStudioIntent = (intent: StudioIntent) => {
+    if (intent.wizard) {
+      try {
+        setWizard(
+          skillWizard(
+            intent.wizard,
+            s,
+            studioSubject,
+            (action, title, body, phrase) => {
+              setWizard(undefined);
+              setConfirmation({ action, title, body, phrase });
+            },
+          ),
+        );
+      } catch (error) {
+        notify(String(error));
+      }
+      return;
+    }
     if (intent.subject !== undefined) setStudioSubject(intent.subject);
     if (intent.screen) navigate(intent.screen);
     if (intent.editProfile) setBindingProfile(intent.editProfile);
@@ -594,7 +615,7 @@ export function App({
     showDocument(row.title, row.body);
   };
   useKeyboard((key) => {
-    if (confirmation || bindingProfile) return;
+    if (confirmation || bindingProfile || wizard) return;
     if (auth?.promptId) {
       if (key.name === "escape" || (key.ctrl && key.name === "c")) {
         key.preventDefault();
@@ -1233,6 +1254,15 @@ export function App({
             }}
           />
         )}
+      {wizard && (
+        <GuidedForm
+          spec={wizard}
+          width={width}
+          height={height}
+          motion={motion}
+          onCancel={() => setWizard(undefined)}
+        />
+      )}
       {confirmation && (
         <Confirm
           confirmation={confirmation}

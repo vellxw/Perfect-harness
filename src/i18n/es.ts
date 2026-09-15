@@ -127,6 +127,8 @@ export function roleLabel(value: string): string {
   return roleNames[value] ?? value;
 }
 const screenNames: Readonly<Record<string, string>> = {
+  "skill-trials": "Evaluaciones A/B",
+  "trial-detail": "Comparación y evidencia",
   skills: "Habilidades",
   teams: "Equipos",
   profiles: "Perfiles y modelos",

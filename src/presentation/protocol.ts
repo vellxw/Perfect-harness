@@ -1,3 +1,4 @@
+import { DraftBriefSchema } from "../skills/creator.js";
 import { StudioActionSchema } from "../skills/actions.js";
 import type { StudioPanelSnapshot } from "../skills/admin.js";
 import { z } from "zod";
@@ -26,6 +27,8 @@ export const UiPreferencesSchema = z.object({
 });
 export type UiPreferences = z.infer<typeof UiPreferencesSchema>;
 export type Screen =
+  | "skill-trials"
+  | "trial-detail"
   | "skills"
   | "teams"
   | "profiles"
@@ -162,6 +165,13 @@ export interface UiSnapshot {
 }
 const goalId = z.string().min(1).max(96);
 export const UiActionSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("create-skill-brief"),
+      brief: DraftBriefSchema,
+      confirmation: z.literal("CREAR"),
+    })
+    .strict(),
   z.object({ type: z.literal("studio"), action: StudioActionSchema }).strict(),
   z
     .object({

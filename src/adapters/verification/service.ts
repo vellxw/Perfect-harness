@@ -44,7 +44,14 @@ export class VerificationService {
     };
     let output: ExecutionOutput;
     try {
-      if (spec.kind === "postgres") {
+      if (spec.kind === "blender") {
+        if (!this.runner.blender)
+          throw new Blocked(
+            "BLENDER_RUNNER_REQUIRED",
+            "Falta el runner aislado de Blender",
+          );
+        output = await this.runner.blender(request, spec.blender!);
+      } else if (spec.kind === "postgres") {
         if (!this.runner.postgres)
           throw new Blocked(
             "POSTGRES_RUNNER_REQUIRED",

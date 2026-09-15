@@ -29,6 +29,10 @@ export interface PaletteItem {
 }
 export const commands: PaletteItem[] = [
   {
+    name: "evaluaciones",
+    description: "Contratos y resultados A/B de habilidades",
+  },
+  {
     name: "unity",
     description: "Conectar el Editor al MCP local con proyecto autorizado",
   },

@@ -1,3 +1,4 @@
+import { draftInstruction } from "../skills/creator.js";
 import { StudioAdmin } from "../skills/admin.js";
 import { studioId } from "../skills/registry.js";
 import { defaultConfig } from "../config/schema.js";
@@ -49,6 +50,7 @@ export class PresentationEngine {
   readonly store: SqliteStore;
   readonly integrations: IntegrationAdmin;
   readonly studios: StudioAdmin;
+  private studioTask?: Promise<void>;
   readonly home: string;
   private workspace: string;
   private selected?: string;
@@ -177,6 +179,11 @@ export class PresentationEngine {
     };
   }
   private idle(): void {
+    if (this.studioTask)
+      throw new Blocked(
+        "EVAL_BUSY",
+        "Hay una evaluación de skills activa; cancelala o esperá antes de iniciar otro trabajo",
+      );
     if (this.active || this.authAbort)
       throw new Blocked(
         "ENGINE_BUSY",
@@ -247,7 +254,73 @@ export class PresentationEngine {
         path: string | undefined,
         operation: string | undefined;
       switch (action.type) {
+        case "create-skill-brief": {
+          this.idle();
+          const cfg = await ctx.config(),
+            studio = this.studios.panel(this.workspace, cfg);
+          if (
+            !studio.config.sets.some(
+              (s) => s.id === action.brief.team && s.enabled,
+            )
+          )
+            throw new Blocked("SKILL_CREATOR_TEAM", "Equipo no disponible");
+          const goal = await createGoal(
+            {
+              request: draftInstruction(action.brief),
+              source: this.workspace,
+              home: this.home,
+              config: cfg,
+              privacy: "private",
+              workMode: "skill-studio",
+            },
+            this.store,
+          );
+          this.start(goal);
+          message =
+            "Creación privada iniciada. El resultado será un borrador; aprobación y activación son independientes.";
+          break;
+        }
         case "studio": {
+          if (action.action.command === "trial-run") {
+            this.idle();
+            const configuration = await ctx.config();
+            this.studioTask = this.studios
+              .perform(
+                this.workspace,
+                configuration,
+                action.action,
+                AbortSignal.timeout(1200000),
+              )
+              .then((result) => {
+                this.send({
+                  type: "result",
+                  requestId,
+                  ok: true,
+                  message: result.message,
+                  content: result.content,
+                  operation: "studio",
+                });
+              })
+              .catch((error) => {
+                this.send({
+                  type: "result",
+                  requestId,
+                  ok: false,
+                  message:
+                    error instanceof Error
+                      ? error.message
+                      : "Evaluación interrumpida",
+                  operation: "studio",
+                });
+              })
+              .finally(() => {
+                this.studioTask = undefined;
+                this.publish();
+              });
+            message =
+              "Evaluación iniciada. /evaluaciones permite ver progreso o cancelar sin bloquear la interfaz.";
+            break;
+          }
           const result = await this.studios.perform(
             this.workspace,
             await ctx.config(),
@@ -740,6 +813,8 @@ export class PresentationEngine {
     }
   }
   async dispose(): Promise<void> {
+    await this.studios.close();
+    await this.studioTask;
     if (this.closing) return;
     await this.actionQueue;
     this.authAbort?.abort();

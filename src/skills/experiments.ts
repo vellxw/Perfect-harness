@@ -472,6 +472,12 @@ export function trialReport(store: StateStore, trialId: string) {
   const real = records.length > 0 && records.every((o) => o?.source === "real");
   return {
     trialId: t.id,
+    releaseId: t.spec.releaseId,
+    baselineReleaseId: t.spec.baselineReleaseId,
+    profileId: t.spec.profileId,
+    partition: t.spec.partition,
+    repetitions: t.spec.repetitions,
+    budget: { maxRequests: t.spec.maxRequests, maxTokens: t.spec.maxTokens },
     status: t.status,
     specHash: t.specHash,
     mode: real ? "real" : "mock-or-unexecuted",
@@ -563,14 +569,29 @@ export async function runTrial(input: {
       if (e instanceof Blocked) throw e;
     }
   }
-  trial = {
-    ...trial,
-    status: "running",
-    attempts: trial.attempts + 1,
-    ownerPid: process.pid,
-    startedAt: now(),
-  };
-  store.put("skillTrials", trial, "skill.trial_started");
+  if (store.list("runs").some((r) => r.status === "running"))
+    throw new Blocked(
+      "EVAL_PROVIDER_BUSY",
+      "Otra sesión está usando proveedores. Pausá ese trabajo antes de evaluar.",
+    );
+  trial = store.transaction(() => {
+    const current = store.get("skillTrials", input.trialId);
+    if (
+      !current ||
+      current.status !== "authorized" ||
+      current.attempts !== trial!.attempts
+    )
+      throw new Blocked("EVAL_BUSY", "Otro controlador inició la evaluación");
+    const claimed: TrialRecord = {
+      ...current,
+      status: "running",
+      attempts: current.attempts + 1,
+      ownerPid: process.pid,
+      startedAt: now(),
+    };
+    store.put("skillTrials", claimed, "skill.trial_started");
+    return claimed;
+  });
   const deadline = AbortSignal.any([
       input.signal,
       AbortSignal.timeout(trial.spec.timeoutMs),

@@ -22,6 +22,17 @@ export interface ExecutionOutput {
   }[];
 }
 export interface ExecutionRunner {
+  blender?(
+    request: ExecutionRequest,
+    spec: {
+      script: string;
+      sourceFile: string;
+      width: number;
+      height: number;
+      timeoutMs: number;
+      maxBytes: number;
+    },
+  ): Promise<ExecutionOutput>;
   postgres?(
     request: ExecutionRequest,
     command: CommandSpec,
