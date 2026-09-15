@@ -12,10 +12,25 @@ $p=Start-Process $download -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/N
 if($p.ExitCode -ne 0){throw "Inno Setup preparation failed: $($p.ExitCode)"}
 $compiler=Join-Path $directory 'ISCC.exe'
 if(-not(Test-Path $compiler)){throw 'Pinned compiler is absent'}
-# ISCC executable metadata is not the compiler engine version. Validate the engine's own banner.
-$banner=(& $compiler '/?' 2>&1 | Out-String)
-Write-Host $banner
-if($banner -notmatch 'Compiler engine version:\s*Inno Setup 7\.0\.2\b'){throw 'Wrong Inno Setup compiler engine version'}
+# /? reports only the frontend's major version. A harmless compile loads ISCmplr.dll
+# and reports the exact engine version. Output=no creates no installer to execute.
+$probe=Join-Path $env:RUNNER_TEMP ('perfect-compiler-probe-'+[Guid]::NewGuid()+'.iss')
+@'
+[Setup]
+AppName=Perfect Compiler Probe
+AppVersion=0.0.0
+DefaultDirName={tmp}\PerfectCompilerProbe
+CreateAppDir=no
+Uninstallable=no
+Output=no
+'@ | Set-Content $probe -Encoding utf8NoBOM
+try {
+  $banner=(& $compiler $probe 2>&1 | Out-String)
+  $code=$LASTEXITCODE
+  Write-Host $banner
+  if($code -ne 0){throw "Inno Setup compiler probe failed: $code"}
+  if($banner -notmatch 'Compiler engine version:\s*Inno Setup 7\.0\.2\b'){throw 'Wrong Inno Setup compiler engine version'}
+} finally {Remove-Item $probe -Force -ErrorAction SilentlyContinue}
 $env:PERFECT_ISCC=$compiler
 if($env:GITHUB_ENV){"PERFECT_ISCC=$compiler" | Out-File $env:GITHUB_ENV -Append -Encoding utf8}
 Write-Host 'Pinned Inno Setup 7.0.2 compiler verified; explicit path prevents shadowing by preinstalled 6.x'
