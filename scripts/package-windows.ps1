@@ -33,7 +33,7 @@ $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if (-not (Test-Path $csc)) { throw '.NET Framework compiler unavailable on this build machine' }
 $sourceOriginal = (Resolve-Path (Join-Path $root 'src\windows\Perfect.cs')).Path
 $sourcePath = Join-Path $root 'release\Perfect.generated.cs'
-$sourceText = [IO.File]::ReadAllText($sourceOriginal) -replace '(?<=AssemblyVersion\(")[^"]+(?="\))', "$version.0" -replace '(?<=AssemblyFileVersion\(")[^"]+(?="\))', "$version.0"
+$sourceText = [IO.File]::ReadAllText($sourceOriginal) -replace '(?<=AssemblyVersion\(")[^"]+(?="\))', "$version.0" -replace '(?<=AssemblyFileVersion\(")[^"]+(?="\))', "$version.0" -replace '(?<=AssemblyInformationalVersion\(")[^"]+(?="\))', $version
 [IO.File]::WriteAllText($sourcePath,$sourceText)
 $iconPath = (Resolve-Path (Join-Path $root 'assets\brand\perfect.ico')).Path
 $manifestPath = (Resolve-Path (Join-Path $root 'src\windows\Perfect.manifest')).Path
@@ -44,7 +44,7 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'Windows launcher compilation failed' }
 } finally { Remove-Item $sourcePath -Force -ErrorAction SilentlyContinue }
 $metadata = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($exePath)
-if ($metadata.ProductName -ne 'Perfect Harness' -or $metadata.FileVersion -ne "$version.0") { throw 'Incorrect executable metadata' }
+if ($metadata.ProductName -ne 'Perfect Harness' -or $metadata.FileVersion -ne "$version.0" -or $metadata.ProductVersion -ne $version) { throw 'Incorrect executable metadata' }
 $oldPath = $env:PATH
 try {
   $env:PATH = "$env:WINDIR\System32;$env:WINDIR"
