@@ -11,3 +11,5 @@ await writeFile(join(output,'package.json'),JSON.stringify({name:'perfect-deskto
 await writeFile(join(output,'engine-dev.json'),JSON.stringify({node:process.execPath}));await mkdir(join(output,'assets'),{recursive:true});
 for(const name of ['perfect-symbol.svg','perfect.ico','perfect-256.png'])await copyFile(join('assets/brand',name),join(output,'assets',name));
 await mkdir('test-results/desktop',{recursive:true});await writeFile('test-results/desktop/bundle.json',JSON.stringify({node:process.version,rendererBytes:(await Promise.all((await readdir(output)).filter(n=>/\.(js|css)$/.test(n)).map(n=>readFile(join(output,n))))).reduce((a,b)=>a+b.length,0),coreModulesInRenderer:forbidden,rendererInputs:Object.keys(renderer.metafile.inputs)},null,2));
+
+await writeFile(join(output,'build-info.json'),JSON.stringify({version:pkg.version,sourceCommit:process.env.GITHUB_SHA??(await import('node:child_process')).execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim()}));

@@ -1,3 +1,4 @@
+import { importUserReferences } from "../../tools/references.js";
 import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { join, extname } from "node:path";
 import { createHash } from "node:crypto";
@@ -74,7 +75,21 @@ async function query(requestId: string, raw: unknown) {
       ? new GitWorkspace(goal.root, config).repo
       : snapshot.workspace;
     let data: unknown;
-    if (q.kind === "files") {
+    if (q.kind === "reference-import") {
+      data = await importUserReferences(
+        engine.home,
+        snapshot.workspace,
+        q.paths,
+        q.privacy,
+      );
+    } else if (q.kind === "metrics") {
+      data = {
+        pid: process.pid,
+        rss: process.memoryUsage().rss,
+        cpu: process.cpuUsage(),
+        uptime: process.uptime(),
+      };
+    } else if (q.kind === "files") {
       const files = (await manifest(root, config)).files.map((f) => f.path);
       data = {
         paths: files.slice(q.offset, q.offset + 200),

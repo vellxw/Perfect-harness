@@ -1,5 +1,6 @@
 /** @jsxImportSource react */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { UserReference } from "../../domain/references.js";
 import { createRoot } from "react-dom/client";
 import { connect, useDesktop, request } from "./store.js";
 import type { UiSnapshot, UiMessage } from "../contracts/protocol.js";
@@ -170,7 +171,23 @@ function App() {
       window.removeEventListener("unhandledrejection", rejection);
     };
   }, []);
-  const modalOpen = Boolean(form || documentView || palette || auth);
+  const [nestedModal, setNestedModal] = useState(false);
+  useEffect(() => {
+    const sync = () =>
+      setNestedModal(Boolean(document.querySelector("dialog[open]")));
+    const observer = new MutationObserver(sync);
+    observer.observe(document.body, {
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["open"],
+      childList: true,
+    });
+    sync();
+    return () => observer.disconnect();
+  }, []);
+  const modalOpen = Boolean(
+    form || documentView || palette || auth || nestedModal,
+  );
   useEffect(() => {
     if (state.preview) {
       void request("preview-layout", {
@@ -387,7 +404,9 @@ function App() {
             {s?.goal?.privacy === "public"
               ? "Proyecto público"
               : "Privado por defecto"}{" "}
-            {s?.demo ? "· DEMO / datos sintéticos" : ""}
+            {s?.demo || s?.goal?.mode === "mock"
+              ? "· DEMO / providers simulados"
+              : ""}
           </span>
           <div>
             <button onClick={() => navigate("cost")}>Consumo</button>
@@ -525,12 +544,23 @@ function Work({
     if (!value.trim()) return;
     setPending(true);
     try {
-      if (attachments.length)
-        throw Error(
-          "Los recursos fueron seleccionados pero no importados. Revisá la importación antes de enviarlos al agente.",
-        );
-      await execute({ type: "goal", description: value, public: isPublic });
+      let referenceIds: string[] = [];
+      if (attachments.length) {
+        const imported = await request("reference-import", {
+          paths: attachments,
+          privacy: isPublic ? "public" : "private",
+          confirmation: "IMPORTAR",
+        });
+        referenceIds = (imported.data as UserReference[]).map((r) => r.id);
+      }
+      await execute({
+        type: "goal",
+        description: value,
+        public: isPublic,
+        referenceIds,
+      });
       setValue("");
+      setAttachments([]);
     } finally {
       setPending(false);
     }
@@ -544,6 +574,23 @@ function Work({
             <h1>¿Qué querés construir?</h1>
             <p>Elegí una carpeta y describí el resultado que buscás.</p>
             <div className="mode-shortcuts">
+              <button
+                onClick={() =>
+                  confirm(
+                    "Demostración verificable",
+                    "Se creará un fixture temporal existente. Los providers son simulados, pero archivos, tests, reparaciones y Judge se ejecutan realmente. Requiere Docker; no usa tus cuentas ni modifica tu proyecto.",
+                    "DEMOSTRAR",
+                    async () => {
+                      await execute({
+                        type: "demo-reservations",
+                        confirmation: "DEMOSTRAR",
+                      });
+                    },
+                  )
+                }
+              >
+                Probar el Goal Loop
+              </button>
               <button onClick={() => navigate("modes")}>
                 {s.studio?.config.modes.find(
                   (m) => m.id === s.studio!.config.activeMode,
@@ -592,7 +639,7 @@ function Work({
                 >
                   Pausar
                 </button>
-              ) : s.goal.state === "PAUSED" ? (
+              ) : !["DONE", "FAILED", "ABORTED"].includes(s.goal.state) ? (
                 <button
                   className="primary"
                   onClick={() =>
@@ -785,8 +832,8 @@ function Work({
           </div>
         </div>
         <small className="composer-hint">
-          Ctrl + Enter para enviar · No se publica ni se aplica código sin
-          autorización
+          Ctrl + Enter para enviar · Las referencias seleccionadas se importan
+          con la privacidad indicada. No se aplica código sin autorización
         </small>
       </section>
       <aside className="agent-rail" aria-label="Agentes del equipo">

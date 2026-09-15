@@ -420,6 +420,12 @@ export function Costs({ s }: { s: UiSnapshot }) {
   );
 }
 export function Projects({ s }: { s: UiSnapshot }) {
+  const [recent, setRecent] = useState<{ id: string; path: string }[]>([]);
+  useEffect(() => {
+    void request("recent-projects").then((r) =>
+      setRecent(r.data as { id: string; path: string }[]),
+    );
+  }, [s.workspace]);
   const ui = useUI();
   return (
     <>
@@ -433,6 +439,27 @@ export function Projects({ s }: { s: UiSnapshot }) {
           Abrir otra carpeta
         </button>
       </Heading>
+      <section className="recent-folders">
+        {recent
+          .filter((r) => r.path !== s.workspace)
+          .map((r) => (
+            <Row
+              key={r.id}
+              title={r.path.split(/[\\/]/).at(-1) ?? r.path}
+              detail={r.path}
+            >
+              <button
+                onClick={() =>
+                  void request("open-recent", { id: r.id }).catch((e) =>
+                    ui.notify(String(e)),
+                  )
+                }
+              >
+                Abrir proyecto
+              </button>
+            </Row>
+          ))}
+      </section>
       {s.recentGoals.length ? (
         s.recentGoals
           .slice()

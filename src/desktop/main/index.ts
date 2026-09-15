@@ -1,3 +1,9 @@
+import { MediaBroker } from "./media.js";
+import {
+  assertSmallMessage,
+  collectorPaths,
+  sameAppOrigin,
+} from "../contracts/limits.js";
 import {
   app,
   BrowserWindow,
@@ -20,7 +26,6 @@ import { EngineBroker } from "./broker.js";
 import {
   APP_ORIGIN,
   EnvelopeSchema,
-  parseRange,
   approvedNavigation,
   type DesktopBoot,
 } from "../contracts/protocol.js";
@@ -65,10 +70,7 @@ const sessionId = randomUUID(),
   pendingActions = new Set<string>(),
   grantedPaths = new Set<string>(),
   authUrls = new Set<string>();
-const media = new Map<
-  string,
-  { path: string; mime: string; size: number; sha256: string }
->();
+const media = new MediaBroker(join(home, "desktop-media"));
 let closing = false,
   workspace = "";
 const mime: Record<string, string> = {
@@ -93,7 +95,7 @@ function assertSender(event: {
     event.sender !== window.webContents ||
     !event.senderFrame ||
     event.senderFrame !== window.webContents.mainFrame ||
-    !event.senderFrame.url.startsWith(APP_ORIGIN + "/")
+    !sameAppOrigin(event.senderFrame.url)
   )
     throw Error("Emisor IPC no autorizado");
 }
@@ -123,9 +125,31 @@ async function launch() {
   try {
     recent = JSON.parse(await readFile(join(home, "desktop.json"), "utf8"));
   } catch {}
-  workspace = await realpath(
-    argument("--workspace") ?? recent.workspace ?? homedir(),
+  const defaultWorkspace = join(
+    app.getPath("documents"),
+    "Perfect Projects",
+    "Workspace",
   );
+  await mkdir(defaultWorkspace, { recursive: true });
+  try {
+    workspace = await realpath(
+      argument("--workspace") ?? recent.workspace ?? defaultWorkspace,
+    );
+  } catch {
+    workspace = await realpath(defaultWorkspace);
+  }
+  let recentPaths: string[] = [];
+  try {
+    recentPaths = JSON.parse(
+      await readFile(join(home, "desktop-recent.json"), "utf8"),
+    );
+  } catch {}
+  recentPaths = [
+    ...new Set([
+      workspace,
+      ...recentPaths.filter((p) => typeof p === "string"),
+    ]),
+  ].slice(0, 12);
   await app.whenReady();
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
@@ -157,6 +181,9 @@ async function launch() {
     ]),
   );
   const assetsRoot = app.getAppPath();
+  const buildInfo = JSON.parse(
+    await readFile(join(assetsRoot, "build-info.json"), "utf8"),
+  ) as { sourceCommit: string };
   protocol.handle("perfect", async (request) => {
     try {
       const url = new URL(request.url);
@@ -174,45 +201,12 @@ async function launch() {
           headers: {
             "Content-Type": mime[extname(path)] ?? "application/octet-stream",
             "Content-Security-Policy":
-              "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' perfect: data:; media-src perfect:; connect-src 'self' perfect:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'",
+              "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' perfect: data: blob:; media-src perfect:; connect-src 'self' perfect:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'",
             "X-Content-Type-Options": "nosniff",
           },
         });
       }
-      if (url.host === "media") {
-        const entry = media.get(url.pathname.slice(1));
-        if (!entry) return new Response("No autorizado", { status: 403 });
-        const stat = await lstat(entry.path);
-        if (
-          stat.isSymbolicLink() ||
-          stat.nlink !== 1 ||
-          stat.size !== entry.size
-        )
-          throw Error("Recurso alterado");
-        const bytes = await readFile(entry.path);
-        if (createHash("sha256").update(bytes).digest("hex") !== entry.sha256)
-          throw Error("Hash de recurso alterado");
-        const r = parseRange(request.headers.get("range"), bytes.length);
-        return new Response(
-          new Uint8Array(bytes.subarray(r.start, r.end + 1)),
-          {
-            status: r.partial ? 206 : 200,
-            headers: {
-              "Content-Type": entry.mime,
-              "Accept-Ranges": "bytes",
-              "Content-Length": String(r.end - r.start + 1),
-              ...(r.partial
-                ? {
-                    "Content-Range": `bytes ${r.start}-${r.end}/${bytes.length}`,
-                  }
-                : {}),
-              "Content-Security-Policy": "default-src 'none'",
-              "Access-Control-Allow-Origin": APP_ORIGIN,
-              "X-Content-Type-Options": "nosniff",
-            },
-          },
-        );
-      }
+      if (url.host === "media") return media.respond(request);
       return new Response("No autorizado", { status: 403 });
     } catch {
       return new Response("Recurso no disponible o alterado", { status: 416 });
@@ -241,11 +235,67 @@ async function launch() {
       : {}),
     webPreferences: { ...secure, preload: join(assetsRoot, "preload.cjs") },
   });
+
+  async function attachPreview(data: unknown) {
+    const info = z
+      .object({
+        url: z.string().url(),
+        origin: z.string().url(),
+        revision: z.string(),
+        notice: z.string(),
+      })
+      .passthrough()
+      .parse(data);
+    const u = new URL(info.url);
+    if (
+      u.hostname !== "127.0.0.1" ||
+      u.protocol !== "http:" ||
+      u.origin !== info.origin
+    )
+      throw Error("Preview fuera de loopback autorizado");
+    detachPreview();
+    const isolated = session.fromPartition("perfect-preview-" + randomUUID());
+    isolated.setPermissionRequestHandler((_w, _p, c) => c(false));
+    isolated.setPermissionCheckHandler(() => false);
+    isolated.webRequest.onBeforeRequest((details, callback) =>
+      callback({ cancel: !approvedNavigation(details.url, info.origin) }),
+    );
+    isolated.on("will-download", (e) => e.preventDefault());
+    preview = new WebContentsView({
+      webPreferences: { ...secure, session: isolated },
+    });
+    preview.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    preview.webContents.on("will-navigate", (e, url) => {
+      if (!approvedNavigation(url, info.origin)) e.preventDefault();
+    });
+    window.contentView.addChildView(preview);
+    preview.setBounds({
+      x: 20,
+      y: 180,
+      width: Math.max(300, (window.getContentSize()[0] ?? 900) - 40),
+      height: Math.max(200, (window.getContentSize()[1] ?? 600) - 220),
+    });
+    await preview.webContents.loadURL(info.url);
+    window.webContents.send("perfect:event", {
+      type: "preview",
+      open: true,
+      url: info.url,
+    });
+  }
   const defaultSession = window.webContents.session;
   defaultSession.setPermissionRequestHandler((_wc, _permission, callback) =>
     callback(false),
   );
   defaultSession.setPermissionCheckHandler(() => false);
+  defaultSession.webRequest.onBeforeRequest((details, callback) => {
+    const url = new URL(details.url);
+    callback({
+      cancel:
+        !(
+          url.protocol === "perfect:" && ["app", "media"].includes(url.hostname)
+        ) && !["blob:", "data:"].includes(url.protocol),
+    });
+  });
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   window.webContents.on("will-navigate", (event, url) => {
     if (!url.startsWith(APP_ORIGIN + "/")) event.preventDefault();
@@ -264,7 +314,9 @@ async function launch() {
     home,
     workspace,
   );
-  broker.on("event", (event) => {
+  let desktopSequence = 0;
+  const relay = (event: Parameters<EngineBroker["emit"]>[1]) => {
+    if (event.type === "engine") event.sequence = ++desktopSequence;
     if (
       event.type === "engine" &&
       event.message.type === "auth" &&
@@ -282,8 +334,14 @@ async function launch() {
       event.message.snapshot.workspace !== workspace
     ) {
       workspace = event.message.snapshot.workspace;
-      media.clear();
+      void media.clear();
       grantedPaths.clear();
+      recentPaths = [...new Set([workspace, ...recentPaths])].slice(0, 12);
+      void writeFile(
+        join(home, "desktop-recent.json"),
+        JSON.stringify(recentPaths),
+        { mode: 0o600 },
+      );
       detachPreview();
       void writeFile(
         join(home, "desktop.json"),
@@ -292,7 +350,8 @@ async function launch() {
       );
     }
     if (!window.isDestroyed()) window.webContents.send("perfect:event", event);
-  });
+  };
+  broker.on("event", relay);
   ipcMain.handle("perfect:boot", (event) => {
     assertSender(event);
     return {
@@ -300,7 +359,7 @@ async function launch() {
       sessionId,
       workspaceId: broker.workspaceId,
       version: app.getVersion(),
-      buildId: process.env.GITHUB_SHA ?? "local",
+      buildId: buildInfo.sourceCommit,
       snapshot: broker.snapshot,
       connected: broker.connected,
       systemReducedMotion: false,
@@ -338,6 +397,7 @@ async function launch() {
   });
   ipcMain.handle("perfect:request", async (event, raw) => {
     assertSender(event);
+    assertSmallMessage(raw);
     const envelope = EnvelopeSchema.parse(raw);
     try {
       if (
@@ -378,6 +438,44 @@ async function launch() {
             });
           data = { path: canonical };
         }
+      } else if (envelope.operation === "reference-import") {
+        const value = z
+          .object({
+            paths: z.array(z.string()).min(1).max(8),
+            privacy: z.enum(["public", "private", "confidential"]),
+            confirmation: z.literal("IMPORTAR"),
+          })
+          .strict()
+          .parse(p);
+        if (value.paths.some((p) => !grantedPaths.has(p)))
+          throw Error(
+            "Seleccioná cada recurso mediante el diálogo o arrastre autorizado",
+          );
+        const imported = (await broker.request(
+          "query",
+          { kind: "reference-import", ...value },
+          envelope.requestId,
+        )) as { data: unknown };
+        data = imported.data;
+      } else if (envelope.operation === "recent-projects") {
+        data = recentPaths.map((path) => ({
+          id: createHash("sha256").update(path).digest("hex"),
+          path,
+        }));
+      } else if (envelope.operation === "open-recent") {
+        const selected = z
+          .object({ id: z.string().regex(/^[a-f0-9]{64}$/) })
+          .strict()
+          .parse(p);
+        const path = recentPaths.find(
+          (path) =>
+            createHash("sha256").update(path).digest("hex") === selected.id,
+        );
+        if (!path) throw Error("Carpeta no autorizada en el historial");
+        await broker.request("action", {
+          type: "workspace",
+          path: await realpath(path),
+        });
       } else if (envelope.operation === "action") {
         const a = z.object({ type: z.string() }).passthrough().parse(p);
         for (const path of collectSensitivePaths(a))
@@ -416,17 +514,41 @@ async function launch() {
             .strict()
             .parse(p).text,
         );
-      } else if (envelope.operation === "metrics")
+      } else if (envelope.operation === "metrics") {
+        const sample = broker.connected
+          ? ((await broker.request("query", { kind: "metrics" })) as {
+              data: unknown;
+            })
+          : undefined;
         data = {
           app: app.getAppMetrics(),
           version: app.getVersion(),
-          enginePid: undefined,
+          sourceCommit: buildInfo.sourceCommit,
+          engine: sample?.data,
         };
-      else if (envelope.operation === "restart-engine")
-        throw Error(
-          "Pausá y cerrá Perfect para recuperar el motor sin duplicar ejecución",
+      } else if (envelope.operation === "restart-engine") {
+        if (broker.connected && broker.snapshot?.busy)
+          throw Error(
+            "Pausá el objetivo antes de reiniciar un motor que sigue activo",
+          );
+        await broker.close();
+        await media.clear();
+        detachPreview();
+        broker.removeAllListeners();
+        broker = new EngineBroker(
+          node,
+          join(root, "dist", "desktop", "engine", "worker.js"),
+          home,
+          workspace,
         );
-      else if (envelope.operation === "preview-layout") {
+        broker.on("event", relay);
+        broker.start();
+        await broker.ready();
+        data = {
+          connected: true,
+          note: "Motor recuperado; las operaciones inciertas requieren reconciliación y no se repitieron.",
+        };
+      } else if (envelope.operation === "preview-layout") {
         const box = z
           .object({
             x: z.number().int().min(0),
@@ -469,69 +591,15 @@ async function launch() {
               current: z.boolean(),
             })
             .parse(data);
-          const cache = join(home, "desktop-media");
-          if (
-            (await realpath(join(item.path, ".."))) !== (await realpath(cache))
-          )
-            throw Error("Recurso fuera del almacén privado");
-          const token = randomUUID();
-          media.set(token, {
-            ...item,
-            mime: mime[item.extension] ?? "application/octet-stream",
-          });
           data = {
-            url: `perfect://media/${token}`,
-            mime: mime[item.extension],
+            ...(await media.add(item)),
             evidenceId: item.evidenceId,
             revision: item.revision,
             current: item.current,
           };
-        } else if (envelope.operation === "preview-stop") {
-          detachPreview();
-        } else if (envelope.operation === "preview-start") {
-          const info = z
-            .object({
-              url: z.string().url(),
-              origin: z.string().url(),
-              revision: z.string(),
-              notice: z.string(),
-            })
-            .passthrough()
-            .parse(data);
-          const u = new URL(info.url);
-          if (u.hostname !== "127.0.0.1" || u.protocol !== "http:")
-            throw Error("Preview fuera de loopback");
-          detachPreview();
-          const isolated = session.fromPartition(
-            "perfect-preview-" + randomUUID(),
-          );
-          isolated.setPermissionRequestHandler((_w, _p, c) => c(false));
-          isolated.setPermissionCheckHandler(() => false);
-          isolated.webRequest.onBeforeRequest((details, callback) =>
-            callback({ cancel: !approvedNavigation(details.url, info.origin) }),
-          );
-          isolated.on("will-download", (e) => e.preventDefault());
-          preview = new WebContentsView({
-            webPreferences: { ...secure, session: isolated },
-          });
-          preview.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-          preview.webContents.on("will-navigate", (e, url) => {
-            if (!approvedNavigation(url, info.origin)) e.preventDefault();
-          });
-          window.contentView.addChildView(preview);
-          preview.setBounds({
-            x: 16,
-            y: 160,
-            width: (window.getContentSize()[0] ?? 900) - 32,
-            height: (window.getContentSize()[1] ?? 600) - 190,
-          });
-          await preview.webContents.loadURL(info.url);
-          window.webContents.send("perfect:event", {
-            type: "preview",
-            open: true,
-            url: info.url,
-          });
-        }
+        } else if (envelope.operation === "preview-stop") detachPreview();
+        else if (envelope.operation === "preview-start")
+          await attachPreview(data);
       }
       return { ok: true, requestId: envelope.requestId, data };
     } catch (error) {
@@ -542,6 +610,20 @@ async function launch() {
           error instanceof Error ? error.message : "Acción no completada",
       };
     }
+  });
+  window.webContents.on("render-process-gone", async () => {
+    detachPreview();
+    const answer = await dialog.showMessageBox(window, {
+      type: "warning",
+      buttons: ["Cerrar de forma segura", "Recargar interfaz"],
+      defaultId: 1,
+      cancelId: 0,
+      message: "La interfaz se cerró inesperadamente",
+      detail:
+        "El motor y sus operaciones no se reinician ni duplican al recargar la interfaz.",
+    });
+    if (answer.response === 1) await window.loadURL(APP_ORIGIN + "/index.html");
+    else window.close();
   });
   app.on("second-instance", () => {
     if (window.isMinimized()) window.restore();
@@ -574,6 +656,7 @@ async function launch() {
       }
       try {
         await broker.close();
+        await media.clear();
         detachPreview();
         closing = true;
         window.destroy();
@@ -593,19 +676,6 @@ async function launch() {
   await window.loadURL(APP_ORIGIN + "/index.html");
   window.show();
 }
-function collectSensitivePaths(a: Record<string, unknown>): string[] {
-  const paths: string[] = [];
-  const visit = (v: unknown) => {
-    if (v && typeof v === "object")
-      for (const [k, x] of Object.entries(v)) {
-        if (
-          ["path", "directory", "casesFile", "descriptorPath"].includes(k) &&
-          typeof x === "string"
-        )
-          paths.push(x);
-        else if (x && typeof x === "object") visit(x);
-      }
-  };
-  visit(a);
-  return paths;
+function collectSensitivePaths(action: Record<string, unknown>): string[] {
+  return collectorPaths(action);
 }

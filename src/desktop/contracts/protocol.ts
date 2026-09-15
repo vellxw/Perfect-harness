@@ -15,6 +15,9 @@ export const EnvelopeSchema = z
     requestId: z.string().uuid(),
     operation: z.enum([
       "action",
+      "reference-import",
+      "recent-projects",
+      "open-recent",
       "choose-workspace",
       "choose-resource",
       "dropped-files",
@@ -78,6 +81,15 @@ declare global {
 export type { UiAction, UiMessage, UiSnapshot };
 
 export const EngineQuerySchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("reference-import"),
+      paths: z.array(z.string().min(1).max(4096)).min(1).max(8),
+      privacy: z.enum(["public", "private", "confidential"]),
+      confirmation: z.literal("IMPORTAR"),
+    })
+    .strict(),
+  z.object({ kind: z.literal("metrics") }).strict(),
   z
     .object({
       kind: z.literal("files"),

@@ -25,9 +25,16 @@ export class DesktopPreview {
   ) {}
   async start(goal: Goal, checkId: string) {
     this.goal = goal;
+    const result = this.store.get("verifications", checkId);
+    if (
+      result &&
+      (result.goalId !== goal.id || result.revision !== goal.candidateRevision)
+    )
+      throw new Blocked("PREVIEW_REVISION", "Verificación de otro candidato");
+    const contractId = result?.specId ?? checkId;
     const plan = this.store.get("plans", goal.activePlanId ?? ""),
       spec = plan?.verification.find(
-        (v) => v.id === checkId && v.kind === "browser",
+        (v) => v.id === contractId && v.kind === "browser",
       );
     if (!spec?.scenario)
       throw new Blocked(
