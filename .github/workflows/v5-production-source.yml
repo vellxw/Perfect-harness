@@ -17,9 +17,22 @@ jobs:
         with:
           node-version: '26.4.0'
       - run: npm ci
-      - run: node scripts/desktop/prepare-production.mjs
+      - name: Recover pending authored source once
+        run: node scripts/desktop/prepare-production.mjs
         env:
           GH_TOKEN: ${{ github.token }}
+      - name: Preserve DOM JSX and backward-compatible goal input
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/desktop/renderer/index.tsx');s=p.read_text()
+          s=s.replace('/** @jsxImportSource react */','')
+          p.write_text('/** @jsxImportSource react */\n'+s)
+          p=Path('src/presentation/protocol.ts');s=p.read_text()
+          old='referenceIds:z.array(z.string().uuid()).max(8).default([]),'
+          assert s.count(old)==1
+          p.write_text(s.replace(old,'referenceIds:z.array(z.string().uuid()).max(8).optional(),'))
+          PY
       - run: npx --no-install prettier --write src tests/desktop
       - run: npm run typecheck
       - run: npm run lint
@@ -34,6 +47,11 @@ jobs:
           sudo chown root:root node_modules/electron/dist/chrome-sandbox
           sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
       - run: xvfb-run -a -s '-screen 0 1920x1080x24' node scripts/desktop/ui-e2e.mjs
+      - name: Export the exact tested source diff
+        run: |
+          mkdir -p test-results/desktop
+          git add --intent-to-add src tests/desktop
+          git diff --binary -- src tests/desktop scripts/desktop/build.mjs > test-results/desktop/validated.patch
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -43,7 +61,7 @@ jobs:
   stage:
     needs: gate
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 10
     permissions:
       contents: write
       actions: read
@@ -51,33 +69,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '26.4.0'
-      - run: npm ci
-      - run: node scripts/desktop/prepare-production.mjs
-        env:
-          GH_TOKEN: ${{ github.token }}
-      - run: npx --no-install prettier --write src tests/desktop
       - uses: actions/download-artifact@v4
         with:
           name: v5-production-bridge
-          path: desktop-review-evidence
-      - name: Stage source and inspectable images, never publish a branch automatically
+          path: validated
+      - name: Stage the exact tested patch, without updating refs
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          git apply --check validated/validated.patch
+          git apply validated/validated.patch
           python3 - <<'PY'
-          import pathlib,json,subprocess,base64,os,shutil
+          import pathlib,json,subprocess,base64,os
           names=set(subprocess.check_output(['git','diff','--name-only'],text=True).splitlines())
           names.update(subprocess.check_output(['git','ls-files','--others','--exclude-standard','src','tests/desktop'],text=True).splitlines())
-          for p in pathlib.Path('desktop-review-evidence').glob('*.png'):
-            assert p.stat().st_size<5000000
-            dst=pathlib.Path('docs/screenshots/v5')/p.name;dst.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(p,dst);names.add(dst.as_posix())
-          prov=pathlib.Path('docs/screenshots/v5/provenance.json');prov.write_text(json.dumps({'sourceCommit':os.environ['GITHUB_SHA'],'workflowRun':os.environ['GITHUB_RUN_ID'],'method':'Real Electron screenshot, synthetic local workspace, no provider inference','inspection':'Awaiting visual review; file existence alone is not approval'},indent=2));names.add(prov.as_posix())
           entries=[]
           for name in sorted(names):
-            assert name.startswith(('src/','tests/desktop/','docs/screenshots/v5/')) or name=='scripts/desktop/build.mjs'
+            assert name.startswith(('src/','tests/desktop/')) or name=='scripts/desktop/build.mjs'
             p=pathlib.Path(name);assert p.is_file() and not p.is_symlink() and p.stat().st_size<6000000
             blob=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/vellxw/Perfect-harness/git/blobs','--input','-'],input=json.dumps({'encoding':'base64','content':base64.b64encode(p.read_bytes()).decode()}),text=True))['sha']
             entries.append({'path':name,'mode':'100644','type':'blob','sha':blob})
