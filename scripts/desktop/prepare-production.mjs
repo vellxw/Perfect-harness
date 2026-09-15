@@ -24,6 +24,11 @@ const grantsInsertion=`      grantedPaths.clear();
       recentPaths=[...new Set([workspace,...recentPaths])].slice(0,12);
       void writeFile(join(home,"desktop-recent.json"),JSON.stringify(recentPaths),{mode:0o600});`;
 source=source.replace(grantsTarget,`change('src/desktop/main/index.ts',${JSON.stringify(grantsAnchor)},${JSON.stringify(grantsInsertion)});`);
+const goalTarget=source.split('\n').find(line=>line.startsWith("change('src/desktop/renderer/index.tsx','        public: isPublic,"));
+if(!goalTarget)throw Error('Missing reference IDs goal insertion');
+const goalAnchor='      await execute({ type: "goal", description: value, public: isPublic });';
+const goalInsertion='      await execute({ type: "goal", description: value, public: isPublic, referenceIds });';
+source=source.replace(goalTarget,`change('src/desktop/renderer/index.tsx',${JSON.stringify(goalAnchor)},${JSON.stringify(goalInsertion)});`);
 try {
   fs.writeFileSync(filename,source);
   await import('./connect-production.mjs');
