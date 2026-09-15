@@ -55,8 +55,9 @@ try{
  if((Get-Content "$destination/build-manifest.json" -Raw | ConvertFrom-Json).sourceCommit -ne $manifest.sourceCommit){throw 'Installer payload differs from tested source'}
  if($Capture){
   & "$PSScriptRoot/capture-windows.ps1" -Package $destination -Output 'test-results/windows-installed'
-  $capture=Get-Content 'test-results/windows-installed/provenance.json' -Raw | ConvertFrom-Json
-  if($capture.status -ne 'CAPTURED' -or $capture.captures.Count -lt 2){throw "Installed TUI capture blocked: $($capture.error)"}
+  # Do not assign an object to the case-insensitive [switch]$Capture parameter.
+  $captureReport=Get-Content 'test-results/windows-installed/provenance.json' -Raw | ConvertFrom-Json
+  if($captureReport.status -ne 'CAPTURED' -or $captureReport.captures.Count -lt 2){throw "Installed TUI capture blocked: $($captureReport.error)"}
   $report.checks+='actual installed launcher and Windows Terminal screenshots'
  }
  if($settingsHash -and (Get-FileHash $personalSettings).Hash -ne $settingsHash){throw 'Personal Terminal settings changed'}
