@@ -55,9 +55,9 @@ Unity tiene un preset MCP de proyecto autorizado; compilación/Play Mode/build d
 
 ## Windows
 
-El instalador x64 y el portable se publican separados como artifacts del commit comprobado. Incluyen Node, módulos nativos y licencia del contenido redistribuido. El portable necesita su carpeta completa, no solo Perfect.exe. No se incluye Blender ni la colección local de Transitions, Dashi, fuentes tipográficas privadas, OAuth o datos del usuario.
+Las descargas aprobadas están en [GitHub Releases](https://github.com/vellxw/Perfect-harness/releases): instalador x64 y portable completo por separado, vinculados al commit comprobado. Los artifacts de Actions son evidencia de compilación; no sustituyen una release si falló algún gate. Incluyen Node, módulos nativos y licencia del contenido redistribuido. El portable necesita su carpeta completa, no solo Perfect.exe. No se incluye Blender ni la colección local de Transitions, Dashi, fuentes tipográficas privadas, OAuth o datos del usuario.
 
-La prueba automatizada instala una versión anterior real con datos sintéticos, actualiza a V4 y verifica SQLite, snapshots, skills, preferencias y credenciales DPAPI antes de desinstalar. La desinstalación conserva los datos de usuario. El perfil de Windows Terminal es un fragmento propio, no una edición destructiva de settings.json.
+La prueba automatizada instala una versión anterior real con datos sintéticos, actualiza a V4 y verifica SQLite, snapshots, skills, preferencias y credenciales DPAPI antes de desinstalar. La desinstalación conserva los datos de usuario. El perfil de Windows Terminal es un fragmento propio, no una edición destructiva de settings.json. Pausá y cerrá Perfect antes de instalar una actualización; ninguna instalación personal se actualiza automáticamente por publicar una release.
 
 Los binarios no están firmados con Authenticode. SHA256 comprueba integridad, no identidad del editor. No desactives protecciones del sistema. Windows Server 2025 CI no equivale a una sesión Windows 11 de tu PC; Docker Desktop/WSL y tus cuentas se validan localmente.
 
@@ -65,4 +65,4 @@ Los binarios no están firmados con Authenticode. SHA256 comprueba integridad, n
 
 Los reports definitivos se vinculan al commit realmente checkout en Actions y a los hashes de los instaladores. Las capturas del renderizador nativo están marcadas DEMO; las capturas de Windows Terminal son pixels del programa real con ese fixture. Ninguna de ellas prueba inferencias de cuentas personales.
 
-Los hitos históricos de `v4-*-validation.md` no sustituyen las comprobaciones del HEAD final. La PR sigue revisable sin merge ni despliegue automático.
+Los hitos históricos de `v4-*-validation.md` no sustituyen las comprobaciones del HEAD final. El propietario autorizó fusionar las PRs en main y publicar la distribución. El workflow permanente bloquea la release hasta que todos los gates obligatorios del mismo commit aprueben; esto no concede permisos de despliegue a los agentes del producto.

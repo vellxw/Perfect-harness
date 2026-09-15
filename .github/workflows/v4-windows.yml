@@ -24,6 +24,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '26.4.0'
+      - name: Compile desktop fixtures using resolved Windows paths
+        shell: pwsh
+        run: |
+          $framework=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319'
+          $compiler=Join-Path $framework 'csc.exe'
+          $fixtureSource=(Resolve-Path -LiteralPath 'tests/windows/DesktopFixture.cs').Path
+          $launcherSource=(Resolve-Path -LiteralPath 'tests/windows/StartUnelevated.cs').Path
+          $fixtureExe=Join-Path $env:RUNNER_TEMP 'Perfect.DesktopFixture.exe'
+          $launcherExe=Join-Path $env:RUNNER_TEMP 'Perfect.StartUnelevated.exe'
+          & $compiler /nologo /target:winexe /platform:x64 /reference:System.Windows.Forms.dll /reference:System.Drawing.dll "/out:$fixtureExe" $fixtureSource
+          if($LASTEXITCODE -ne 0 -or -not(Test-Path -LiteralPath $fixtureExe -PathType Leaf)){throw 'Desktop fixture did not compile'}
+          & $compiler /nologo /target:exe /platform:x64 "/out:$launcherExe" $launcherSource
+          if($LASTEXITCODE -ne 0 -or -not(Test-Path -LiteralPath $launcherExe -PathType Leaf)){throw 'Fixture launcher did not compile'}
+          "PERFECT_DESKTOP_FIXTURE=$fixtureExe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PERFECT_DESKTOP_LAUNCHER=$launcherExe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Prepare pinned Inno Setup 7 with extended path support
         shell: pwsh
         run: ./scripts/prepare-installer.ps1
@@ -80,13 +95,6 @@ jobs:
       - name: Exercise native desktop guards with a synthetic local application
         shell: pwsh
         run: |
-          $framework=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319'
-          & "$framework/csc.exe" /nologo /target:winexe /platform:x64 /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /out:"$env:RUNNER_TEMP/Perfect.DesktopFixture.exe" tests/windows/DesktopFixture.cs
-          if($LASTEXITCODE -ne 0){throw 'Desktop fixture did not compile'}
-          & "$framework/csc.exe" /nologo /target:exe /platform:x64 /out:"$env:RUNNER_TEMP/Perfect.StartUnelevated.exe" tests/windows/StartUnelevated.cs
-          if($LASTEXITCODE -ne 0){throw 'Fixture launcher did not compile'}
-          $env:PERFECT_DESKTOP_FIXTURE="$env:RUNNER_TEMP/Perfect.DesktopFixture.exe"
-          $env:PERFECT_DESKTOP_LAUNCHER="$env:RUNNER_TEMP/Perfect.StartUnelevated.exe"
           node --import tsx scripts/desktop-contract-diagnose.mjs
           if($LASTEXITCODE -ne 0){throw 'Native desktop contract failed'}
       - uses: actions/upload-artifact@v4
