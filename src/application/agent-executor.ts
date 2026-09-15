@@ -1,3 +1,8 @@
+import { policyLease } from "../skills/control.js";
+import {
+  evaluationContext,
+  type EvaluationInvocation,
+} from "../skills/experiments.js";
 import { executeSkillScript } from "../skills/scripts.js";
 import { assertNativeProfile } from "../modes/capabilities.js";
 import { SkillsRegistry } from "../skills/registry.js";
@@ -36,6 +41,9 @@ import { Semaphore } from "./semaphore.js";
 import { id, now, errorText, Blocked } from "../domain/util.js";
 
 export interface Invocation {
+  evaluation?: EvaluationInvocation;
+  requestGuard?: (requestId: string, runId: string, tokens: number) => void;
+  usageObserver?: (usage: Usage) => void;
   goal: Goal;
   role: Role;
   profileId?: string;
@@ -250,7 +258,7 @@ export class AgentExecutor {
     input: Invocation,
     outerSignal: AbortSignal,
   ): Promise<{ run: AgentRun; output: AgentOutput }> {
-    const signal = AbortSignal.any([
+    let signal = AbortSignal.any([
       outerSignal,
       AbortSignal.timeout(this.config.limits.timeoutPerTask),
     ]);
@@ -295,208 +303,243 @@ export class AgentExecutor {
         runId,
         signal,
       );
-      const services = this.services(
-        input.goal,
-        input.role,
-        input.workspace,
+      const trial = input.evaluation
+        ? evaluationContext(this.store, input.evaluation, profile.profile)
+        : undefined;
+      const origin = input.evaluation
+        ? this.store.get("skillTrials", input.evaluation.trialId)!.workspace
+        : input.goal.source;
+      const revocation = policyLease(
+        this.store,
+        origin,
         signal,
-        input.leaseId,
-        input.task?.id,
-        input.evidence,
-        definition,
+        input.evaluation
+          ? () => {
+              evaluationContext(this.store, input.evaluation!, profile.profile);
+            }
+          : undefined,
       );
-      services.skillGuard = () => skillSession.guard();
-      const catalog = skillSession.list();
-      if (catalog.length)
-        services.skills = {
-          list: () => skillSession.list(),
-          load: (skillId) => skillSession.load(skillId),
-          read: (skillId, resource) => skillSession.read(skillId, resource),
-          ...(!definition.readOnly && services.command
+      signal = revocation.signal;
+      try {
+        const services = this.services(
+          input.goal,
+          input.role,
+          input.workspace,
+          signal,
+          input.leaseId,
+          input.task?.id,
+          input.evidence,
+          definition,
+        );
+        services.skillGuard = () => skillSession.guard();
+        const catalog = trial ? [] : skillSession.list();
+        if (catalog.length)
+          services.skills = {
+            list: () => skillSession.list(),
+            load: (skillId) => skillSession.load(skillId),
+            read: (skillId, resource) => skillSession.read(skillId, resource),
+            ...(!definition.readOnly && services.command
+              ? {
+                  run: (skillId: string, resource: string, args: string[]) =>
+                    executeSkillScript({
+                      goal: input.goal,
+                      workspace: input.workspace,
+                      release: skillSession.authorizedRelease(skillId),
+                      resource,
+                      args,
+                      config: this.config,
+                      runner: this.runner,
+                      signal,
+                      guard: () => skillSession.guard(),
+                    }),
+                }
+              : {}),
+          };
+        const procedures = trial
+          ? trial.procedures
+          : input.role === "planner"
+            ? ""
+            : skillSession.auto(
+                input.task
+                  ? input.task.title + " " + input.task.description
+                  : input.instruction,
+              );
+        const frozen = new SkillsRegistry(this.store).forGoal(
+          input.goal,
+          this.config,
+        );
+        const specialization = {
+          profileId: profile.profile.id,
+          setIds: [...profile.profile.setIds],
+          workMode: profile.mode.id,
+          instruction: profile.mode.instruction,
+          catalog,
+          procedures,
+          ...(input.role === "planner"
             ? {
-                run: (skillId: string, resource: string, args: string[]) =>
-                  executeSkillScript({
-                    goal: input.goal,
-                    workspace: input.workspace,
-                    release: skillSession.authorizedRelease(skillId),
-                    resource,
-                    args,
-                    config: this.config,
-                    runner: this.runner,
-                    signal,
-                    guard: () => skillSession.guard(),
-                  }),
+                availableProfiles: frozen.profiles
+                  .filter(
+                    (p) => p.enabled && profile.mode.profiles.includes(p.id),
+                  )
+                  .map((p) => ({
+                    id: p.id,
+                    role: p.role,
+                    setIds: p.setIds,
+                    readOnly: p.readOnly,
+                  })),
               }
             : {}),
         };
-      const procedures =
-        input.role === "planner"
-          ? ""
-          : skillSession.auto(
-              input.task
-                ? input.task.title + " " + input.task.description
-                : input.instruction,
-            );
-      const frozen = new SkillsRegistry(this.store).forGoal(
-        input.goal,
-        this.config,
-      );
-      const specialization = {
-        profileId: profile.profile.id,
-        setIds: [...profile.profile.setIds],
-        workMode: profile.mode.id,
-        instruction: profile.mode.instruction,
-        catalog,
-        procedures,
-        ...(input.role === "planner"
-          ? {
-              availableProfiles: frozen.profiles
-                .filter(
-                  (p) => p.enabled && profile.mode.profiles.includes(p.id),
-                )
-                .map((p) => ({
-                  id: p.id,
-                  role: p.role,
-                  setIds: p.setIds,
-                  readOnly: p.readOnly,
-                })),
-            }
-          : {}),
-      };
-      const context = await buildContext(
-        input.goal,
-        input.role,
-        input.task,
-        services,
-        this.store,
-        this.config,
-        input.evidence,
-        specialization,
-      );
-      let run: AgentRun = {
-        id: runId,
-        profileId: profile.profile.id,
-        setIds: [...profile.profile.setIds],
-        studioSnapshotId: input.goal.studioSnapshotId,
-        goalId: input.goal.id,
-        taskId: input.task?.id,
-        attempt: input.task?.attempt ?? 1,
-        agentDefinitionId: input.role,
-        status: "running",
-        routeBinding: route,
-        contextPackageId: context.id,
-        inputRevision: input.goal.candidateRevision,
-        requestIds: [],
-        usageIds: [],
-        startedAt: now(),
-      };
-      this.store.put("runs", run, "agent.started");
-      if (input.task)
-        this.store.put(
-          "attempts",
-          {
-            id: `${input.task.id}-attempt-${input.task.attempt}`,
-            goalId: input.goal.id,
-            taskId: input.task.id,
-            number: input.task.attempt,
-            runId: run.id,
-            status: "running",
-            startedAt: now(),
-          },
-          "attempt.started",
-        );
-      const budget = new BudgetManager(this.store, input.goal.id, this.config);
-      try {
-        const output = await this.runtime.run({
-          run,
-          context,
-          cwd: input.workspace,
-          sourceWorkspace: input.goal.source,
-          goalRoot: input.goal.root,
-          observeIntegration: (observation) =>
-            recordIntegrationEvidence(this.store, input.goal, run, observation),
-          controlDir: join(input.goal.root, "runs", run.id),
-          signal,
+        const context = await buildContext(
+          input.goal,
+          input.role,
+          input.task,
           services,
-          instruction: input.instruction,
-          resultSchema: input.schema,
-          parseResult: input.parse,
-          images: input.images,
-          beforeRequest: async (requestId, tokens, cost) => {
-            skillSession.guard();
-            if (
-              route.provenance !== "mock" &&
-              definition.model.includes("contributor") &&
-              !(await this.consentGranted())
-            )
-              throw new Blocked(
-                "CONTRIBUTOR_CONSENT",
-                "Workspace consent was revoked during execution",
-              );
-            budget.reserve(requestId, run.id, route, tokens, cost);
-            run = { ...run, requestIds: [...run.requestIds, requestId] };
-            this.store.put("runs", run, "agent.request_started");
-          },
-          usage: (usage: Usage) => {
-            budget.settle(usage);
-            run = { ...run, usageIds: [...run.usageIds, usage.id] };
-            this.store.put("runs", run, "agent.usage_updated");
-          },
-          event: (type, payload) =>
-            this.store.event(
-              input.goal.id,
-              type,
-              { runId: run.id, taskId: input.task?.id, details: payload },
-              input.role,
-            ),
-        });
-        signal.throwIfAborted();
-        input.parse(output.result);
-        run = {
-          ...run,
-          status: "completed",
-          endedAt: now(),
-          sessionRef: output.sessionRef,
+          this.store,
+          this.config,
+          input.evidence,
+          specialization,
+        );
+        let run: AgentRun = {
+          id: runId,
+          profileId: profile.profile.id,
+          setIds: [...profile.profile.setIds],
+          studioSnapshotId: input.goal.studioSnapshotId,
+          goalId: input.goal.id,
+          taskId: input.task?.id,
+          attempt: input.task?.attempt ?? 1,
+          agentDefinitionId: input.role,
+          status: "running",
+          routeBinding: route,
+          contextPackageId: context.id,
+          inputRevision: input.goal.candidateRevision,
+          requestIds: [],
+          usageIds: [],
+          startedAt: now(),
         };
-        this.store.put("runs", run, "agent.completed");
-        if (input.task) {
-          const attempt = this.store.get(
-            "attempts",
-            `${input.task.id}-attempt-${input.task.attempt}`,
-          )!;
-          this.store.put(
-            "attempts",
-            { ...attempt, status: "completed", endedAt: now() },
-            "attempt.completed",
-          );
-        }
-        return { run, output };
-      } catch (error) {
-        run = {
-          ...run,
-          status: signal.aborted ? "interrupted" : "failed",
-          endedAt: now(),
-          stopReason: errorText(error),
-        };
-        this.store.put("runs", run, "agent.failed");
-        if (input.task) {
-          const attempt = this.store.get(
-            "attempts",
-            `${input.task.id}-attempt-${input.task.attempt}`,
-          )!;
+        this.store.put("runs", run, "agent.started");
+        if (input.task)
           this.store.put(
             "attempts",
             {
-              ...attempt,
-              status: signal.aborted ? "interrupted" : "failed",
-              endedAt: now(),
+              id: `${input.task.id}-attempt-${input.task.attempt}`,
+              goalId: input.goal.id,
+              taskId: input.task.id,
+              number: input.task.attempt,
+              runId: run.id,
+              status: "running",
+              startedAt: now(),
             },
-            "attempt.failed",
+            "attempt.started",
           );
+        const budget = new BudgetManager(
+          this.store,
+          input.goal.id,
+          this.config,
+        );
+        try {
+          const output = await this.runtime.run({
+            toolAllowlist: trial?.tools,
+            disableIntegrations: Boolean(trial),
+            run,
+            context,
+            cwd: input.workspace,
+            sourceWorkspace: input.goal.source,
+            goalRoot: input.goal.root,
+            observeIntegration: (observation) =>
+              recordIntegrationEvidence(
+                this.store,
+                input.goal,
+                run,
+                observation,
+              ),
+            controlDir: join(input.goal.root, "runs", run.id),
+            signal,
+            services,
+            instruction: input.instruction,
+            resultSchema: input.schema,
+            parseResult: input.parse,
+            images: input.images,
+            beforeRequest: async (requestId, tokens, cost) => {
+              skillSession.guard();
+              if (
+                route.provenance !== "mock" &&
+                definition.model.includes("contributor") &&
+                !(await this.consentGranted())
+              )
+                throw new Blocked(
+                  "CONTRIBUTOR_CONSENT",
+                  "Workspace consent was revoked during execution",
+                );
+              input.requestGuard?.(requestId, run.id, tokens);
+              budget.reserve(requestId, run.id, route, tokens, cost);
+              run = { ...run, requestIds: [...run.requestIds, requestId] };
+              this.store.put("runs", run, "agent.request_started");
+            },
+            usage: (usage: Usage) => {
+              budget.settle(usage);
+              input.usageObserver?.(usage);
+              run = { ...run, usageIds: [...run.usageIds, usage.id] };
+              this.store.put("runs", run, "agent.usage_updated");
+            },
+            event: (type, payload) =>
+              this.store.event(
+                input.goal.id,
+                type,
+                { runId: run.id, taskId: input.task?.id, details: payload },
+                input.role,
+              ),
+          });
+          signal.throwIfAborted();
+          input.parse(output.result);
+          run = {
+            ...run,
+            status: "completed",
+            endedAt: now(),
+            sessionRef: output.sessionRef,
+          };
+          this.store.put("runs", run, "agent.completed");
+          if (input.task) {
+            const attempt = this.store.get(
+              "attempts",
+              `${input.task.id}-attempt-${input.task.attempt}`,
+            )!;
+            this.store.put(
+              "attempts",
+              { ...attempt, status: "completed", endedAt: now() },
+              "attempt.completed",
+            );
+          }
+          return { run, output };
+        } catch (error) {
+          run = {
+            ...run,
+            status: signal.aborted ? "interrupted" : "failed",
+            endedAt: now(),
+            stopReason: errorText(error),
+          };
+          this.store.put("runs", run, "agent.failed");
+          if (input.task) {
+            const attempt = this.store.get(
+              "attempts",
+              `${input.task.id}-attempt-${input.task.attempt}`,
+            )!;
+            this.store.put(
+              "attempts",
+              {
+                ...attempt,
+                status: signal.aborted ? "interrupted" : "failed",
+                endedAt: now(),
+              },
+              "attempt.failed",
+            );
+          }
+          throw error;
+        } finally {
+          budget.interrupt(run.id);
         }
-        throw error;
       } finally {
-        budget.interrupt(run.id);
+        revocation.close();
       }
     });
   }

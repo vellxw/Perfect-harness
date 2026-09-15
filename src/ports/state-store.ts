@@ -1,4 +1,10 @@
 import type {
+  SkillControl,
+  SkillInspection,
+  SkillDecision,
+} from "../skills/control.js";
+import type { TrialRecord, TrialOutcome } from "../skills/experiments.js";
+import type {
   StudioRecord,
   StudioSnapshot,
   SkillRelease,
@@ -42,6 +48,11 @@ export interface DependencyImage {
   createdAt: string;
 }
 export interface EntityMap {
+  skillControls: SkillControl;
+  skillInspections: SkillInspection;
+  skillDecisions: SkillDecision;
+  skillTrials: TrialRecord;
+  skillTrialOutcomes: TrialOutcome;
   studios: StudioRecord;
   studioHistory: StudioSnapshot;
   studioSnapshots: StudioSnapshot;

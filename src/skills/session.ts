@@ -1,3 +1,4 @@
+import { control, epoch, pinned, snapshotPins } from "./control.js";
 import { hash, id, now, Blocked } from "../domain/util.js";
 import type { Goal } from "../domain/model.js";
 import type { StateStore } from "../ports/state-store.js";
@@ -13,6 +14,7 @@ export class SkillSession {
   private spent = 0;
   private readonly registry: SkillsRegistry;
   private readonly initialHash: string;
+  private readonly initialEpoch: string;
   constructor(
     private readonly store: StateStore,
     private readonly goal: Goal,
@@ -23,6 +25,7 @@ export class SkillSession {
   ) {
     this.registry = new SkillsRegistry(store);
     this.initialHash = this.registry.get(goal.source, base).hash;
+    this.initialEpoch = epoch(store, goal.source);
   }
   guard(): void {
     this.signal.throwIfAborted();
@@ -38,6 +41,11 @@ export class SkillSession {
         "SKILLS_OFF",
         "Se apagaron las habilidades; reiniciá sin su contexto",
       );
+    if (epoch(this.store, this.goal.source) !== this.initialEpoch)
+      throw new Blocked(
+        "SKILL_POLICY_REVOKED",
+        "Cambió la política. Reiniciá la sesión con contexto limpio",
+      );
     for (const r of this.loaded.values())
       if (!this.allowed(r))
         throw new Blocked(
@@ -49,6 +57,12 @@ export class SkillSession {
     if (!this.registry.masterEnabled()) return false;
     const frozen = this.registry.forGoal(this.goal, this.base);
     const live = this.registry.get(this.goal.source, this.base).config;
+    if (
+      (frozen.skills.mode === "manual" || live.skills.mode === "manual") &&
+      (!pinned(snapshotPins(this.store, this.goal), r) ||
+        !pinned(control(this.store, this.goal.source).manual, r))
+    )
+      return false;
     const locked = this.goal.studioSnapshotId
       ? this.store.get("studioSnapshots", this.goal.studioSnapshotId)?.skillLock
       : undefined;
@@ -218,24 +232,36 @@ export class SkillSession {
   }
   auto(task: string): string {
     this.guard();
-    if (
-      this.registry.forGoal(this.goal, this.base).skills.mode !== "auto-curated"
-    )
-      return "";
-    const matches = this.candidates().filter((r) => matchesTask(r, task));
-    const max = this.registry.forGoal(this.goal, this.base).skills.maxActive;
-    const chosen = matches
-      .sort(
-        (a, b) =>
-          b.triggers.filter((t) => task.toLowerCase().includes(t.toLowerCase()))
-            .length -
-          a.triggers.filter((t) => task.toLowerCase().includes(t.toLowerCase()))
-            .length,
-      )
-      .slice(0, max);
-    return chosen
+    const cfg = this.registry.forGoal(this.goal, this.base);
+    if (!this.registry.masterEnabled() || cfg.skills.mode === "off") return "";
+    const available = this.candidates();
+    const explicit = available.filter(
+      (r) =>
+        pinned(snapshotPins(this.store, this.goal), r) &&
+        pinned(control(this.store, this.goal.source).manual, r),
+    );
+    if (explicit.length > cfg.skills.maxActive)
+      throw new Blocked(
+        "SKILL_ACTIVE_LIMIT",
+        "Reducí la selección de este perfil; no se omitieron skills manuales",
+      );
+    const automatic =
+      cfg.skills.mode === "auto-curated"
+        ? available.filter(
+            (r) => !explicit.some((e) => e.id === r.id) && matchesTask(r, task),
+          )
+        : [];
+    return [
+      ...explicit,
+      ...automatic.slice(0, cfg.skills.maxActive - explicit.length),
+    ]
       .map((r) =>
-        this.load(r.skillId, "Coincidencia de tarea dentro del equipo"),
+        this.load(
+          r.skillId,
+          explicit.includes(r)
+            ? "Selección manual del usuario"
+            : "Coincidencia de tarea dentro del equipo",
+        ),
       )
       .join("\n\n");
   }

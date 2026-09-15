@@ -1,3 +1,4 @@
+import type { SkillPin } from "./control.js";
 import { z } from "zod";
 import { RoleSchema, ReasoningSchema, type Role } from "../domain/model.js";
 
@@ -161,6 +162,7 @@ export interface StudioRecord {
   updatedAt: string;
 }
 export interface StudioSnapshot {
+  skillManual?: SkillPin[];
   skillLock?: SkillLock;
   id: string;
   goalId: string;

@@ -52,12 +52,17 @@ export class SqliteStore implements StateStore {
     const version = this.db
       .prepare("SELECT MAX(version) AS version FROM migrations")
       .get() as { version: number | null };
-    if ((version.version ?? 0) > 2) {
+    if ((version.version ?? 0) > 3) {
       this.db.close();
       throw new Blocked(
         "DATABASE_VERSION",
         "Database belongs to a newer harness; refusing downgrade",
       );
+    }
+    if (version.version === 2 && path !== ":memory:") {
+      const backup = resolve(path) + ".before-v4-complete.sqlite";
+      if (!existsSync(backup)) this.db.prepare("VACUUM INTO ?").run(backup);
+      chmodSync(backup, 0o600);
     }
     if (version.version === 1 && path !== ":memory:") {
       const backup = resolve(path) + ".before-v4.sqlite";
@@ -66,6 +71,7 @@ export class SqliteStore implements StateStore {
     }
     this.db.prepare("INSERT OR IGNORE INTO migrations VALUES(1,?)").run(now());
     this.db.prepare("INSERT OR IGNORE INTO migrations VALUES(2,?)").run(now());
+    this.db.prepare("INSERT OR IGNORE INTO migrations VALUES(3,?)").run(now());
     if (path !== ":memory:") chmodSync(path, 0o600);
   }
   get<K extends Collection>(
@@ -149,6 +155,9 @@ export class SqliteStore implements StateStore {
           "skillReleases",
           "skillActivations",
           "skillEvaluations",
+          "skillInspections",
+          "skillDecisions",
+          "skillTrialOutcomes",
         ].includes(kind) &&
         existing &&
         JSON.stringify(existing) !== JSON.stringify(value)

@@ -1,3 +1,4 @@
+import { TrialSpecSchema } from "./experiments.js";
 import { z } from "zod";
 import {
   AssignmentSchema,
@@ -12,6 +13,57 @@ import { GithubSkillSchema } from "./remote.js";
 
 const revision = { expectedHash: Sha256 };
 export const StudioActionSchema = z.discriminatedUnion("command", [
+  z
+    .object({
+      command: z.literal("manual-select"),
+      releaseId: z.string(),
+      hash: Sha256,
+      selected: z.boolean(),
+      expectedEpoch: z.number().int().nonnegative(),
+      pins: z.array(
+        z
+          .object({ skillId: Key, releaseId: z.string(), hash: Sha256 })
+          .strict(),
+      ),
+      confirmation: z.literal("SELECCIONAR"),
+    })
+    .strict(),
+  z
+    .object({
+      command: z.literal("collect-draft"),
+      goalId: z.string(),
+      folder: z.string(),
+      setIds: z.array(Key).min(1),
+      license: z.string(),
+      triggers: z.array(z.string()).max(30),
+      confirmation: z.literal("RECOPILAR"),
+    })
+    .strict(),
+  z
+    .object({ command: z.literal("trial-propose"), spec: TrialSpecSchema })
+    .strict(),
+  z
+    .object({
+      command: z.literal("trial-authorize"),
+      trialId: z.string(),
+      specHash: Sha256,
+      inspectionIds: z.array(z.string()),
+      confirmation: z.literal("EVALUAR"),
+    })
+    .strict(),
+  z
+    .object({
+      command: z.literal("trial-run"),
+      trialId: z.string(),
+      confirmation: z.literal("EJECUTAR"),
+    })
+    .strict(),
+  z
+    .object({ command: z.literal("trial-cancel"), trialId: z.string() })
+    .strict(),
+  z
+    .object({ command: z.literal("trial-report"), trialId: z.string() })
+    .strict(),
   z
     .object({
       command: z.literal("refresh-bundled"),

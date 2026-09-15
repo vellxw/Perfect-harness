@@ -47,6 +47,8 @@ export interface AgentServices {
   research?(url: string): Promise<string>;
 }
 export interface AgentRequest {
+  toolAllowlist?: string[];
+  disableIntegrations?: boolean;
   sourceWorkspace?: string;
   goalRoot?: string;
   observeIntegration?: (observation: IntegrationObservation) => Promise<void>;

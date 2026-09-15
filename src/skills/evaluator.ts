@@ -173,7 +173,7 @@ export function compareBehavior(
       );
     checks.push({
       name: caseId,
-      passed: !a.passed || b.passed,
+      passed: b.passed,
       detail: `Sin skill: ${a.passed}; con skill: ${b.passed}. Evidencia ${a.outputHash}/${b.outputHash}.`,
     });
   }

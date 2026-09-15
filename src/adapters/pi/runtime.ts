@@ -146,11 +146,9 @@ export class PiRuntime implements AgentRuntime {
     };
   }
   async run(request: AgentRequest): Promise<AgentOutput> {
-    const integrations = await AgentIntegrations.create(
-      this.home,
-      this.config,
-      request,
-    );
+    const integrations = request.disableIntegrations
+      ? undefined
+      : await AgentIntegrations.create(this.home, this.config, request);
     try {
       return await this.runWithIntegrations(request, integrations);
     } finally {
@@ -291,7 +289,9 @@ export class PiRuntime implements AgentRuntime {
     const tools = buildTools(request, guard, (value) => {
       result = value;
       submitted = true;
-    });
+    }).filter(
+      (t) => !request.toolAllowlist || request.toolAllowlist.includes(t.name),
+    );
     if (integrations)
       tools.push(
         ...integrationTools(integrations, guard, (error) => {

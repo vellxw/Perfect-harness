@@ -1,3 +1,4 @@
+import { invalidateSkills, control } from "./control.js";
 import type { StateStore } from "../ports/state-store.js";
 import type { PerfectConfig } from "../config/schema.js";
 import type { Goal } from "../domain/model.js";
@@ -80,6 +81,7 @@ export class SkillsRegistry {
         "skills.master_changed",
         "user",
       );
+      invalidateSkills(this.store);
       if (!enabled) this.pauseAffected();
     });
   }
@@ -126,6 +128,7 @@ export class SkillsRegistry {
     });
   }
   private pauseAffected(workspace?: string): void {
+    invalidateSkills(this.store, workspace);
     for (const goal of this.store.list("goals"))
       if (
         (!workspace || goal.source === workspace) &&
@@ -155,6 +158,7 @@ export class SkillsRegistry {
       hash: hash(selectedConfig),
       revision: record.revision,
       skillLock: this.lock(goal.source),
+      skillManual: structuredClone(control(this.store, goal.source).manual),
       createdAt: now(),
     };
     this.store.put("studioSnapshots", result, "studio.snapshot_created");
@@ -233,6 +237,18 @@ export class SkillsRegistry {
     if (release.provenance.redistribution === "unknown")
       throw new Blocked("SKILL_LICENSE", "Falta autorización de reutilización");
     for (const path of Object.keys(release.files)) releaseBytes(release, path);
+    const decision = this.store.get("skillDecisions", reviewer);
+    if (
+      !decision ||
+      decision.workspace !== workspace ||
+      decision.releaseId !== releaseId ||
+      decision.hash !== expectedHash ||
+      decision.action !== "approve"
+    )
+      throw new Blocked(
+        "SKILL_USER_DECISION",
+        "Se requiere una aprobación real del usuario ligada a la inspección de esta versión",
+      );
     const key = studioId(workspace);
     this.store.put(
       "skillSelections",
@@ -265,7 +281,7 @@ export class SkillsRegistry {
             releaseId: r.id,
             hash: r.hash,
             source: r.provenance.source,
-            commit: r.provenance.commit,
+            ...(r.provenance.commit ? { commit: r.provenance.commit } : {}),
             license: r.provenance.license,
             redistribution: r.provenance.redistribution,
           };

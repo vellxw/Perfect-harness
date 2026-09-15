@@ -1,3 +1,19 @@
+import {
+  control,
+  selectManual,
+  selectionClosure,
+  inspectReceipt,
+  userDecision,
+} from "./control.js";
+import { collectDraft } from "./creator.js";
+import {
+  proposeTrial,
+  authorizeTrial,
+  runTrial,
+  verifiedTrialReport,
+  trialReport,
+} from "./experiments.js";
+import { PreparedDockerRunner } from "../adapters/sandbox/prepared-runner.js";
 import { builtinSkills } from "./library.js";
 import { studioCapabilities } from "../modes/capabilities.js";
 import { mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
@@ -17,6 +33,8 @@ import { skillAccess } from "./policy.js";
 import { skillCandidates } from "./library.js";
 
 export interface StudioPanelSnapshot {
+  control: ReturnType<typeof control>;
+  trials: ReturnType<typeof trialReport>[];
   workspace: string;
   masterEnabled: boolean;
   revision: number;
@@ -31,6 +49,8 @@ export interface StudioPanelSnapshot {
     hash: string;
     enabled: boolean;
     reviewed: boolean;
+    inspectionId?: string;
+    pins: ReturnType<typeof selectionClosure>;
     license: string;
     redistribution: string;
     defaultSets: string[];
@@ -48,6 +68,16 @@ export interface StudioPanelSnapshot {
 }
 export class StudioAdmin {
   readonly registry: SkillsRegistry;
+  private executions = new Map<
+    string,
+    { abort: AbortController; promise: Promise<unknown> }
+  >();
+  async close(): Promise<void> {
+    for (const x of this.executions.values()) x.abort.abort();
+    await Promise.allSettled(
+      [...this.executions.values()].map((x) => x.promise),
+    );
+  }
   constructor(
     readonly store: StateStore,
     readonly home: string,
@@ -76,6 +106,10 @@ export class StudioAdmin {
     );
     return {
       workspace,
+      control: control(this.store, workspace),
+      trials: this.store
+        .list("skillTrials", studioId(workspace))
+        .map((t) => trialReport(this.store, t.id)),
       masterEnabled: this.registry.masterEnabled(),
       revision: record.revision,
       hash: record.hash,
@@ -91,6 +125,17 @@ export class StudioAdmin {
           hash: r.hash,
           enabled: s?.enabled ?? false,
           reviewed: s?.reviewedHash === r.hash,
+          inspectionId: this.store
+            .list("skillInspections", studioId(workspace))
+            .filter((i) => i.releaseId === r.id && i.hash === r.hash)
+            .at(-1)?.id,
+          pins: (() => {
+            try {
+              return selectionClosure(this.store, workspace, r.id);
+            } catch {
+              return [];
+            }
+          })(),
           license: r.provenance.license,
           redistribution: r.provenance.redistribution,
           defaultSets: r.defaultSets,
@@ -201,6 +246,113 @@ export class StudioAdmin {
       };
     };
     switch (action.command) {
+      case "manual-select":
+        selectManual(
+          this.store,
+          workspace,
+          base,
+          action.releaseId,
+          action.hash,
+          action.selected,
+          action.expectedEpoch,
+          action.pins,
+        );
+        await this.writeLock(workspace);
+        return {
+          message:
+            "Selección manual guardada por hash. Las sesiones activas deben reiniciarse sin perder el trabajo.",
+        };
+      case "collect-draft": {
+        const result = await collectDraft({
+          ...action,
+          store: this.store,
+          base,
+          workspace,
+        });
+        return {
+          message: result.message,
+          content: JSON.stringify(result, null, 2),
+        };
+      }
+      case "trial-propose": {
+        const result = proposeTrial(this.store, workspace, base, action.spec);
+        return {
+          message:
+            "Contrato propuesto, sin inferencias. Revisá casos, versión y límites antes de autorizar.",
+          content: JSON.stringify(result, null, 2),
+        };
+      }
+      case "trial-authorize": {
+        const result = authorizeTrial(
+          this.store,
+          action.trialId,
+          action.specHash,
+          workspace,
+          action.inspectionIds,
+          action.confirmation,
+        );
+        return {
+          message:
+            "Evaluación autorizada, sin aprobar el paquete para producción. Ejecutar consume la cuota indicada.",
+          content: JSON.stringify(result, null, 2),
+        };
+      }
+      case "trial-run": {
+        const t = this.store.get("skillTrials", action.trialId);
+        if (!t || t.workspace !== workspace)
+          throw new Blocked("EVAL_WORKSPACE", "Evaluación ajena");
+        if (this.executions.size)
+          throw new Blocked("EVAL_BUSY", "Ya hay una evaluación activa");
+        const abort = new AbortController();
+        const promise = runTrial({
+          store: this.store,
+          home: this.home,
+          base,
+          runtime: new PiRuntime(this.home, base),
+          runner: new PreparedDockerRunner(
+            base,
+            this.store,
+            join(this.home, "sandbox"),
+          ),
+          trialId: t.id,
+          signal: AbortSignal.any([signal, abort.signal]),
+        });
+        this.executions.set(t.id, { abort, promise });
+        try {
+          return {
+            message:
+              "Evaluación terminada. No se aprueba ni activa la skill automáticamente.",
+            content: JSON.stringify(await promise, null, 2),
+          };
+        } finally {
+          this.executions.delete(t.id);
+        }
+      }
+      case "trial-cancel": {
+        const t = this.store.get("skillTrials", action.trialId);
+        if (!t || t.workspace !== workspace)
+          throw new Blocked("EVAL_WORKSPACE", "Evaluación ajena");
+        this.store.put(
+          "skillTrials",
+          { ...t, status: "cancelled" },
+          "skill.trial_cancelled",
+          "user",
+        );
+        this.executions.get(t.id)?.abort.abort();
+        return {
+          message:
+            "Cancelación solicitada. Se preservan evidencia, cuotas e intentos.",
+        };
+      }
+      case "trial-report":
+        return {
+          message: "Comparación con evidencia del controlador",
+          content: JSON.stringify(
+            await verifiedTrialReport(this.store, workspace, action.trialId),
+            null,
+            2,
+          ),
+        };
       case "refresh-bundled": {
         for (const release of builtinSkills()) {
           if (!this.store.get("skillReleases", release.id))
@@ -375,6 +527,7 @@ export class StudioAdmin {
       }
       case "inspect": {
         const release = this.scopedRelease(workspace, action.releaseId, base);
+        inspectReceipt(this.store, workspace, release);
         return {
           message: "Revisión de la versión exacta",
           content: JSON.stringify(
@@ -467,7 +620,28 @@ export class StudioAdmin {
             "SKILL_STRUCTURE",
             "La estructura/licencia requiere correcciones antes de aprobar",
           );
-        this.registry.approve(workspace, action.releaseId, action.hash, "user");
+        const inspection = this.store
+          .list("skillInspections", studioId(workspace))
+          .filter((i) => i.releaseId === release.id && i.hash === release.hash)
+          .at(-1);
+        if (!inspection)
+          throw new Blocked(
+            "SKILL_INSPECT_FIRST",
+            "Inspeccioná el contenido de esta versión primero",
+          );
+        const decision = userDecision(
+          this.store,
+          workspace,
+          release,
+          "approve",
+          inspection.id,
+        );
+        this.registry.approve(
+          workspace,
+          action.releaseId,
+          action.hash,
+          decision.id,
+        );
         await this.writeLock(workspace);
         return {
           message:
