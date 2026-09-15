@@ -1,18 +1,13 @@
 name: Perfect Desktop V5 Goal Loop
 on:
-  push:
-    branches: [feat/perfect-desktop-v5]
-    paths:
-      - 'src/**'
-      - 'scripts/desktop/**'
-      - '.github/workflows/v5-goal-loop.yml'
-      - 'package*.json'
   pull_request:
     branches: [main]
+  workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 concurrency:
-  group: v5-goal-loop-${{ github.ref }}
+  group: v5-goal-loop-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   goal-loop:
@@ -21,14 +16,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '26.4.0'
+      - run: node --check scripts/desktop/goal-loop-e2e.mjs
       - run: npm ci
       - run: node node_modules/electron/install.js
       - run: npm run build:desktop
-      - name: Prepare exact public sandbox images from an empty runner cache
+      - name: Prepare public sandbox images from an empty runner cache
         run: |
           docker pull node:24-bookworm-slim
           docker pull mcr.microsoft.com/playwright:v1.63.0-noble
