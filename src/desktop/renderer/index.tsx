@@ -2,11 +2,113 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { connect, useDesktop, act, request } from "./store.js";
-import './theme.css';
-function App(){
- const s=useDesktop(),[value,setValue]=useState(''),[error,setError]=useState(''),[pending,setPending]=useState(false);
- useEffect(()=>{void connect();},[]);
- const submit=async()=>{setPending(true);setError('');try{await act({type:'goal',description:value,public:false});setValue('');}catch(e){setError(String(e));}finally{setPending(false);}};
- return <div className="shell"><header><div className="brand"><img src="assets/perfect-symbol.svg" alt=""/><strong>Perfect</strong><span className="version">Desktop</span></div><button onClick={()=>void request('choose-workspace').catch(e=>setError(String(e)))}>Abrir carpeta</button></header><main><section className="intro"><span className="eyebrow">TU ESPACIO PARA CONSTRUIR</span><h1>Una idea. Todo un equipo.</h1><p>Describí el resultado. Perfect coordina, construye y verifica.</p></section><div className="connection"><i className={s.connected?'online':'waiting'}/>{s.connected?'Motor conectado':'Conectando con el motor local…'}<span>{s.snapshot?.workspaceName??''}</span></div>{s.snapshot?.goal&&<section className="goal"><span className="eyebrow">OBJETIVO ACTUAL</span><h2>{s.snapshot.goal.request}</h2><p>{s.snapshot.goal.state} · Iteración {s.snapshot.goal.iteration}/{s.snapshot.goal.maxIterations}</p><p>{s.snapshot.goal.reason}</p></section>}<section className="activity">{s.snapshot?.activity.slice(-12).map(item=><article key={item.id}><span className="status-dot"/><div><strong>{item.title}</strong><p>{item.detail}</p></div></article>)}</section><div role="alert" className="error">{error||s.error}</div><div className="composer"><textarea aria-label="¿Qué querés construir?" placeholder="¿Qué querés construir?" value={value} onChange={e=>setValue(e.target.value)}/><div className="composer-bottom"><span>Proyecto privado · Motor V4</span><button className="primary" disabled={!s.connected||!value.trim()||pending} onClick={()=>void submit()}>{pending?'Enviando…':'Construir ↗'}</button></div></div><footer><span>{s.snapshot?.version??'0.5.0'} · Sin credenciales en la interfaz</span><button onClick={()=>void act({type:'doctor',online:false}).catch(e=>setError(String(e)))}>Diagnóstico</button></footer></main></div>;
+import "./theme.css";
+function App() {
+  const s = useDesktop(),
+    [value, setValue] = useState(""),
+    [error, setError] = useState(""),
+    [pending, setPending] = useState(false);
+  useEffect(() => {
+    void connect();
+  }, []);
+  const submit = async () => {
+    setPending(true);
+    setError("");
+    try {
+      await act({ type: "goal", description: value, public: false });
+      setValue("");
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setPending(false);
+    }
+  };
+  return (
+    <div className="shell">
+      <header>
+        <div className="brand">
+          <img src="assets/perfect-symbol.svg" alt="" />
+          <strong>Perfect</strong>
+          <span className="version">Desktop</span>
+        </div>
+        <button
+          onClick={() =>
+            void request("choose-workspace").catch((e) => setError(String(e)))
+          }
+        >
+          Abrir carpeta
+        </button>
+      </header>
+      <main>
+        <section className="intro">
+          <span className="eyebrow">TU ESPACIO PARA CONSTRUIR</span>
+          <h1>Una idea. Todo un equipo.</h1>
+          <p>Describí el resultado. Perfect coordina, construye y verifica.</p>
+        </section>
+        <div className="connection">
+          <i className={s.connected ? "online" : "waiting"} />
+          {s.connected ? "Motor conectado" : "Conectando con el motor local…"}
+          <span>{s.snapshot?.workspaceName ?? ""}</span>
+        </div>
+        {s.snapshot?.goal && (
+          <section className="goal">
+            <span className="eyebrow">OBJETIVO ACTUAL</span>
+            <h2>{s.snapshot.goal.request}</h2>
+            <p>
+              {s.snapshot.goal.state} · Iteración {s.snapshot.goal.iteration}/
+              {s.snapshot.goal.maxIterations}
+            </p>
+            <p>{s.snapshot.goal.reason}</p>
+          </section>
+        )}
+        <section className="activity">
+          {s.snapshot?.activity.slice(-12).map((item) => (
+            <article key={item.id}>
+              <span className="status-dot" />
+              <div>
+                <strong>{item.title}</strong>
+                <p>{item.detail}</p>
+              </div>
+            </article>
+          ))}
+        </section>
+        <div role="alert" className="error">
+          {error || s.error}
+        </div>
+        <div className="composer">
+          <textarea
+            aria-label="¿Qué querés construir?"
+            placeholder="¿Qué querés construir?"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          />
+          <div className="composer-bottom">
+            <span>Proyecto privado · Motor V4</span>
+            <button
+              className="primary"
+              disabled={!s.connected || !value.trim() || pending}
+              onClick={() => void submit()}
+            >
+              {pending ? "Enviando…" : "Construir ↗"}
+            </button>
+          </div>
+        </div>
+        <footer>
+          <span>
+            {s.snapshot?.version ?? "0.5.0"} · Sin credenciales en la interfaz
+          </span>
+          <button
+            onClick={() =>
+              void act({ type: "doctor", online: false }).catch((e) =>
+                setError(String(e)),
+              )
+            }
+          >
+            Diagnóstico
+          </button>
+        </footer>
+      </main>
+    </div>
+  );
 }
-createRoot(document.getElementById('root')!).render(<App/>);
+createRoot(document.getElementById("root")!).render(<App />);
