@@ -2,7 +2,7 @@ name: V4 completion source gate (temporary)
 on:
   push:
     branches: [feat/perfect-harness-v4-skills-studios]
-    paths: [scripts/v4-finish-source.mjs, .github/workflows/v4-completion-source.yml]
+    paths: [scripts/v4-finish-source.mjs, scripts/v4-source-preflight.mjs, .github/workflows/v4-completion-source.yml]
 permissions:
   contents: write
 concurrency:
@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: '26.4.0'
       - run: npm ci
-      - run: node scripts/v4-finish-source.mjs
+      - run: node scripts/v4-source-preflight.mjs
         env:
           GH_TOKEN: ${{ github.token }}
       - run: npm install --save-exact --ignore-scripts three@0.180.0
