@@ -13,7 +13,6 @@ $electronOut = Join-Path $release 'electron-staging'
 $payload = Join-Path $release 'Perfect-Harness-Windows-x64'
 Remove-Item $electronOut,$payload -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory $release -Force | Out-Null
-
 & (Join-Path $root 'scripts\prepare-desktop.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'Native Windows integration preparation failed' }
 node scripts/build-brand.mjs
@@ -28,7 +27,6 @@ $packed = Join-Path $electronOut 'Perfect-win32-x64'
 if (-not (Test-Path (Join-Path $packed 'Perfect.exe') -PathType Leaf)) { throw 'Packaged GUI executable missing' }
 Move-Item $packed $payload
 Remove-Item $electronOut -Recurse -Force
-
 $engine = Join-Path $payload 'resources\engine'
 New-Item -ItemType Directory "$engine\runtime","$engine\assets\windows" -Force | Out-Null
 $nodeExecutable = (Get-Command node).Source
@@ -49,11 +47,9 @@ try {
   npm ci --omit=dev --ignore-scripts
   if ($LASTEXITCODE -ne 0) { throw 'Engine production dependency install failed' }
 } finally { Pop-Location }
-
+node scripts/desktop/write-cli.mjs $payload
+if ($LASTEXITCODE -ne 0) { throw 'Isolated CLI launcher preparation failed' }
 $bin = Join-Path $payload 'bin'
-New-Item -ItemType Directory $bin -Force | Out-Null
-$cli = @('@echo off','"%~dp0..\resources\engine\runtime\node.exe" "%~dp0..\resources\engine\dist\cli\index.js" %*','exit /b %errorlevel%','') -join "`r`n"
-[IO.File]::WriteAllText((Join-Path $bin 'perfect.cmd'),$cli,[Text.Encoding]::ASCII)
 node scripts/desktop/harden-electron.mjs (Join-Path $payload 'Perfect.exe') (Join-Path $payload 'electron-fuses.json')
 if ($LASTEXITCODE -ne 0) { throw 'Electron fuse hardening failed' }
 $oldPath = $env:PATH
@@ -64,7 +60,6 @@ try {
   $nodeVersion = & "$engine\runtime\node.exe" --version
   if ($nodeVersion.Trim() -ne 'v26.4.0') { throw "Unexpected bundled engine runtime: $nodeVersion" }
 } finally { $env:PATH = $oldPath }
-
 $sourceCommit = (git rev-parse HEAD).Trim()
 $engineIdentity = Get-Content "$engine\dist\build-info.json" -Raw | ConvertFrom-Json
 $desktopIdentity = Get-Content 'desktop/build-info.json' -Raw | ConvertFrom-Json
@@ -75,6 +70,8 @@ $files = Get-ChildItem $payload -Recurse -File | Sort-Object FullName | ForEach-
   @{path=[IO.Path]::GetRelativePath($payload,$_.FullName).Replace('\','/');sha256=(Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant();bytes=$_.Length}
 }
 @{schemaVersion=1;version=$version;sourceCommit=$sourceCommit;files=$files} | ConvertTo-Json -Depth 6 | Set-Content "$payload\package-integrity.json" -Encoding utf8NoBOM
+node scripts/desktop/check-windows-package.mjs $payload $sourceCommit 'test-results/desktop/package-byte-check.json'
+if ($LASTEXITCODE -ne 0) { throw 'Packaged files/fuses/source validation failed' }
 $zip = Join-Path $release 'Perfect-Harness-Windows-x64.zip'
 Remove-Item $zip -Force -ErrorAction SilentlyContinue
 Compress-Archive -Path $payload -DestinationPath $zip -CompressionLevel Optimal
