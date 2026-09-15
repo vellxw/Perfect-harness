@@ -4,8 +4,10 @@ const root=await mkdtemp(join(tmpdir(),'perfect-desktop-gate-')),workspace=join(
 const args=[resolve('desktop'),'--home',home,'--workspace',workspace];
 const app=await electron.launch({args,timeout:30000});const page=await app.firstWindow();const errors=[],consoleErrors=[];page.on('pageerror',e=>errors.push(String(e)));page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text());});
 try{
- await page.waitForFunction(async()=>Boolean(window.perfect&&(await window.perfect.boot()).connected),{},{timeout:30000});
- assert.match(await page.locator('.connection').innerText(),/Motor conectado/);
+ const deadline=Date.now()+30000;let boot;
+ do{boot=await page.evaluate(()=>window.perfect?.boot());if(boot?.connected)break;await new Promise(r=>setTimeout(r,100));}while(Date.now()<deadline);
+ assert.equal(boot?.connected,true,'The real Node engine must complete its handshake');
+ await page.locator('.connection').filter({hasText:'Motor conectado'}).waitFor({timeout:10000});
  await page.getByRole('textbox',{name:'¿Qué querés construir?'}).fill('Crear un saludo local probado');
  await page.getByRole('button',{name:'Construir ↗'}).click();
  await page.getByText('PAUSED',{exact:false}).waitFor({timeout:30000});
