@@ -29,6 +29,11 @@ if(!goalTarget)throw Error('Missing reference IDs goal insertion');
 const goalAnchor='      await execute({ type: "goal", description: value, public: isPublic });';
 const goalInsertion='      await execute({ type: "goal", description: value, public: isPublic, referenceIds });';
 source=source.replace(goalTarget,`change('src/desktop/renderer/index.tsx',${JSON.stringify(goalAnchor)},${JSON.stringify(goalInsertion)});`);
+const copyTarget=source.split('\n').find(line=>line.startsWith("change('src/desktop/renderer/index.tsx','No se publica ni se aplica código sin autorización'"));
+if(!copyTarget)throw Error('Missing composer authorization copy insertion');
+const copyAnchor='No se publica ni se aplica código sin\n          autorización';
+const copyInsertion='Las referencias seleccionadas se importan con la privacidad indicada. No se aplica código sin\n          autorización';
+source=source.replace(copyTarget,`change('src/desktop/renderer/index.tsx',${JSON.stringify(copyAnchor)},${JSON.stringify(copyInsertion)});`);
 try {
   fs.writeFileSync(filename,source);
   await import('./connect-production.mjs');
