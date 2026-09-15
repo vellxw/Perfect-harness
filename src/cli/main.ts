@@ -1,3 +1,4 @@
+import { registerSkillStudio } from "./skill-studio.js";
 import { registerUnityCommands } from "./unity.js";
 import { registerSkills } from "./skills.js";
 import { Command, CommanderError } from "commander";
@@ -53,7 +54,11 @@ export async function main(
     .description(
       "Orquestación local de agentes de programación con evidencia y Pi SDK",
     )
-    .version("0.3.0")
+    .version(
+      JSON.parse(
+        await readFile(new URL("../../package.json", import.meta.url), "utf8"),
+      ).version,
+    )
     .option("--home <directory>", "Carpeta local de estado y cuentas")
     .option(
       "--workspace <directory>",
@@ -110,6 +115,7 @@ export async function main(
       exitCode = goalExit(finished);
     });
   registerSkills(program, context);
+  registerSkillStudio(program, context);
   registerUnityCommands(program, context);
   registerIntegrations(program, globals);
   registerPrepare(program, context);

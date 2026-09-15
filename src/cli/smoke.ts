@@ -1,3 +1,6 @@
+import type { AgentProfile, StudioConfig } from "../skills/model.js";
+import { SkillsRegistry } from "../skills/registry.js";
+import { hash } from "../domain/util.js";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { deflateSync } from "node:zlib";
@@ -73,6 +76,8 @@ export async function providerSmoke(input: {
   config: PerfectConfig;
   store: StateStore;
   roles?: Role[];
+  profile?: AgentProfile;
+  studioConfig?: StudioConfig;
   contributorConsent?: boolean;
   signal: AbortSignal;
 }): Promise<{ goalId: string; report: string; checks: SmokeCheck[] }> {
@@ -91,6 +96,19 @@ export async function providerSmoke(input: {
     },
     input.store,
   );
+  if (input.profile && input.studioConfig) {
+    const registry = new SkillsRegistry(input.store),
+      record = registry.get(goal.source, input.config),
+      cfg = structuredClone(input.studioConfig);
+    cfg.skills.mode = "off";
+    input.store.put(
+      "studios",
+      { ...record, config: cfg, hash: hash(cfg) },
+      "smoke.profile_snapshot_created",
+    );
+    goal.studioSnapshotId = registry.snapshot(goal, input.config).id;
+    input.store.put("goals", goal, "smoke.profile_bound");
+  }
   const runtime = new PiRuntime(input.home, input.config),
     runner = new PreparedDockerRunner(
       input.config,
@@ -113,27 +131,35 @@ export async function providerSmoke(input: {
     "oracle",
   ]) {
     try {
+      const visual = (
+        input.profile?.binding.capabilities ??
+        input.config.agents[role].capabilities
+      ).includes("image");
       const result = await executor.invoke(
         {
           goal: input.store.get("goals", goal.id)!,
           role,
+          profileId: input.profile?.id,
           workspace: source,
-          instruction:
-            "Connectivity smoke test only. Call list_files once. Identify the solid color in each of the two attached images, in order, and submit the JSON result. Do not modify files.",
+          instruction: visual
+            ? "Connectivity smoke test only. Call list_files once. Identify the solid color in each of the two attached images, in order, and submit the JSON result. Do not modify files."
+            : "Connectivity smoke only. Call list_files once, then submit ok true, firstColor blue, secondColor red, and a summary. No images were sent; do not claim visual verification.",
           schema: z.toJSONSchema(SmokeSchema),
           parse: (value) => SmokeSchema.parse(value),
-          images: [
-            {
-              data: colorPng([0, 0, 255]),
-              mimeType: "image/png",
-              source: "image-1",
-            },
-            {
-              data: colorPng([255, 0, 0]),
-              mimeType: "image/png",
-              source: "image-2",
-            },
-          ],
+          images: visual
+            ? [
+                {
+                  data: colorPng([0, 0, 255]),
+                  mimeType: "image/png",
+                  source: "image-1",
+                },
+                {
+                  data: colorPng([255, 0, 0]),
+                  mimeType: "image/png",
+                  source: "image-2",
+                },
+              ]
+            : undefined,
         },
         input.signal,
       );
@@ -161,8 +187,9 @@ export async function providerSmoke(input: {
       checks.push({
         role,
         status: "PASS",
-        detail:
-          "Inferencia real, respuesta estructurada, herramienta observada y prueba de imagen aprobadas. Los metadatos no informados siguen siendo desconocidos.",
+        detail: visual
+          ? "Inferencia real, respuesta estructurada, herramienta observada y prueba de imagen aprobadas. Los metadatos no informados siguen siendo desconocidos."
+          : "Inferencia real y herramienta observada. El perfil no usa imágenes; no se comprobó visión. Los metadatos ausentes permanecen desconocidos.",
         model: result.run.routeBinding.model,
         provider: result.run.routeBinding.provider,
         reasoningSent: last?.reasoningSent,

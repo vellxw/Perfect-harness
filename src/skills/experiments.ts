@@ -111,6 +111,7 @@ export type TrialSpec = z.infer<typeof TrialSpecSchema>;
 export type TrialCase = z.infer<typeof TrialCaseSchema>;
 export type TrialCondition = "baseline" | "candidate";
 export interface TrialRecord {
+  activeMs?: number;
   id: string;
   goalId: string;
   workspace: string;
@@ -592,9 +593,16 @@ export async function runTrial(input: {
     store.put("skillTrials", claimed, "skill.trial_started");
     return claimed;
   });
+  const remainingMs = trial.spec.timeoutMs - (trial.activeMs ?? 0);
+  if (remainingMs <= 0)
+    throw new Blocked(
+      "EVAL_TIMEOUT",
+      "Presupuesto temporal agotado; no se reinicia al reanudar",
+    );
+  const activeStart = performance.now();
   const deadline = AbortSignal.any([
       input.signal,
-      AbortSignal.timeout(trial.spec.timeoutMs),
+      AbortSignal.timeout(remainingMs),
     ]),
     cancel = new AbortController(),
     signal = AbortSignal.any([deadline, cancel.signal]);
@@ -881,7 +889,10 @@ export async function runTrial(input: {
               "skill.eval_finished",
             );
           } finally {
-            if (lease) owner.release(lease.id);
+            if (lease) {
+              await input.runner.recover(goal.id);
+              owner.release(lease.id);
+            }
           }
         }
     const live = store.get("skillTrials", trial.id)!;
@@ -907,6 +918,15 @@ export async function runTrial(input: {
     throw error;
   } finally {
     clearInterval(timer);
+    const final = store.get("skillTrials", trial.id)!;
+    store.put(
+      "skillTrials",
+      {
+        ...final,
+        activeMs: (final.activeMs ?? 0) + (performance.now() - activeStart),
+      },
+      "skill.trial_time_recorded",
+    );
   }
   const report = trialReport(store, trial.id);
   await writeFile(join(root, "report.json"), JSON.stringify(report, null, 2), {

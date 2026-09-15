@@ -281,7 +281,11 @@ export class PresentationEngine {
           break;
         }
         case "studio": {
-          if (action.action.command === "trial-run") {
+          if (
+            ["trial-run", "validation-profile", "validation-blender"].includes(
+              action.action.command,
+            )
+          ) {
             this.idle();
             const configuration = await ctx.config();
             this.studioTask = this.studios
@@ -318,7 +322,7 @@ export class PresentationEngine {
                 this.publish();
               });
             message =
-              "Evaluación iniciada. /evaluaciones permite ver progreso o cancelar sin bloquear la interfaz.";
+              "Prueba iniciada sin bloquear la interfaz. /evaluaciones y /validacion muestran progreso, evidencia y cancelación.";
             break;
           }
           const result = await this.studios.perform(

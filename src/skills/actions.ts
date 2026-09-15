@@ -13,6 +13,30 @@ import { GithubSkillSchema } from "./remote.js";
 
 const revision = { expectedHash: Sha256 };
 export const StudioActionSchema = z.discriminatedUnion("command", [
+  z.object({ command: z.literal("validation-check") }).strict(),
+  z.object({ command: z.literal("validation-export") }).strict(),
+  z.object({ command: z.literal("validation-cancel") }).strict(),
+  z
+    .object({
+      command: z.literal("validation-profile"),
+      profileId: Key,
+      contributorConsent: z.boolean().default(false),
+      confirmation: z.literal("PROBAR"),
+    })
+    .strict(),
+  z
+    .object({
+      command: z.literal("validation-blender"),
+      confirmation: z.literal("RENDERIZAR"),
+    })
+    .strict(),
+  z
+    .object({
+      command: z.literal("trial-recover"),
+      trialId: z.string(),
+      confirmation: z.literal("RECUPERAR"),
+    })
+    .strict(),
   z
     .object({
       command: z.literal("manual-select"),

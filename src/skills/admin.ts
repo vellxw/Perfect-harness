@@ -1,4 +1,13 @@
 import {
+  inspectLocal,
+  latestValidation,
+  exportValidation,
+  smokeProfile,
+  smokeBlender,
+  type LocalValidationReport,
+} from "../validation/center.js";
+import { recoverTrial } from "./trial-recovery.js";
+import {
   control,
   selectManual,
   selectionClosure,
@@ -33,6 +42,7 @@ import { skillAccess } from "./policy.js";
 import { skillCandidates } from "./library.js";
 
 export interface StudioPanelSnapshot {
+  validation?: LocalValidationReport;
   control: ReturnType<typeof control>;
   trials: ReturnType<typeof trialReport>[];
   workspace: string;
@@ -107,6 +117,7 @@ export class StudioAdmin {
     return {
       workspace,
       control: control(this.store, workspace),
+      validation: latestValidation(this.store, workspace),
       trials: this.store
         .list("skillTrials", studioId(workspace))
         .map((t) => trialReport(this.store, t.id)),
@@ -246,6 +257,77 @@ export class StudioAdmin {
       };
     };
     switch (action.command) {
+      case "trial-recover": {
+        const result = await recoverTrial(
+          this.store,
+          new PreparedDockerRunner(
+            base,
+            this.store,
+            join(this.home, "sandbox"),
+          ),
+          base,
+          workspace,
+          action.trialId,
+          action.confirmation,
+        );
+        return {
+          message: result.message,
+          content: JSON.stringify(result, null, 2),
+        };
+      }
+      case "validation-check":
+        return {
+          message: "Diagnóstico sin inferencias terminado",
+          content: JSON.stringify(
+            await inspectLocal(this.store, this.home, workspace, base),
+            null,
+            2,
+          ),
+        };
+      case "validation-export": {
+        const result = await exportValidation(this.store, this.home, workspace);
+        return {
+          message:
+            "Informe saneado guardado. No es una atestación independiente.",
+          content: JSON.stringify(result.report, null, 2),
+          path: result.path,
+        };
+      }
+      case "validation-cancel":
+        for (const item of this.executions.values()) item.abort.abort();
+        return {
+          message: "Cancelación solicitada; se conservan evidencias y consumo.",
+        };
+      case "validation-profile":
+      case "validation-blender": {
+        if (this.executions.size)
+          throw new Blocked("VALIDATION_BUSY", "Ya hay una prueba activa");
+        const abort = new AbortController(),
+          combined = AbortSignal.any([signal, abort.signal]);
+        const promise =
+          action.command === "validation-profile"
+            ? smokeProfile(
+                this.store,
+                this.home,
+                workspace,
+                base,
+                action.profileId,
+                action.contributorConsent,
+                combined,
+              )
+            : smokeBlender(this.store, this.home, workspace, base, combined);
+        this.executions.set("validation", { abort, promise });
+        try {
+          const result = await promise;
+          return {
+            message:
+              "Prueba local terminada; revisá el estado de cada comprobación",
+            content: JSON.stringify(result, null, 2),
+          };
+        } finally {
+          this.executions.delete("validation");
+        }
+      }
       case "manual-select":
         selectManual(
           this.store,

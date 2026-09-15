@@ -1,3 +1,4 @@
+import { validationRows, validationIntent } from "./validation-view.js";
 import type { SkillWizard } from "./skill-wizard.js";
 import type {
   UiSnapshot,
@@ -23,6 +24,7 @@ export interface StudioIntent {
 }
 const action = (a: StudioAction): UiAction => ({ type: "studio", action: a });
 export const studioScreens = [
+  "local-validation",
   "skill-trials",
   "trial-detail",
   "skills",
@@ -67,6 +69,7 @@ export function studioRows(s: UiSnapshot, screen: string, subject = ""): Row[] {
         "Lee ajustes locales; no hace inferencias",
       ),
     ];
+  if (screen === "local-validation") return validationRows(s);
   const cfg = p.config,
     result: Row[] = [];
   if (screen === "skill-trials") {
@@ -422,6 +425,17 @@ export function studioRows(s: UiSnapshot, screen: string, subject = ""): Row[] {
       );
     }
   }
+  if (screen === "trial-detail") {
+    const trial = p.trials.find((t) => t.trialId === subject);
+    if (trial && ["running", "interrupted", "cancelled"].includes(trial.status))
+      result.push(
+        row(
+          "trial-recover",
+          "Recuperar tras cierre del proceso",
+          "Solo si el controlador anterior terminó; requiere reconfirmar después",
+        ),
+      );
+  }
   return result;
 }
 function confirmed(
@@ -526,6 +540,14 @@ export function studioRowIntent(
     if (id === "evaluate-response" || id === "evaluate-code")
       return { wizard: id };
   }
+  if (screen === "local-validation") return validationIntent(s, id);
+  if (screen === "trial-detail" && id === "trial-recover")
+    return confirmed(
+      { command: "trial-recover", trialId: subject, confirmation: "RECUPERAR" },
+      "Recuperar evaluación interrumpida",
+      "Solo se reconcilian procesos detenidos y recursos propios. No se roban locks ni se repiten llamadas inciertas. Cuotas e intentos se conservan.",
+      "RECUPERAR",
+    );
   const c = p.config,
     expectedHash = p.hash;
   if (screen === "skills") {
@@ -746,6 +768,11 @@ export function studioCommand(
       notice:
         "Conexión segura: perfect unity inspeccionar <descriptor>; luego conectar con fingerprint y perfiles. El token se ingresa localmente en /integraciones. Consultá docs/unity.md.",
       screen: "integrations",
+    };
+  if (name === "validacion")
+    return {
+      screen: "local-validation",
+      action: action({ command: "status" }),
     };
   if (name === "evaluaciones")
     return { screen: "skill-trials", action: action({ command: "status" }) };

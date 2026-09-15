@@ -29,6 +29,10 @@ export interface PaletteItem {
 }
 export const commands: PaletteItem[] = [
   {
+    name: "validacion",
+    description: "Cuentas, editores y pruebas locales verificables",
+  },
+  {
     name: "evaluaciones",
     description: "Contratos y resultados A/B de habilidades",
   },

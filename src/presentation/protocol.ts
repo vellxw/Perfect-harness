@@ -27,6 +27,7 @@ export const UiPreferencesSchema = z.object({
 });
 export type UiPreferences = z.infer<typeof UiPreferencesSchema>;
 export type Screen =
+  | "local-validation"
   | "skill-trials"
   | "trial-detail"
   | "skills"

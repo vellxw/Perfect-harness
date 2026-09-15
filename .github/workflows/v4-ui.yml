@@ -1,0 +1,41 @@
+name: Perfect V4 UI evidence
+on:
+  push:
+    branches: [feat/perfect-harness-v4-skills-studios]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: v4-ui-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:tui
+      - name: Capture actual OpenTUI renderer with labeled display fixtures
+        run: |
+          export PERFECT_SOURCE_COMMIT=$(git rev-parse HEAD)
+          node --experimental-ffi scripts/capture-v4.mjs test-results/v4-ui
+          node --experimental-ffi scripts/benchmark-tui.mjs test-results/benchmark
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Perfect-V4-UI-Evidence
+          path: |
+            test-results/v4-ui
+            test-results/benchmark
+            dist/build-info.json
+          if-no-files-found: error
+          retention-days: 30

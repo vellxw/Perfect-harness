@@ -29,7 +29,10 @@ if ($LASTEXITCODE -ne 0) { throw 'Production dependency install failed' }
 Pop-Location
 $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if (-not (Test-Path $csc)) { throw '.NET Framework compiler unavailable on this build machine' }
-$sourcePath = (Resolve-Path (Join-Path $root 'src\windows\Perfect.cs')).Path
+$sourceOriginal = (Resolve-Path (Join-Path $root 'src\windows\Perfect.cs')).Path
+$sourcePath = Join-Path $root 'release\Perfect.generated.cs'
+$sourceText = [IO.File]::ReadAllText($sourceOriginal) -replace '(?<=AssemblyVersion\(")[^"]+(?="\))', "$version.0" -replace '(?<=AssemblyFileVersion\(")[^"]+(?="\))', "$version.0"
+[IO.File]::WriteAllText($sourcePath,$sourceText)
 $iconPath = (Resolve-Path (Join-Path $root 'assets\brand\perfect.ico')).Path
 $manifestPath = (Resolve-Path (Join-Path $root 'src\windows\Perfect.manifest')).Path
 $exePath = Join-Path $out 'Perfect.exe'
@@ -49,6 +52,23 @@ if ($profile.profiles[0].name -ne 'Perfect Harness' -or $profile.profiles[0].opa
 $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($exePath)
 if ($null -eq $icon) { throw 'Executable has no icon resource' }
 $icon.Dispose()
+$identity=Get-Content "$out\app\dist\build-info.json" -Raw | ConvertFrom-Json
+if($identity.version -ne $version -or $identity.sourceCommit -notmatch '^[a-f0-9]{40} | Sort-Object FullName | ForEach-Object { @{path=[IO.Path]::GetRelativePath($out,$_.FullName).Replace('\','/');sha256=(Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant();bytes=$_.Length} }
+@{version=$version;node=(& "$out\runtime\node.exe" --version);platform='win32-x64';signing='unsigned launcher; a release certificate is required for Authenticode';files=$files} | ConvertTo-Json -Depth 5 | Set-Content "$out\package-integrity.json" -Encoding utf8NoBOM
+$zip = Join-Path $root 'release\Perfect-Harness-Windows-x64.zip'
+if (Test-Path $zip) { Remove-Item $zip }
+Compress-Archive -Path $out -DestinationPath $zip -CompressionLevel Optimal
+if ($Installer) {
+  $iscc = Get-ChildItem "${env:ProgramFiles(x86)}\Inno Setup*\ISCC.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (-not $iscc) { throw 'Install the official Inno Setup compiler explicitly first.' }
+  & $iscc.FullName "/DPayload=$out" "/DOutput=$root\release" "/DAppVersion=$version" (Join-Path $root 'build\windows\perfect.iss')
+  if ($LASTEXITCODE -ne 0) { throw 'Installer build failed' }
+}
+Get-ChildItem "$root\release" -File | Where-Object Name -ne 'SHA256SUMS.txt' | ForEach-Object { $h=Get-FileHash $_.FullName -Algorithm SHA256; "$($h.Hash.ToLowerInvariant())  $($_.Name)" } | Set-Content "$root\release\SHA256SUMS.txt" -Encoding utf8NoBOM
+Write-Host "Windows package created: $zip"
+){throw 'Missing exact build provenance'}
+$identity | ConvertTo-Json -Depth 5 | Set-Content "$out\build-manifest.json" -Encoding utf8NoBOM
+Remove-Item $sourcePath -Force
 $files = Get-ChildItem $out -Recurse -File | Sort-Object FullName | ForEach-Object { @{path=[IO.Path]::GetRelativePath($out,$_.FullName).Replace('\','/');sha256=(Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant();bytes=$_.Length} }
 @{version=$version;node=(& "$out\runtime\node.exe" --version);platform='win32-x64';signing='unsigned launcher; a release certificate is required for Authenticode';files=$files} | ConvertTo-Json -Depth 5 | Set-Content "$out\package-integrity.json" -Encoding utf8NoBOM
 $zip = Join-Path $root 'release\Perfect-Harness-Windows-x64.zip'
@@ -57,7 +77,7 @@ Compress-Archive -Path $out -DestinationPath $zip -CompressionLevel Optimal
 if ($Installer) {
   $iscc = Get-ChildItem "${env:ProgramFiles(x86)}\Inno Setup*\ISCC.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
   if (-not $iscc) { throw 'Install the official Inno Setup compiler explicitly first.' }
-  & $iscc.FullName "/DPayload=$out" "/DOutput=$root\release" (Join-Path $root 'build\windows\perfect.iss')
+  & $iscc.FullName "/DPayload=$out" "/DOutput=$root\release" "/DAppVersion=$version" (Join-Path $root 'build\windows\perfect.iss')
   if ($LASTEXITCODE -ne 0) { throw 'Installer build failed' }
 }
 Get-ChildItem "$root\release" -File | Where-Object Name -ne 'SHA256SUMS.txt' | ForEach-Object { $h=Get-FileHash $_.FullName -Algorithm SHA256; "$($h.Hash.ToLowerInvariant())  $($_.Name)" } | Set-Content "$root\release\SHA256SUMS.txt" -Encoding utf8NoBOM
