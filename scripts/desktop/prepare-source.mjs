@@ -4,6 +4,8 @@ import {execFileSync} from 'node:child_process';
 const change=(p,a,b)=>{const s=fs.readFileSync(p,'utf8');if(s.split(a).length!==2)throw Error('Anchor not unique '+p+' '+a);fs.writeFileSync(p,s.replace(a,b));};
 const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));pkg.version='0.5.0';pkg.description='Agentes con evidencia, interfaz gráfica y controles por equipo';pkg.scripts['build:desktop']='npm run build && node scripts/desktop/build.mjs';pkg.scripts['test:desktop']='node scripts/desktop/gate.mjs';fs.writeFileSync('package.json',JSON.stringify(pkg,null,2)+'\n');
 const npm=process.platform==='win32'?'npm.cmd':'npm';execFileSync(npm,['install','--save-dev','--save-exact','electron@44.3.0','react-dom@19.2.0','@types/react-dom@19.2.0','@types/three@0.180.0','@electron/packager@20.3.0','@electron/fuses@2.1.3'],{stdio:'inherit',shell:process.platform==='win32'});
+// Electron 44 downloads its binary lazily; preparing it is explicit, not assumed from npm install.
+execFileSync(process.execPath,['node_modules/electron/install.js'],{stdio:'inherit',timeout:240000});
 change('src/desktop/main/index.ts',"join(homedir(),'.perfect')","process.env.PERFECT_HOME??join(homedir(),'.local','share','perfect-harness')");
 change('src/desktop/main/index.ts','let window:BrowserWindow,broker:EngineBroker,preview:WebContentsView|undefined,previewOrigin:string|undefined;','let window:BrowserWindow,broker:EngineBroker,preview:WebContentsView|undefined;');
 change('src/desktop/main/index.ts','preview=undefined;previewOrigin=undefined;','preview=undefined;');change('src/desktop/main/index.ts','detachPreview();previewOrigin=info.origin;','detachPreview();');
