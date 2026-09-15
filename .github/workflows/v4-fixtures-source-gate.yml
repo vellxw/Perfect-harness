@@ -1,0 +1,62 @@
+name: V4 curated sources and application gate (temporary)
+on:
+  push:
+    branches: [feat/perfect-harness-v4-skills-studios]
+    paths: [scripts/v4-wire-fixtures.mjs, scripts/build-curated-skills.mjs, .github/workflows/v4-fixtures-source-gate.yml]
+permissions:
+  contents: write
+jobs:
+  gate:
+    if: github.repository == 'vellxw/Perfect-harness' && github.ref == 'refs/heads/feat/perfect-harness-v4-skills-studios'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - run: node scripts/build-curated-skills.mjs
+      - run: node scripts/v4-wire-fixtures.mjs
+      - run: npx --no-install prettier --write src tests/skills tests/e2e/postgres.test.ts tests/e2e/game-beam.test.ts
+      - run: node --import tsx scripts/generate-config.mjs
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run check:config
+      - run: npm run build
+      - run: npm test
+      - name: Prepare only public test images
+        run: |
+          docker pull node:24-bookworm-slim
+          docker pull mcr.microsoft.com/playwright:v1.63.0-noble
+          docker pull postgres:18.6-bookworm
+      - run: npm run test:e2e
+        env:
+          PERFECT_TEST_DOCKER: '1'
+          PERFECT_ARTIFACT_DIR: test-results
+      - run: npm run test:package
+      - run: npm audit --omit=dev --audit-level=moderate
+      - name: Stage exact verified source and licensed resources
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import pathlib,json,subprocess,base64,os
+          names=set(subprocess.check_output(['git','diff','--name-only'],text=True).splitlines());names.update(['src/skills/curated.ts','docs/skills/upstream-lock.json']);entries=[]
+          for name in sorted(names):
+            assert name.startswith(('src/','tests/','docs/skills/')) or name in ['perfect.config.schema.json','perfect.config.example.json']
+            p=pathlib.Path(name);assert p.is_file() and not p.is_symlink() and p.stat().st_size<6_000_000
+            blob=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/vellxw/Perfect-harness/git/blobs','--input','-'],input=json.dumps({'encoding':'base64','content':base64.b64encode(p.read_bytes()).decode()}),text=True))['sha']
+            entries.append({'path':name,'mode':'100644','type':'blob','sha':blob})
+          tree=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/vellxw/Perfect-harness/git/trees','--input','-'],input=json.dumps({'base_tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),'tree':entries}),text=True))['sha']
+          print('VALIDATED_TREE='+tree);print('PARENT='+os.environ['GITHUB_SHA'])
+          pathlib.Path('test-results').mkdir(exist_ok=True);pathlib.Path('test-results/validated-source.json').write_text(json.dumps({'tree':tree,'parent':os.environ['GITHUB_SHA'],'files':sorted(names)},indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v4-fixtures-validation
+          path: test-results
+          retention-days: 14

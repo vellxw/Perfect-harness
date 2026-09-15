@@ -1,0 +1,23 @@
+import fs from 'node:fs';
+const change=(path,before,after)=>{const text=fs.readFileSync(path,'utf8');if(text.split(before).length!==2)throw Error('Anchor not unique: '+path+' '+before.slice(0,90));fs.writeFileSync(path,text.replace(before,after));};
+const prepend=(path,text)=>fs.writeFileSync(path,text+fs.readFileSync(path,'utf8'));
+change('src/domain/model.ts','kind: z.enum(["command", "browser", "remotion"]),','kind: z.enum(["command", "browser", "remotion", "postgres"]),');
+change('src/domain/model.ts','if (s.kind === "command" && !s.command)','if ((s.kind === "command" || s.kind === "postgres") && !s.command)');
+change('src/domain/model.ts','    maxConsoleErrors: z.number().int().min(0).default(0),','    maxConsoleErrors: z.number().int().min(0).default(0),\n    reducedMotion: z.enum(["reduce", "no-preference"]).default("no-preference"),');
+change('src/ports/execution.ts','export interface ExecutionRunner {','export interface ExecutionRunner {\n  postgres?(request: ExecutionRequest, command: CommandSpec): Promise<ExecutionOutput>;');
+prepend('src/adapters/sandbox/prepared-runner.ts','import { PostgresRunner } from "./postgres.js";\n');
+change('src/adapters/sandbox/prepared-runner.ts','  available(): Promise<boolean> {','  postgres(request: ExecutionRequest, command: CommandSpec): Promise<ExecutionOutput> {\n    return this.admission.use(request.signal,()=>new PostgresRunner(this.config,this.store,join(this.directory,"postgres")).run(request,command));\n  }\n  available(): Promise<boolean> {');
+change('src/adapters/verification/service.ts','      if (spec.kind === "browser")','      if (spec.kind === "postgres") {\n        if(!this.runner.postgres) throw new Blocked("POSTGRES_RUNNER_REQUIRED","La verificación requiere PostgreSQL real aislado; no se sustituye por SQLite");\n        output = await this.runner.postgres(request,spec.command!);\n      } else if (spec.kind === "browser")');
+change('src/adapters/sandbox/browser-driver.ts',"colorScheme:'light'","colorScheme:'light',reducedMotion:spec.reducedMotion??'no-preference'");
+// Curated content stays in compiled control-plane resources, not in agent workspaces.
+prepend('src/skills/library.ts','import { curatedSkills } from "./curated.js";\n');
+change('src/skills/library.ts','export function builtinSkills(): SkillRelease[] {','function originalSkills(): SkillRelease[] {');
+fs.appendFileSync('src/skills/library.ts','\nexport function builtinSkills(): SkillRelease[] { return [...originalSkills(), ...curatedSkills()]; }\n');
+change('src/skills/library.ts','license: "MIT",\n        redistribution: "allowed",','license: "MIT",\n        ...(d.id === "perfect-dream-loop" ? {commit:"9bddb901f7d071cfefdd21e264267c757177a9df"} : {}),\n        redistribution: "allowed",');
+change('src/application/context.ts','      "Only the controller accepts plans and declares DONE.",','      "Only the controller accepts plans and declares DONE.",\n      "Para probar backend PostgreSQL proponé VerificationSpec kind=postgres con command. El runner crea una DB temporal aislada y DATABASE_URL de prueba; no acepta URLs de producción. Para Blender/editores revisá capacidades antes de planear su ejecución.",');
+// Explicit catalog refresh: old workspaces see new bundled releases only after user selection.
+change('src/skills/actions.ts','export const StudioActionSchema = z.discriminatedUnion("command", [','export const StudioActionSchema = z.discriminatedUnion("command", [\n  z.object({command:z.literal("refresh-bundled"),confirmation:z.literal("REVISAR")}).strict(),');
+prepend('src/skills/admin.ts','import { builtinSkills } from "./library.js";\n');
+change('src/skills/admin.ts','    switch (action.command) {','    switch (action.command) {\n      case "refresh-bundled": {\n        for(const release of builtinSkills()) {\n          if(!this.store.get("skillReleases",release.id)) this.store.put("skillReleases",release,"skill.bundled_discovered");\n          this.store.event(studioId(workspace),"skill.import_pending",{releaseId:release.id,hash:release.hash},"user");\n        }\n        return {message:"Versiones incluidas añadidas a revisión; no se sustituyó ni activó ninguna selección anterior."};\n      }');
+change('src/cli/skills.ts','  root\n    .command("lock")','  root.command("actualizar-catalogo").requiredOption("--yes","Mostrar nuevas versiones incluidas para revisión").action(()=>run(async()=>({command:"refresh-bundled",confirmation:"REVISAR"})));\n  root\n    .command("lock")');
+console.log('Real PostgreSQL verification and reduced-motion browser tests wired; curated payload generated separately.');
