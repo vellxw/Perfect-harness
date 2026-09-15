@@ -1,0 +1,66 @@
+name: Desktop evidence review export
+on:
+  push:
+    branches: [feat/perfect-desktop-v5, audit/v5-evidence-review]
+    paths: [.github/workflows/v5-evidence-review.yml, scripts/desktop/review-evidence.mjs]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Existing owned workflow run containing captured evidence
+        type: string
+        required: true
+      artifact_name:
+        description: Exact evidence artifact name
+        type: string
+        required: true
+  workflow_call:
+    inputs:
+      run_id:
+        type: string
+        required: true
+      artifact_name:
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  inspectable-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - name: Resolve the actual captured source; never substitute current HEAD
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.run_id || '35033516539' }}
+        run: |
+          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+          SOURCE_SHA=$(gh api "repos/vellxw/Perfect-harness/actions/runs/$SOURCE_RUN" --jq .head_sha)
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          echo "SOURCE_RUN=$SOURCE_RUN" >> "$GITHUB_ENV"
+          echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: vellxw/Perfect-harness
+          run-id: ${{ env.SOURCE_RUN }}
+          name: ${{ inputs.artifact_name || 'v5-goal-loop-evidence' }}
+          path: actual-captures
+      - name: Preserve original captured pixels as reviewable pages; no automatic approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PERFECT_STAGE_REVIEW: '1'
+        run: node scripts/desktop/review-evidence.mjs actual-captures review/desktop.pdf "$SOURCE_SHA" "$SOURCE_RUN"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Desktop-inspectable-evidence-${{ env.SOURCE_RUN }}
+          path: review
+          retention-days: 30
