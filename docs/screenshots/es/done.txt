@@ -1,0 +1,36 @@
+ ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮ 
+ │                                                                                                                    │ 
+ │ ◈ Perfect / ShopFront                                                  ✓ completado  0 activos · pruebas 5/5  DEMO │ 
+ │                                                                                                                    │ 
+ │  OBJETIVO ACTUAL                                                                                                   │ 
+ │                                                                                                                    │ 
+ │  Construí la pantalla de pago y verificala visualmente                                                             │ 
+ │                                                                                                                    │ 
+ │  Iteración 4 / 10 · público · f14a86d2                                                         Verificación 5 / 5  │ 
+ │                                                                                                                    │ 
+ │  Todos los criterios obligatorios están respaldados por evidencia actual.                                          │ 
+ │                                                                                                                    │ 
+ │  Datos de demostración · sin cuentas, cambios de código ni inferencias                                             │ 
+ │                                                                                                                    │ 
+ │  ✓ Planificador   ✓ Interfaz   ✓ Servidor   ✓ Revisor experto                                                      │ 
+ │                                                                                                                    │ 
+ │  ACTIVIDAD                                                                                  Tab para inspeccionar  │ 
+ │                                                                                                                    │ 
+ │   ✓ Revisor experto · Revisión independiente aprobada                                                              │ 
+ │    Sin hallazgos bloqueantes en la versión final                                                                   │ 
+ │                                                                                                                    │ 
+ │   ✓ Controlador · Evaluador de evidencia: COMPLETADO                                                               │ 
+ │    Versión verificada lista para inspeccionar y aplicar                                                            │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  │ 
+ │  │ › Pedile a Perfect qué construir…  / acciones                                                                │  │ 
+ │  │                                                                                                              │  │ 
+ │  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  │ 
+ │  /agentes /plan /verificar /cambios    Ctrl+K acciones                                            PRIVADO · 0.2.1  │ 
+ │                                                                                                                    │ 
+ ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ 

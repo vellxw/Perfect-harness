@@ -1,7 +1,7 @@
 import type { Command } from "commander";
+import { prepareDependencies } from "../adapters/sandbox/dependencies.js";
 import type { CliContext } from "./context.js";
 import { goalConfig } from "./context.js";
-import { prepareDependencies } from "../adapters/sandbox/dependencies.js";
 export function registerPrepare(
   program: Command,
   context: <T>(action: (ctx: CliContext) => Promise<T>) => Promise<T>,
@@ -9,19 +9,16 @@ export function registerPrepare(
   program
     .command("prepare [goalId]")
     .description(
-      "Explicitly prepare a registry-only dependency image; never runs npm lifecycle scripts",
+      "Preparar una imagen de dependencias del registro; nunca ejecutar scripts de instalación",
     )
     .option(
       "--allow-network",
-      "Approve downloading packages from the public npm registry",
+      "Autorizar la descarga de paquetes del registro público de npm",
     )
-    .option(
-      "--task <taskId>",
-      "Prepare manifests from a paused task checkpoint",
-    )
+    .option("--task <taskId>", "Preparar los manifiestos de una tarea pausada")
     .option(
       "--render",
-      "Use the configured browser image as the base for render dependencies",
+      "Usar la imagen de navegador configurada como base para renderizar",
     )
     .action(
       async (
@@ -32,7 +29,7 @@ export function registerPrepare(
           const goal = ctx.goal(goalId),
             controller = new AbortController(),
             cancel = () =>
-              controller.abort(new Error("Preparation interrupted"));
+              controller.abort(new Error("Preparación interrumpida"));
           process.once("SIGINT", cancel);
           try {
             const image = await prepareDependencies({
@@ -47,7 +44,7 @@ export function registerPrepare(
             });
             ctx.print(
               image,
-              `Prepared immutable dependency image ${image.imageId}. The lockfile was checkpointed only in managed state. Resume the goal.`,
+              `Imagen inmutable de dependencias preparada: ${image.imageId}. El archivo de dependencias quedó guardado solo en el estado administrado. Reanudá el objetivo.`,
             );
           } finally {
             process.removeListener("SIGINT", cancel);

@@ -1,0 +1,36 @@
+ ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮ 
+ │                                                                                                                    │ 
+ │ ◈ Perfect / ShopFront                                                          ✓ done  0 active · checks 5/5  DEMO │ 
+ │                                                                                                                    │ 
+ │  CURRENT GOAL                                                                                                      │ 
+ │                                                                                                                    │ 
+ │  Build the checkout and verify it visually                                                                         │ 
+ │                                                                                                                    │ 
+ │  Iteration 4 / 10 · public · f14a86d2                                                          Verification 5 / 5  │ 
+ │                                                                                                                    │ 
+ │  All required criteria are covered by current evidence.                                                            │ 
+ │                                                                                                                    │ 
+ │  Synthetic display data · no accounts, code changes or inference calls                                             │ 
+ │                                                                                                                    │ 
+ │  ✓ Planner   ✓ Frontend   ✓ Backend   ✓ Oracle                                                                     │ 
+ │                                                                                                                    │ 
+ │  ACTIVITY                                                                                          Tab to inspect  │ 
+ │                                                                                                                    │ 
+ │   ✓ oracle · Independent review approved                                                                           │ 
+ │    No blocking findings on the final candidate                                                                     │ 
+ │                                                                                                                    │ 
+ │   ✓ controller · Evidence Judge: DONE                                                                              │ 
+ │    Verified candidate is ready to inspect and apply                                                                │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  │ 
+ │  │ › Ask Perfect what to build…  / for actions                                                                  │  │ 
+ │  │                                                                                                              │  │ 
+ │  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  │ 
+ │  /agents /plan /verify /diff    Ctrl+K actions                                                    PRIVATE · 0.2.0  │ 
+ │                                                                                                                    │ 
+ ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ 

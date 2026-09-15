@@ -1,16 +1,19 @@
-import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import type {
   ExtensionAPI,
   ExtensionCommandContext,
 } from "@earendil-works/pi-coding-agent";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { splitArguments } from "../cli/shell.js";
+import { commandName, normalizeArgs } from "../i18n/es.js";
+import { humanMessage } from "../i18n/messages.js";
 
 /** Thin presentation adapter: all scheduling, state and policies remain in the application. */
 export default function perfectExtension(pi: ExtensionAPI): void {
   const cli = fileURLToPath(new URL("../cli/index.js", import.meta.url));
   const children = new Set<ReturnType<typeof spawn>>();
   const invoke = async (args: string[], ctx: ExtensionCommandContext) => {
+    args = normalizeArgs(args);
     const allowed = new Set([
       "goal",
       "status",
@@ -30,17 +33,20 @@ export default function perfectExtension(pi: ExtensionAPI): void {
     ]);
     if (!allowed.has(args[0] ?? "")) {
       ctx.ui.notify(
-        "Use the standalone CLI for login, consent, configuration and applying changes.",
+        "Usá la CLI independiente para conectar cuentas, autorizar datos, configurar y aplicar cambios.",
         "warning",
       );
       return;
     }
     if (args.includes("--watch") || args.includes("--follow")) {
-      ctx.ui.notify("Use a terminal for streaming status/logs.", "warning");
+      ctx.ui.notify(
+        "Usá una terminal para seguir el estado y los registros.",
+        "warning",
+      );
       return;
     }
     ctx.ui.notify(
-      `Perfect ${args[0]} started. Status remains available in the standalone CLI.`,
+      `Perfect: ${commandName(args[0]!)} iniciado. El estado sigue disponible en la CLI independiente.`,
       "info",
     );
     const child = spawn(
@@ -63,36 +69,41 @@ export default function perfectExtension(pi: ExtensionAPI): void {
         child.once("close", (value) => resolve(value ?? 130));
       });
       ctx.ui.notify(
-        (stdout || stderr || `Perfect exited ${code}`).slice(-16000),
+        (stdout || stderr || `Perfect terminó con código ${code}`).slice(
+          -16000,
+        ),
         code === 0 ? "info" : code === 2 ? "warning" : "error",
       );
     } catch (error) {
       ctx.ui.notify(
-        error instanceof Error ? error.message : String(error),
+        humanMessage(error instanceof Error ? error.message : String(error)),
         "error",
       );
     } finally {
       children.delete(child);
     }
   };
-  pi.registerCommand("goal", {
-    description: "Create an independently audited Perfect Harness goal",
-    handler: async (args, ctx) => {
-      if (!args.trim()) {
-        ctx.ui.notify("Usage: /goal <description>", "warning");
-        return;
-      }
-      await invoke(["goal", "--", args], ctx);
-    },
-  });
+  for (const name of ["goal", "objetivo"])
+    pi.registerCommand(name, {
+      description:
+        "Crear un objetivo de Perfect Harness con auditoría independiente",
+      handler: async (args, ctx) => {
+        if (!args.trim()) {
+          ctx.ui.notify("Uso: /objetivo <descripción>", "warning");
+          return;
+        }
+        await invoke(["goal", "--", args], ctx);
+      },
+    });
   pi.registerCommand("perfect", {
-    description: "Perfect status, tasks, routing, pause, resume and inspection",
+    description:
+      "Estado, tareas, modelos, pausa, reanudación e inspección de Perfect",
     handler: async (args, ctx) => {
       try {
         await invoke(splitArguments(args.trim() || "status"), ctx);
       } catch (error) {
         ctx.ui.notify(
-          error instanceof Error ? error.message : String(error),
+          humanMessage(error instanceof Error ? error.message : String(error)),
           "error",
         );
       }

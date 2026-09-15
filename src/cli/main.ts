@@ -3,34 +3,37 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
-import {
-  withContext,
-  goalConfig,
-  goalExit,
-  type GlobalOptions,
-  type CliContext,
-} from "./context.js";
-import { statusSnapshot, renderStatus } from "./display.js";
-import { doctor } from "./doctor.js";
-import { login } from "./login.js";
-import { providerSmoke, fullstackSmoke } from "./smoke.js";
-import {
-  controlGoal,
-  approvePlan,
-  approveCriterion,
-  retryTask,
-  applyGoal,
-} from "./control.js";
-import { defaultConfig, ConfigSchema } from "../config/schema.js";
-import { localPolicy, savePolicy } from "../config/load.js";
+import { GitWorkspace } from "../adapters/git/workspace.js";
 import { PiRuntime } from "../adapters/pi/runtime.js";
 import { PreparedDockerRunner } from "../adapters/sandbox/prepared-runner.js";
-import { registerPrepare } from "./prepare.js";
-import { GitWorkspace } from "../adapters/git/workspace.js";
-import { Orchestrator } from "../application/orchestrator.js";
 import { createGoal } from "../application/goals.js";
+import { Orchestrator } from "../application/orchestrator.js";
+import { localPolicy, savePolicy } from "../config/load.js";
+import { ConfigSchema, defaultConfig } from "../config/schema.js";
 import { RoleSchema, type Goal } from "../domain/model.js";
-import { hash, errorText, Blocked } from "../domain/util.js";
+import { Blocked, errorText, hash } from "../domain/util.js";
+import { normalizeArgs, stateLabel, valueLabel } from "../i18n/es.js";
+import { humanMessage } from "../i18n/messages.js";
+import {
+  goalConfig,
+  goalExit,
+  withContext,
+  type CliContext,
+  type GlobalOptions,
+} from "./context.js";
+import {
+  applyGoal,
+  approveCriterion,
+  approvePlan,
+  controlGoal,
+  retryTask,
+} from "./control.js";
+import { renderStatus, statusSnapshot } from "./display.js";
+import { doctor } from "./doctor.js";
+import { login } from "./login.js";
+import { registerPrepare } from "./prepare.js";
+import { fullstackSmoke, providerSmoke } from "./smoke.js";
+import { configureSpanishHelp, humanData } from "./spanish.js";
 
 export interface MainOptions {
   signal?: AbortSignal;
@@ -39,18 +42,21 @@ export async function main(
   argv: string[],
   options: MainOptions = {},
 ): Promise<number> {
+  argv = normalizeArgs(argv);
   const program = new Command();
   let exitCode = 0;
   program
     .name("perfect")
-    .description("Evidence-driven local coding-agent orchestration on Pi SDK")
-    .version("0.1.0")
-    .option("--home <directory>", "Local state and account directory")
+    .description(
+      "Orquestación local de agentes de programación con evidencia y Pi SDK",
+    )
+    .version("0.2.1")
+    .option("--home <directory>", "Carpeta local de estado y cuentas")
     .option(
       "--workspace <directory>",
-      "Source workspace (default: current directory)",
+      "Carpeta original de trabajo (predeterminada: carpeta actual)",
     )
-    .option("--json", "Machine-readable output")
+    .option("--json", "Salida JSON para herramientas y automatizaciones")
     .exitOverride();
   const globals = () => program.opts<GlobalOptions>();
   const context = <T>(action: (ctx: CliContext) => Promise<T>) =>
@@ -59,7 +65,8 @@ export async function main(
     action: (signal: AbortSignal) => Promise<T>,
   ): Promise<T> => {
     const controller = new AbortController(),
-      cancel = () => controller.abort(new Error("User interrupted execution"));
+      cancel = () =>
+        controller.abort(new Error("El usuario interrumpió la ejecución"));
     process.once("SIGINT", cancel);
     try {
       return await action(
@@ -89,7 +96,7 @@ export async function main(
         onState: (state) => {
           if (!ctx.json)
             process.stderr.write(
-              `${state.state} · iteration ${state.iteration} · ${state.id}\n`,
+              `${stateLabel(state.state)} · iteración ${state.iteration} · ${state.id}\n`,
             );
         },
       });
@@ -103,15 +110,15 @@ export async function main(
   program
     .command("goal <description...>")
     .description(
-      "Create and run a real-provider goal without modifying the source checkout",
+      "Crear y ejecutar un objetivo con proveedores reales sin modificar la carpeta original",
     )
     .option(
       "--public",
-      "Declare this goal and its source suitable for public/contributor processing",
+      "Declarar el objetivo y su código aptos para procesamiento público/Contributor",
     )
     .option(
       "--accept-plan",
-      "Explicitly authorize the generated acceptance contract without a separate approval pause",
+      "Autorizar explícitamente el contrato de aceptación generado sin una pausa adicional",
     )
     .action(
       async (
@@ -135,16 +142,16 @@ export async function main(
   program
     .command("resume [goalId]")
     .description(
-      "Reconcile interrupted operations and resume a nonterminal goal",
+      "Reconciliar operaciones interrumpidas y reanudar un objetivo no finalizado",
     )
-    .option("--accept-plan", "Authorize the pending acceptance contract")
+    .option("--accept-plan", "Autorizar el contrato de aceptación pendiente")
     .action(
       async (goalId: string | undefined, flags: { acceptPlan?: boolean }) =>
         context((ctx) => execute(ctx, ctx.goal(goalId), flags.acceptPlan)),
     );
   program
     .command("status [goalId]")
-    .option("--watch", "Refresh until interrupted")
+    .option("--watch", "Actualizar hasta que se interrumpa")
     .action(async (goalId: string | undefined, flags: { watch?: boolean }) =>
       context(async (ctx) => {
         if (!flags.watch) {
@@ -209,7 +216,7 @@ export async function main(
     );
   program
     .command("logs [goalId]")
-    .option("--follow", "Follow domain events")
+    .option("--follow", "Seguir los eventos del dominio")
     .action(async (goalId: string | undefined, flags: { follow?: boolean }) =>
       context(async (ctx) => {
         const goal = ctx.goal(goalId);
@@ -221,7 +228,7 @@ export async function main(
               console.log(
                 ctx.json
                   ? JSON.stringify(event)
-                  : `${event.sequence} ${event.occurredAt} ${event.type} ${JSON.stringify(event.payload)}`,
+                  : `${event.sequence} ${event.occurredAt} · Evento ${event.type}\n${humanData(event.payload)}`,
               );
             }
             if (!flags.follow) break;
@@ -245,8 +252,8 @@ export async function main(
             requested: goal.controlRequest,
           },
           goal.controlRequest
-            ? `${name} requested; inspect status for confirmed termination.`
-            : `Goal is ${goal.state}. Checkpoints were preserved.`,
+            ? `${valueLabel(name)} solicitado; revisá el estado para confirmar la detención.`
+            : `Objetivo ${stateLabel(goal.state)}. Se conservaron los puntos de recuperación.`,
         );
       }),
     );
@@ -255,14 +262,14 @@ export async function main(
       await retryTask(ctx, taskId);
       ctx.print(
         { taskId, status: "pending" },
-        `Retry queued without resetting limits. Use perfect resume.`,
+        "Reintento en espera, sin reiniciar límites. Usá perfect reanudar.",
       );
     }),
   );
   program
     .command("approve-plan [goalId]")
     .description(
-      "Approve the exact currently displayed acceptance criteria and verification contract",
+      "Aprobar los criterios y el contrato de verificación que se muestran",
     )
     .action(async (goalId?: string) =>
       context(async (ctx) => {
@@ -270,7 +277,7 @@ export async function main(
         approvePlan(ctx, goal);
         ctx.print(
           { goalId: goal.id, approved: true },
-          "Acceptance contract approved. Use perfect resume.",
+          "Contrato de aceptación aprobado. Usá perfect reanudar.",
         );
       }),
     );
@@ -294,14 +301,14 @@ export async function main(
         patch = await new GitWorkspace(goal.root, goalConfig(goal)).diff(
           goal.baseline,
         );
-      ctx.print({ goalId: goal.id, patch }, patch || "No changes.");
+      ctx.print({ goalId: goal.id, patch }, patch || "Sin cambios.");
     }),
   );
   program
     .command("apply [goalId]")
     .option(
       "--yes",
-      "Approve applying the verified delta to the unchanged original workspace",
+      "Autorizar la aplicación de los cambios verificados a la carpeta original intacta",
     )
     .action(async (goalId: string | undefined, flags: { yes?: boolean }) =>
       context(async (ctx) => {
@@ -309,14 +316,14 @@ export async function main(
         await applyGoal(ctx, goal, Boolean(flags.yes));
         ctx.print(
           { goalId: goal.id, applied: true, source: goal.source },
-          `Applied verified changes to ${goal.source}. No commit or push was made in the original repository.`,
+          `Cambios verificados aplicados a ${goal.source}. No se creó ningún commit ni se publicó nada en el repositorio original.`,
         );
       }),
     );
   program
     .command("init")
     .description(
-      "Write default JSON config and trust that exact generated version",
+      "Crear la configuración JSON predeterminada y autorizar esa versión exacta",
     )
     .action(async () =>
       context(async (ctx) => {
@@ -331,7 +338,7 @@ export async function main(
         await savePolicy(policy, ctx.home);
         ctx.print(
           { created: "perfect.config.json" },
-          "Created and trusted the generated default configuration.",
+          "Configuración predeterminada creada y autorizada.",
         );
       }),
     );
@@ -342,7 +349,7 @@ export async function main(
     );
   program
     .command("trust-config")
-    .option("--yes", "Authorize this exact reviewed configuration")
+    .option("--yes", "Autorizar esta configuración exacta después de revisarla")
     .action(async (flags: { yes?: boolean }) =>
       context(async (ctx) => {
         const config = ConfigSchema.parse(
@@ -354,7 +361,7 @@ export async function main(
         if (!flags.yes)
           throw new Blocked(
             "CONFIG_APPROVAL",
-            "Review the configuration above, then run trust-config --yes",
+            "Revisá la configuración y ejecutá confiar-config --si",
           );
         const policy = await localPolicy(ctx.home);
         policy.trustedConfigs[ctx.workspace] = hash(config);
@@ -365,15 +372,15 @@ export async function main(
     .command("consent-contributor")
     .option(
       "--yes",
-      "Allow public workspace content to use the Contributor training route",
+      "Permitir el uso del contenido público de esta carpeta en la ruta de entrenamiento Contributor",
     )
-    .option("--revoke", "Revoke consent for this workspace")
+    .option("--revoke", "Revocar el consentimiento de esta carpeta")
     .action(async (flags: { yes?: boolean; revoke?: boolean }) =>
       context(async (ctx) => {
         if (!flags.yes && !flags.revoke)
           throw new Blocked(
             "CONTRIBUTOR_APPROVAL",
-            "Contributor prompts/responses may be used for training. Review the workspace and pass --yes explicitly; never use for confidential or third-party private data.",
+            "Los mensajes y respuestas de Contributor pueden usarse para entrenamiento. Revisá la carpeta y pasá --si explícitamente. Nunca lo uses con datos confidenciales ni privados de terceros.",
           );
         const policy = await localPolicy(ctx.home);
         policy.contributorWorkspaces = policy.contributorWorkspaces.filter(
@@ -384,14 +391,17 @@ export async function main(
         ctx.print(
           { workspace: ctx.workspace, consent: !flags.revoke },
           flags.revoke
-            ? "Contributor consent revoked."
-            : "Contributor consent recorded. Each applicable goal must still be explicitly classified --public.",
+            ? "Consentimiento de Contributor revocado."
+            : "Consentimiento registrado. Cada objetivo debe declararse público explícitamente con --publico.",
         );
       }),
     );
   program
     .command("doctor")
-    .option("--online", "Resolve/refresh credentials; never run inference")
+    .option(
+      "--online",
+      "Resolver o renovar credenciales; nunca enviar inferencias",
+    )
     .action(async (flags: { online?: boolean }) =>
       context(async (ctx) => {
         const checks = await doctor(
@@ -403,7 +413,10 @@ export async function main(
         ctx.print(
           checks,
           checks
-            .map((c) => `${c.status.padEnd(12)} ${c.name}: ${c.detail}`)
+            .map(
+              (c) =>
+                `${stateLabel(c.status).padEnd(14)} ${c.name}: ${humanMessage(c.detail)}`,
+            )
             .join("\n"),
         );
         if (checks.some((c) => c.status === "BLOCKED")) exitCode = 2;
@@ -414,7 +427,7 @@ export async function main(
     .option("--account <reference>")
     .option(
       "--key-env <variable>",
-      "Read API key from a named environment variable, never from a CLI token argument",
+      "Leer la clave API desde una variable de entorno, nunca como argumento visible",
     )
     .action(
       async (provider: string, flags: { account?: string; keyEnv?: string }) =>
@@ -430,22 +443,22 @@ export async function main(
     );
   program
     .command("smoke")
-    .option("--role <role>", "Test a single configured role")
+    .option("--role <role>", "Probar un único rol configurado")
     .option(
       "--fullstack",
-      "Create and verify the temporary reservation scenario",
+      "Crear y verificar el escenario temporal de reservas",
     )
     .option(
       "--mock",
-      "Use visibly scripted providers in the fullstack scenario; tools and Docker remain real",
+      "Usar proveedores claramente simulados; las herramientas y Docker siguen siendo reales",
     )
     .option(
       "--accept-plan",
-      "Authorize the temporary fullstack acceptance contract",
+      "Autorizar el contrato de aceptación del escenario integral temporal",
     )
     .option(
       "--allow-contributor",
-      "Consent only to synthetic public smoke-test data using Contributor",
+      "Autorizar solo los datos sintéticos públicos de esta prueba en Contributor",
     )
     .action(
       async (flags: {
@@ -493,11 +506,12 @@ export async function main(
     );
   program
     .command("shell")
-    .description("Interactive slash-command shell")
+    .description("Consola interactiva con comandos precedidos por /")
     .action(async () => {
       const { shell } = await import("./shell.js");
       await shell(globals());
     });
+  configureSpanishHelp(program);
   if (argv.length === 0) argv = ["--help"];
   try {
     await program.parseAsync(argv, { from: "user" });
@@ -508,7 +522,7 @@ export async function main(
     const code = error instanceof Blocked ? 2 : 3;
     if (globals().json)
       console.error(JSON.stringify({ error: errorText(error), code }));
-    else console.error(errorText(error));
+    else console.error(humanMessage(errorText(error)));
     return code;
   }
 }

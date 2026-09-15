@@ -1,6 +1,6 @@
-import Database from "better-sqlite3";
+import { DatabaseSync } from "node:sqlite";
 import { mkdirSync, chmodSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import type {
   Collection,
   EntityMap,
@@ -9,16 +9,39 @@ import type {
 import type { Event } from "../../domain/model.js";
 import { id, now, hash, Blocked } from "../../domain/util.js";
 
-/** One local database; mutations and audit events commit atomically. */
+const listeners = new Map<string, Set<() => void>>();
+/** Local, post-commit wakeups. No polling or presentation dependencies in the store. */
+export function onDatabaseChange(
+  path: string,
+  listener: () => void,
+): () => void {
+  const key = resolve(path);
+  let set = listeners.get(key);
+  if (!set) {
+    set = new Set();
+    listeners.set(key, set);
+  }
+  set.add(listener);
+  return () => {
+    set!.delete(listener);
+    if (!set!.size) listeners.delete(key);
+  };
+}
+
+/** Keeps the V1 file format. Transactions support nested savepoints and publish only committed changes. */
 export class SqliteStore implements StateStore {
-  private db: Database.Database;
+  private db: DatabaseSync;
+  private depth = 0;
+  private changed = false;
+  private readonly key: string;
   constructor(path: string) {
+    this.key = resolve(path);
     if (path !== ":memory:")
       mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-    this.db = new Database(path);
-    this.db.pragma("journal_mode = WAL");
-    this.db.pragma("foreign_keys = ON");
-    this.db.pragma("busy_timeout = 5000");
+    this.db = new DatabaseSync(path);
+    this.db.exec(
+      "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;",
+    );
     this.db
       .exec(`CREATE TABLE IF NOT EXISTS migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS entities(kind TEXT NOT NULL,id TEXT NOT NULL,goal_id TEXT NOT NULL,body TEXT NOT NULL,PRIMARY KEY(kind,id));
@@ -63,7 +86,34 @@ export class SqliteStore implements StateStore {
     return rows.map((r) => JSON.parse(r.body) as EntityMap[K]);
   }
   transaction<T>(fn: () => T): T {
-    return this.db.transaction(fn).immediate();
+    const level = this.depth,
+      before = this.changed;
+    const savepoint = `perfect_${level}`;
+    this.db.exec(level ? `SAVEPOINT ${savepoint}` : "BEGIN IMMEDIATE");
+    this.depth++;
+    let result: T;
+    try {
+      result = fn();
+      if (result && typeof (result as { then?: unknown }).then === "function")
+        throw new Error("SQLite transactions must be synchronous");
+      this.db.exec(level ? `RELEASE SAVEPOINT ${savepoint}` : "COMMIT");
+    } catch (error) {
+      this.db.exec(
+        level
+          ? `ROLLBACK TO SAVEPOINT ${savepoint}; RELEASE SAVEPOINT ${savepoint}`
+          : "ROLLBACK",
+      );
+      this.changed = before;
+      throw error;
+    } finally {
+      this.depth--;
+    }
+    if (!level && this.changed) {
+      this.changed = false;
+      for (const listener of [...(listeners.get(this.key) ?? [])])
+        queueMicrotask(listener);
+    }
+    return result;
   }
   put<K extends Collection>(
     kind: K,
@@ -72,8 +122,8 @@ export class SqliteStore implements StateStore {
     actor = "controller",
   ): void {
     this.transaction(() => {
-      const goalId = "goalId" in value ? value.goalId : value.id;
-      const existing = this.get(kind, value.id);
+      const goalId = "goalId" in value ? value.goalId : value.id,
+        existing = this.get(kind, value.id);
       if (
         kind === "runs" &&
         existing &&
@@ -103,31 +153,57 @@ export class SqliteStore implements StateStore {
     payload: unknown,
     actor = "controller",
   ): void {
-    const event: Event = {
-      id: id("event"),
-      schemaVersion: 1,
-      type,
-      goalId,
-      actor,
-      correlationId: goalId,
-      occurredAt: now(),
-      payload,
+    const write = () => {
+      const event: Event = {
+        id: id("event"),
+        schemaVersion: 1,
+        type,
+        goalId,
+        actor,
+        correlationId: goalId,
+        occurredAt: now(),
+        payload,
+      };
+      this.db
+        .prepare("INSERT INTO events(id,goal_id,body) VALUES(?,?,?)")
+        .run(event.id, goalId, JSON.stringify(event));
+      this.changed = true;
     };
-    this.db
-      .prepare("INSERT INTO events(id,goal_id,body) VALUES(?,?,?)")
-      .run(event.id, goalId, JSON.stringify(event));
+    if (this.depth) write();
+    else this.transaction(write);
   }
   events(goalId: string, after = 0): Event[] {
+    const rows = this.db
+      .prepare(
+        "SELECT sequence,body FROM events WHERE goal_id=? AND sequence>? ORDER BY sequence",
+      )
+      .all(goalId, after) as { sequence: number; body: string }[];
+    return rows.map((r) => ({
+      ...(JSON.parse(r.body) as Event),
+      sequence: r.sequence,
+    }));
+  }
+  tailEvents(goalId: string, limit = 150): Event[] {
+    const rows = this.db
+      .prepare(
+        "SELECT sequence,body FROM events WHERE goal_id=? ORDER BY sequence DESC LIMIT ?",
+      )
+      .all(goalId, Math.min(1000, Math.max(1, limit))) as {
+      sequence: number;
+      body: string;
+    }[];
+    return rows
+      .reverse()
+      .map((r) => ({ ...(JSON.parse(r.body) as Event), sequence: r.sequence }));
+  }
+  lastSequence(goalId: string): number {
     return (
       this.db
         .prepare(
-          "SELECT sequence,body FROM events WHERE goal_id=? AND sequence>? ORDER BY sequence",
+          "SELECT COALESCE(MAX(sequence),0) AS value FROM events WHERE goal_id=?",
         )
-        .all(goalId, after) as { sequence: number; body: string }[]
-    ).map((row) => ({
-      ...(JSON.parse(row.body) as Event),
-      sequence: row.sequence,
-    }));
+        .get(goalId) as { value: number }
+    ).value;
   }
   lock(workspaceId: string, owner: string, pid: number): void {
     this.transaction(() => {

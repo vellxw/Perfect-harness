@@ -1,0 +1,7 @@
+{
+  "platform": "linux",
+  "node": "v26.4.0",
+  "source": "actual xterm window on Xvfb, OS screenshot",
+  "scene": "synthetic repair fixture; no real providers",
+  "blur": "none; this terminal has no Acrylic compositor"
+}

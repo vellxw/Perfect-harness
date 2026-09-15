@@ -1,0 +1,36 @@
+ ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮ 
+ │                                                                                                                    │ 
+ │ ◈ Perfect / ShopFront                                                    ○ inactivo  0 activos · pruebas 0/0  DEMO │ 
+ │                                                                                                                    │ 
+ │  TU PRÓXIMA IDEA                                                                                                   │ 
+ │                                                                                                                    │ 
+ │  ¿Qué querés construir?                                                                                            │ 
+ │                                                                                                                    │ 
+ │  Describí un objetivo. Perfect lo planifica, lo construye y lo verifica.                                           │ 
+ │                                                                                                                    │ 
+ │  Datos de demostración · sin cuentas, cambios de código ni inferencias                                             │ 
+ │                                                                                                                    │ 
+ │  EMPEZÁ CON UN OBJETIVO                                                                     Tab para inspeccionar  │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │  Planificá con claridad. Construí con cuidado. Verificá el resultado.                                              │ 
+ │                                                                                                                    │ 
+ │  Tu código permanece intacto hasta que apliques un resultado verificado.                                           │ 
+ │                                                                                                                    │ 
+ │  /carpeta elegir carpeta · /diagnostico revisar · /conectar                                                        │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  │ 
+ │  │ › Pedile a Perfect qué construir…  / acciones                                                                │  │ 
+ │  │                                                                                                              │  │ 
+ │  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  │ 
+ │  /agentes /plan /verificar /cambios    Ctrl+K acciones                                            PRIVADO · 0.2.1  │ 
+ │                                                                                                                    │ 
+ ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ 

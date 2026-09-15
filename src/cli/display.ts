@@ -1,4 +1,5 @@
 import type { Goal } from "../domain/model.js";
+import { stateLabel, valueLabel } from "../i18n/es.js";
 import type { StateStore } from "../ports/state-store.js";
 export function statusSnapshot(store: StateStore, goal: Goal) {
   const tasks = store.list("tasks", goal.id),
@@ -66,7 +67,7 @@ export function renderStatus(store: StateStore, goal: Goal): string {
   const lines = [
     `GOAL ${goal.id}`,
     goal.originalRequest,
-    `State: ${goal.state} | Mode: ${goal.mode} | Iteration: ${goal.iteration}/${(goal.configSnapshot as { limits: { maxGoalIterations: number } }).limits.maxGoalIterations}`,
+    `Estado: ${stateLabel(goal.state)} | Modo: ${valueLabel(goal.mode)} | Iteración: ${goal.iteration}/${(goal.configSnapshot as { limits: { maxGoalIterations: number } }).limits.maxGoalIterations}`,
     `Candidate: ${goal.candidateRevision}`,
     `Planner: ${goal.plannerCalls} calls | Oracle: ${goal.oracleCalls} calls | Requests: ${goal.providerRequests}`,
     "",
@@ -79,7 +80,7 @@ export function renderStatus(store: StateStore, goal: Goal): string {
       .at(-1);
     const elapsed = Math.floor((Date.now() - Date.parse(run.startedAt)) / 1000);
     lines.push(
-      `RUNNING ${run.taskId ?? route.id}: ${route.provider}/${route.model} | requested ${route.requestedReasoning} | selected ${route.selectedReasoning} | sent ${observation?.reasoningSent ?? "not observed yet"} | reported ${observation?.reasoningReported ?? "unknown"} | ${elapsed}s`,
+      `EN CURSO ${run.taskId ?? route.id}: ${route.provider}/${route.model} | solicitado ${route.requestedReasoning} | seleccionado ${route.selectedReasoning} | enviado ${observation?.reasoningSent ?? "todavía no observado"} | informado ${observation?.reasoningReported ?? "desconocido"} | ${elapsed}s`,
     );
   }
   for (const task of value.tasks.filter(
@@ -90,14 +91,14 @@ export function renderStatus(store: StateStore, goal: Goal): string {
     );
   lines.push(
     "",
-    `Verification on current candidate: ${value.verification.passed}/${value.verification.total}`,
+    `Verificación de la versión actual: ${value.verification.passed}/${value.verification.total}`,
   );
   for (const account of value.accounts)
     lines.push(
-      `${account.account}: ${account.reportedTokens} reported tokens; ${account.unknownRequests} uncertain requests; billed amount ${account.reportedChargesUsd === null ? "not reported" : `USD ${account.reportedChargesUsd.toFixed(4)}`}`,
+      `${account.account}: ${account.reportedTokens} tokens informados; ${account.unknownRequests} solicitudes inciertas; cargo observado ${account.reportedChargesUsd === null ? "no informado" : `USD ${account.reportedChargesUsd.toFixed(4)}`}`,
     );
   if (goal.pauseReason ?? goal.terminalReason)
     lines.push(`Reason: ${goal.pauseReason ?? goal.terminalReason}`);
-  lines.push(`Evidence and report: ${goal.root}`);
+  lines.push(`Evidencia e informe: ${goal.root}`);
   return lines.join("\n");
 }

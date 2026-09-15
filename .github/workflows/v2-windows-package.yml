@@ -1,0 +1,63 @@
+name: Windows package
+on:
+  push:
+    branches: [main, feat/perfect-harness-v2-tui-windows]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: v2-windows-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - name: Compilar el instalador en español con Node incluido
+        shell: pwsh
+        run: |
+          if (-not (Get-ChildItem "${env:ProgramFiles(x86)}/Inno Setup*/ISCC.exe" -ErrorAction SilentlyContinue)) {
+            choco install innosetup --version=6.7.0 --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'Falló la instalación de Inno Setup' }
+          }
+          ./scripts/package-windows.ps1 -Installer
+      - name: Probar ejecutable, idioma, perfil, instalación y desinstalación
+        shell: pwsh
+        run: ./scripts/smoke-windows.ps1 -Installer
+      - name: Capturar Windows Terminal cuando exista escritorio interactivo
+        shell: pwsh
+        run: ./scripts/capture-windows.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-terminal-desktop
+          path: test-results/windows-desktop
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: Perfect-Windows-x64-Espanol-Instalador
+          path: |
+            release/Perfect-Harness-Setup-x64.exe
+            release/SHA256SUMS.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Perfect-Harness-Windows-x64
+          path: |
+            release/*.zip
+            release/*Setup*.exe
+            release/SHA256SUMS.txt
+            release/Perfect-Harness-Windows-x64/package-integrity.json
+          compression-level: 0
+          retention-days: 14

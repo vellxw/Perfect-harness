@@ -1,147 +1,151 @@
 # Perfect Harness
 
-Un coding-agent harness local sobre **Pi SDK**: planificación multiagente, cambios aislados, verificación ejecutada y un Judge determinista. No es una extensión gigante ni una cadena fija de prompts.
+**Construí hasta que la evidencia demuestre que está listo.**
 
-```text
-goal → descubrir → plan/DAG → workers en paralelo → integrar
-     → verificar → revisar → Judge → DONE
-                  ↳ reparar / replantear / pausar
-```
+Agentes de programación locales sobre Pi SDK, con una interfaz de terminal reactiva, diseñada para el teclado y con estética de vidrio negro. Describí un objetivo, revisá el plan, observá el trabajo de los especialistas y aceptá el resultado solo después de aprobar las verificaciones.
 
-**Un agente no puede declarar DONE.** Deben pasar los criterios y verificaciones del plan aprobado, sobre el candidato integrado actual, con evidencia íntegra y las revisiones exigidas. `PAUSED` conserva trabajo y explica qué falta; no equivale a éxito.
+## Versión 0.2.1 · Español
+
+La interfaz, la ayuda, las acciones, las confirmaciones y el instalador se presentan en español. Los comandos originales siguen funcionando. Los nombres de modelos y proveedores, niveles de razonamiento, claves JSON, identificadores, código, rutas y evidencia original no se traducen ni se sustituyen.
+
+![Perfect en español: renderizador OpenTUI real con datos de demostración](docs/screenshots/es/running.png)
+
+Esta imagen proviene del renderizador real de la aplicación, con datos deterministas identificados como **DEMO**. No es una imagen generada ni demuestra actividad de cuentas personales. El concepto de vidrio es una referencia de diseño: las celdas de una terminal no pueden dibujar refracciones arbitrarias de píxeles. Las capturas históricas de la versión anterior se conservan por separado con su procedencia.
 
 ## Instalación
 
-V1 validada en Linux/WSL2, con **Node 24**, Git y Docker. Ejecutar con un usuario normal, no con `sudo`. No requiere una instalación global adicional de Pi.
+La V2 está en `feat/perfect-harness-v2-tui-windows`. Se conservan la V1 y su solicitud de revisión independiente.
+
+### Windows 11 x64
+
+Descargá el archivo de instalación de una ejecución exitosa del flujo **Windows package**, verificando el commit y la versión elegidos. El paquete contiene `Perfect-Harness-Setup-x64.exe`, un ZIP portable completo y las sumas de verificación SHA256. La versión 0.2.1 usa el instalador en español.
+
+La instalación es por usuario, sin privilegios de administrador. Incluye icono, acceso en Inicio, acceso opcional al escritorio y un perfil independiente de Windows Terminal. La integración con el PATH es opcional y reversible. Node está incluido: no hace falta instalarlo globalmente. Extraé el ZIP completo; `Perfect.exe` es un iniciador nativo pequeño y necesita los archivos que lo acompañan.
+
+Windows Terminal es necesario para abrir la ventana visual dedicada. Git y un motor de Docker capaz de ejecutar contenedores Linux siguen siendo necesarios para trabajar sobre código real. No se instalan silenciosamente ni se reducen las protecciones del entorno aislado. El ejecutable y el instalador **no tienen firma Authenticode**. Consultá [instalación, compilación y validación en Windows](docs/windows.md).
+
+### Desde el código fuente
+
+Usá Node **26.4.0** de la serie 26.x y Git:
 
 ```sh
-git clone --branch feat/perfect-harness-v1 https://github.com/vellxw/Perfect-harness.git
+git clone --branch feat/perfect-harness-v2-tui-windows https://github.com/vellxw/Perfect-harness.git
 cd Perfect-harness
 npm ci
 npm run build
 npm link
-perfect --version
+perfect
 ```
 
-Preparar explícitamente las imágenes de ejecución:
+OpenTUI requiere FFI experimental en Node. La entrada lo habilita para la interfaz y el iniciador de Windows proporciona ese parámetro. Pi sigue fijado en 0.85.1. SQLite utiliza `node:sqlite` y conserva el formato de la base de datos de V1. La traducción no migra ni borra tus proyectos, cuentas o estado local.
 
-```sh
-docker pull node:24-bookworm-slim
-docker pull mcr.microsoft.com/playwright:v1.63.0-noble
-perfect doctor
+## Primeros pasos
+
+Abrí `perfect`. El diagnóstico inicial te orienta para conectar las cuentas. Escribí lo que querés construir y presioná Enter. Los objetivos son privados por defecto. Cuando el plan esté listo, revisá `/plan`, aprobalo con `/aprobar` y continuá con `/reanudar`.
+
+Para seleccionar tu proyecto:
+
+```powershell
+perfect --carpeta "C:\Proyectos\Mi aplicación"
 ```
 
-`doctor` diagnostica; no instala herramientas, no abre una sesión de inferencia y no llama a un modelo. Sin Docker, la ejecución de comandos se bloquea: **no existe un fallback a shell del host**. Las imágenes se resuelven a un ID inmutable al ejecutarlas.
-
-### Primero: demostrar el loop sin cuentas
+Dentro de la interfaz también podés usar `/carpeta` seguido de la ruta. Para explorarla sin cuentas ni cambios en tu código:
 
 ```sh
-perfect smoke --fullstack --mock --accept-plan
+perfect --demo running
+perfect --demo repair
+perfect --demo done
 ```
 
-El ejemplo temporal construye una miniapp de reservas con API, SQLite y UI. Los **providers y reviews son simulados e identificados como `perfect-mock`**; Git, ownership, comandos aislados, API, persistencia, navegador, capturas y Judge son reales. El primer frontend tiene un desborde móvil deliberado: su verificación sintáctica pasa, el navegador lo rechaza y una repair recibe capturas para corregirlo. El origen no se modifica.
+Los nombres de estos escenarios son identificadores técnicos; su contenido se muestra en español. Las demostraciones están marcadas **DEMO**. Ver un nombre de modelo no demuestra acceso a una cuenta: eso se comprueba mediante una prueba real y explícita después de conectar el proveedor.
 
-### Después: autenticar las rutas reales
+## Proveedores
+
+| Rol visible | Ruta configurada | Razonamiento literal |
+|---|---|---|
+| Planificador | `xai/grok-4.6` | `xhigh` |
+| Asistente / integrador | `xai/grok-4.6` | `medium` |
+| Interfaz | `opencode/muse-spark-1.3-contributor-free` | `xhigh`, no Max |
+| Servidor | `openai-codex/gpt-6-astra` | `high` |
+| Revisor experto | `openai-codex/gpt-6-astra` | `xhigh`, solo lectura |
 
 ```sh
-perfect login xai
-perfect login openai-codex
-perfect login opencode
-perfect doctor --online
-perfect smoke --allow-contributor
+perfect conectar xai
+perfect conectar openai-codex
+perfect conectar opencode
+perfect diagnostico --en-linea
+perfect prueba --permitir-contributor
 ```
 
-Los logins usan las rutas de autenticación de Pi. Para una API key, el comando la solicita sin mostrarla; alternativamente `--key-env NOMBRE_DE_VARIABLE`. No pasar tokens como argumentos, pegarlos en issues ni subirlos a GitHub. El permiso Contributor del smoke solo autoriza datos sintéticos de diagnóstico, no el código de tu proyecto.
+Las claves API y autorizaciones OAuth se introducen localmente. Nunca deben copiarse a GitHub. Contributor exige consentimiento explícito por carpeta y contenido público; los mensajes y respuestas pueden utilizarse para entrenamiento. `/contribuir` lo explica antes de pedir autorización. `/publico` solo afecta al próximo objetivo y no autoriza por sí mismo a compartirlo. `/contribuir revocar` revoca el consentimiento para futuras solicitudes; no retira información ya enviada.
 
-| Rol                           | Provider / modelo solicitado               | Reasoning |
-| ----------------------------- | ------------------------------------------ | --------- |
-| Planner                       | `xai/grok-4.6`                             | `xhigh`   |
-| General / integrator          | `xai/grok-4.6`                             | `medium`  |
-| Frontend                      | `opencode/muse-spark-1.3-contributor-free` | `xhigh`   |
-| Backend                       | `openai-codex/gpt-6-astra`                 | `high`    |
-| Oracle, read-only             | `openai-codex/gpt-6-astra`                 | `xhigh`   |
-| Revisión visual independiente | `xai/grok-4.6`                             | `medium`  |
+No hay cambios silenciosos de modelo ni de modalidad de cobro. Consultá [autenticación](docs/authentication.md) y [compatibilidad de proveedores](docs/provider-compatibility.md). Las instrucciones o errores externos que un proveedor emita sin traducción se conservan para no ocultar información relevante.
 
-Son bindings explícitos del producto, **no una afirmación de que tus cuentas ya fueron probadas**. Muse Free no se etiqueta Max: el catálogo fijado declara `max: null`. No se cambia de proveedor, modelo, reasoning o modalidad de cobro silenciosamente. [Compatibilidad y auditoría](docs/provider-compatibility.md).
+## Controles de la terminal
 
-## Trabajar sobre un proyecto
+| Acción | Control |
+|---|---|
+| Enviar un objetivo | Enter |
+| Nueva línea | Shift+Enter cuando se admite; Ctrl+J como alternativa |
+| Buscar comandos | `/` |
+| Acciones rápidas | Ctrl+K |
+| Inspeccionar actividad | Tab, flechas y Enter |
+| Agentes / plan / verificación / cambios | Alt+A / Alt+P / Alt+V / Alt+D |
+| Cerrar un panel | Escape |
+| Salir de forma segura | `/salir` o Ctrl+C; primero se pausa el trabajo activo |
+
+`/agentes`, `/plan`, `/tareas`, `/verificar`, `/archivos`, `/cambios`, `/modelos`, `/consumo`, `/registros`, `/diagnostico` y `/ajustes` muestran los detalles sin llenar la pantalla de paneles permanentes. En archivos, Enter inspecciona texto verificado, O abre una imagen o video verificado y C copia su ruta. Los demás formatos no se ejecutan automáticamente.
+
+Las operaciones sensibles requieren escribir una confirmación: `APROBAR`, `APLICAR`, `CANCELAR` o `COMPARTIR`, según la acción. Un Enter vacío no concede permiso. La autorización sigue vinculada al plan o versión exactos. Un nivel de razonamiento no informado sigue siendo desconocido. La iteración es un contador de límites, no un porcentaje estimado de avance. La interfaz se adapta al ancho y conserva el uso por teclado en 80×24.
+
+La CLI tradicional también está disponible en español:
 
 ```sh
-cd /ruta/a/mi-proyecto
-perfect init
-perfect goal "Implementá la funcionalidad y demostrá que cumple sus criterios"
-perfect plan
-perfect approve-plan
-perfect resume
+perfect estado
+perfect estado --json
+perfect --sin-interfaz objetivo "Construí la funcionalidad"
+perfect pausar
+perfect reanudar
+perfect cambios
+perfect aplicar --si
+perfect ayuda
 ```
 
-Por defecto la goal es privada y exige aprobación del plan. **La ruta Contributor se bloqueará para una tarea privada/confidencial**, sin sustituirse por una ruta de pago. Para un workspace que realmente pueda compartirse con esa modalidad, después de revisar las condiciones de entrenamiento:
+Para aprobar un plan desde la CLI usá `perfect aprobar-plan`; `perfect aprobar <id-criterio>` conserva la aprobación de un criterio humano individual. Dentro de la interfaz, `/aprobar` abre la revisión del plan.
 
-```sh
-perfect consent-contributor --yes
-perfect goal --public "Construí una landing responsive con verificación visual"
+Los nombres originales (`goal`, `status`, `agents`, `resume`, `doctor`, entre otros) y sus opciones originales siguen funcionando. `--json` conserva las claves y estados del protocolo: por ejemplo, `DONE` continúa siendo `DONE` en JSON, aunque la interfaz muestre «completado». La interfaz es un cliente del mismo motor, no un segundo evaluador. [Arquitectura de la interfaz](docs/tui-architecture.md).
+
+## Funcionamiento
+
+```text
+objetivo → exploración → plan → grafo de tareas → agentes aislados
+         → integración → verificación real → revisión independiente
+         → evaluador de evidencia → reparación / nuevo plan / pausa / completado
 ```
 
-Ambas autorizaciones son necesarias: consentimiento del workspace y clasificación pública. Una task puede elevar la clasificación, nunca reducirla. `perfect consent-contributor --revoke` detiene nuevas solicitudes a Contributor; no revierte información ya enviada.
+La carpeta original se conserva intacta. Las copias de trabajo tienen áreas asignadas, los comandos se ejecutan en contenedores aislados y la evidencia se vincula a una revisión concreta. El controlador, no un modelo que diga «terminé», decide cuándo se cumple el objetivo. Aplicar los cambios requiere autorización y comprobación de divergencias. [Arquitectura](docs/architecture.md), [ciclo de objetivos](docs/goal-loop.md), [recuperación](docs/recovery.md).
 
-### Comandos principales
+## Seguridad
 
-```sh
-perfect status --watch
-perfect tasks
-perfect agents
-perfect routing
-perfect cost
-perfect logs --follow
-perfect pause
-perfect resume
-perfect abort
-perfect retry <task-id>
-perfect diff
-perfect apply --yes
-```
+No se ejecutan comandos directamente en el equipo como alternativa a un Docker ausente. No se incluyen secretos en el contexto ni se publican cambios remotos desde los objetivos por defecto. La interfaz no puede escribir `DONE` ni modificar las rutas de los modelos. Las credenciales se enmascaran y solo viajan por comunicación local privada. Abrir un archivo requiere validar su hash y tipo. [Modelo de seguridad](SECURITY.md).
 
-`apply` requiere DONE y que tanto el origen como el candidato sigan intactos. Aplica solo el delta verificado: no hace commit ni push en el repositorio original. No se hace stash/reset del trabajo del usuario. Si hay divergencia o una operación previa incierta, se detiene. Las goals terminales son inmutables; `retry` no resetea límites.
+Tener un ejecutable no elimina los requisitos de Git, Docker y acceso a proveedores. Acrylic y Mica dependen de Windows Terminal; las celdas no ofrecen desenfoque por píxel. No se utiliza Electron, Tauri, una interfaz web ni un servicio de servidor nuevo.
 
-`perfect shell` admite `/goal`, `/status`, `/plan`, `/tasks`, `/agents`, `/routing`, `/cost`, `/pause`, `/resume`, `/abort`, `/retry` y `/logs`. `--home`, `--workspace` y `--json` están disponibles en la CLI. Códigos: `0` éxito, `2` bloqueo/pausa, `3` goal fallida y `130` abortada.
-
-La extensión opcional se carga desde `dist/pi-extension/index.js` en una instalación compatible de Pi. Expone `/goal` y `/perfect <comando>`; no reemplaza el `/resume` propio de Pi. Autenticación, consentimiento y apply se hacen en la CLI, no en la extensión.
-
-### Dependencias de un proyecto
-
-El sandbox no hereda `node_modules`, `.npmrc` ni credenciales del host. Si el proyecto necesita paquetes, la goal puede pausar para una preparación explícita:
+## Verificación y desarrollo
 
 ```sh
-perfect prepare <goal-id> --allow-network
-perfect resume <goal-id>
-```
-
-Para los manifiestos de una task pausada, agregar `--task <task-id>`; esa task debe tener ownership del lockfile. Para Remotion, `--render`. La preparación usa solo el registro público npm, sin lifecycle scripts, y guarda hashes de manifests/lockfile e ID de imagen. Verificaciones posteriores funcionan sin salida a Internet. [Seguridad y límites](SECURITY.md).
-
-## Configuración y estado
-
-`perfect.config.json` es JSON estricto, con [schema](perfect.config.schema.json) y [ejemplo](perfect.config.example.json). Editar y luego ejecutar `perfect trust-config --yes` tras revisar el contenido. Cambiar un archivo del repo no amplía permisos automáticamente. Cada goal conserva un snapshot de su configuración; cambios posteriores se aplican a nuevas goals.
-
-Estado local en `~/.local/share/perfect-harness` o `PERFECT_HOME`: SQLite, eventos, sesiones Pi, repositorios administrados y artifacts. Credenciales separadas por referencia de cuenta, fuera del source y de los contenedores. No se monta una base de datos de red.
-
-Defaults: 4 agentes, 2 escritores, 2 workers generales; xAI 2 por cuenta, Codex 1, Muse 1; 10 iteraciones, hasta 3 intentos por linaje, 8 invocaciones del Planner y 3 del Oracle. Presupuesto `warn`, rutas pay-per-token deshabilitadas. Uso desconocido se conserva como desconocido, no como cero. [Arquitectura](docs/architecture.md) · [Loop](docs/goal-loop.md) · [Recuperación](docs/recovery.md).
-
-## Desarrollo y pruebas
-
-```sh
-npm ci
 npm run typecheck
 npm run lint
+npm run check:config
 npm test
 npm run build
 npm run test:package
-PERFECT_TEST_DOCKER=1 npm run test:e2e
+node --experimental-ffi scripts/capture-tui.mjs
+node --experimental-ffi scripts/benchmark-tui.mjs
 ```
 
-`npm test` incluye contratos que atraviesan **Pi SDK real contra un servidor SSE falso**, sin cuentas. Los dos tests Docker se omiten localmente si no está activado `PERFECT_TEST_DOCKER`; el job Docker de CI los exige y falla si Docker no está disponible. Ese job verifica fullstack/repair y render de frames/video Remotion. CI nunca tiene OAuth personal. [Guía de validación](docs/validation.md).
+La matriz nativa comprueba Linux y Windows, incluyendo sesiones del SDK real de Pi con transporte simulado y el renderizador real de OpenTUI. Los casos de Docker ejecutan por separado el ciclo integral de reservas y reparación visual, y el renderizado de Remotion. No se utilizan cuentas personales en CI.
 
-## Límites de V1
+La localización añade pruebas de comandos españoles y originales, texto con tildes y eñes, confirmaciones, metadatos intactos y pantallas en español. Los informes distinguen la latencia del renderizador de la latencia completa del escritorio. Los datos de demostración no equivalen a inferencias reales, y Windows Server 2025 no equivale a una prueba personal de Windows 11.
 
-No es una prueba formal de corrección ni una certificación de seguridad. Los modelos y las reviews pueden equivocarse. Linux/WSL2 es la plataforma de ejecución probada; no hay soporte certificado de macOS/Windows nativo. La preparación npm es de un manifiesto raíz, no soporta registries privados ni ejecutar scripts nativos de instalación. Tests/referencias ya existentes están congelados para workers. No hay despliegues, push remoto automático, coordinación distribuida ni recolección automática de artifacts.
-
-Los smoke de tus cuentas y la cuota efectiva se validan en tu PC. La CI demuestra la lógica del harness, no que una suscripción tenga acceso. Remotion es una dependencia opcional del proyecto renderizado y conserva su propia licencia; no se relicencia por el MIT de Perfect.
+[Dirección de diseño](docs/design/perfect-v2.md) · [Capturas y procedencia](docs/screenshots/README.md) · [Windows](docs/windows.md) · [Contribuciones](CONTRIBUTING.md).

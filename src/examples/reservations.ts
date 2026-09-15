@@ -8,19 +8,19 @@ import {
   type Privacy,
   type RouteBinding,
 } from "../domain/model.js";
-import type {
-  AgentRuntime,
-  AgentRequest,
-  AgentOutput,
-} from "../ports/agent-runtime.js";
 import { hash, id, now } from "../domain/util.js";
-import { reservationTests, reservationGoal } from "./reservation-tests.js";
+import type {
+  AgentOutput,
+  AgentRequest,
+  AgentRuntime,
+} from "../ports/agent-runtime.js";
 import { backendApp, backendStart } from "./reservation-backend.js";
 import {
-  frontendHtml,
   frontendCss,
+  frontendHtml,
   frontendJs,
 } from "./reservation-frontend.js";
+import { reservationGoal, reservationTests } from "./reservation-tests.js";
 export { reservationGoal };
 export async function seedReservationSource(source: string): Promise<void> {
   await mkdir(join(source, "tests"), { recursive: true });
@@ -36,31 +36,31 @@ export async function seedReservationSource(source: string): Promise<void> {
 export function reservationPlan(): PlanProposal {
   return PlanProposalSchema.parse({
     summary:
-      "Build and independently verify a persistent responsive reservation application.",
+      "Construir y verificar independientemente una aplicación de reservas adaptable y persistente.",
     architecture: [
-      "Native Node HTTP server and SQLite unique slot constraint",
-      "Static responsive frontend using the JSON API",
-      "Immutable API tests plus browser interaction and visual inspection",
+      "Servidor HTTP nativo de Node y restricción de horario único en SQLite",
+      "Interfaz estática adaptable que consume la API JSON",
+      "Pruebas de API inmutables, interacción en navegador e inspección visual",
     ],
-    risks: ["Concurrent requests must never double-book a slot"],
+    risks: ["Las solicitudes concurrentes nunca deben duplicar una reserva"],
     criteria: [
       {
         id: "api",
         description:
-          "API validates input, rejects concurrent double booking and preserves reservations after restart",
+          "La API valida datos, rechaza reservas simultáneas duplicadas y conserva las reservas después de reiniciar",
         kind: "functional",
       },
       {
         id: "responsive",
         description:
-          "The booking form works in desktop and mobile viewports without horizontal overflow",
+          "El formulario de reservas funciona en escritorio y móvil sin desborde horizontal",
         kind: "visual",
       },
     ],
     verification: [
       {
         id: "api-tests",
-        title: "Validation, concurrency and persistence tests",
+        title: "Pruebas de validación, concurrencia y persistencia",
         kind: "command",
         criteriaIds: ["api"],
         command: {
@@ -70,14 +70,14 @@ export function reservationPlan(): PlanProposal {
       },
       {
         id: "frontend-build",
-        title: "Frontend JavaScript syntax build",
+        title: "Compilación de sintaxis JavaScript de la interfaz",
         kind: "command",
         criteriaIds: ["responsive"],
         command: { executable: "node", args: ["--check", "public/app.js"] },
       },
       {
         id: "browser",
-        title: "Responsive booking interaction",
+        title: "Interacción de reservas adaptable",
         kind: "browser",
         criteriaIds: ["responsive"],
         scenario: {
@@ -93,7 +93,7 @@ export function reservationPlan(): PlanProposal {
             {
               type: "expectText",
               selector: "#status",
-              value: "Reservation confirmed",
+              value: "Reserva confirmada",
             },
           ],
         },
@@ -102,9 +102,9 @@ export function reservationPlan(): PlanProposal {
     tasks: [
       {
         id: "foundation",
-        title: "Document API contract",
+        title: "Documentar el contrato de la API",
         description:
-          "Create package metadata and document the shared reservation API contract.",
+          "Crear los metadatos del paquete y documentar el contrato compartido de la API.",
         type: "general",
         assignedAgent: "general",
         ownedFiles: ["package.json", "contract.json"],
@@ -112,9 +112,9 @@ export function reservationPlan(): PlanProposal {
       },
       {
         id: "backend",
-        title: "Implement reservation API",
+        title: "Implementar la API de reservas",
         description:
-          "Implement the native HTTP server, strict validation, SQLite persistence and a unique constraint for concurrency safety.",
+          "Implementar el servidor HTTP nativo, validación estricta, persistencia SQLite y una restricción única para la concurrencia.",
         type: "backend",
         assignedAgent: "backend",
         riskLevel: "high",
@@ -125,9 +125,9 @@ export function reservationPlan(): PlanProposal {
       },
       {
         id: "frontend",
-        title: "Implement responsive booking UI",
+        title: "Implementar la interfaz de reservas adaptable",
         description:
-          "Implement an accessible responsive form in public/ consuming the shared API contract, with clear loading, error and confirmation states.",
+          "Implementar un formulario accesible y adaptable en public/ que use la API compartida, con estados claros de carga, error y confirmación.",
         type: "frontend",
         assignedAgent: "frontend",
         dependencies: ["foundation"],
@@ -183,7 +183,7 @@ export class ReservationDemoRuntime implements AgentRuntime {
       result = {
         decision: "approve",
         summary:
-          "Scripted mock review exercises routing only; no real model judgment was performed.",
+          "La revisión simulada solo prueba la asignación de rutas; ningún modelo real emitió un juicio.",
         findings: [],
       };
     } else {
@@ -273,7 +273,7 @@ export class ReservationDemoRuntime implements AgentRuntime {
     });
     return {
       result: request.parseResult ? request.parseResult(result) : result,
-      summary: "Scripted smoke (not a real inference)",
+      summary: "Prueba simulada (no es una inferencia real)",
     };
   }
 }

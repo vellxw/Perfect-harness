@@ -1,8 +1,9 @@
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
-import type { PerfectConfig } from "../config/schema.js";
 import { PiRuntime } from "../adapters/pi/runtime.js";
+import type { PerfectConfig } from "../config/schema.js";
 import { Blocked } from "../domain/util.js";
+import { humanMessage } from "../i18n/messages.js";
 
 async function answer(
   message: string,
@@ -15,12 +16,12 @@ async function answer(
       output: process.stdout,
     });
     try {
-      return await rl.question(`${message}: `, { signal });
+      return await rl.question(`${humanMessage(message)}: `, { signal });
     } finally {
       rl.close();
     }
   }
-  process.stdout.write(`${message}: `);
+  process.stdout.write(`${humanMessage(message)}: `);
   const muted = new Writable({
     write(_chunk, _encoding, callback) {
       callback();
@@ -51,27 +52,32 @@ export async function login(
   const definition = definitions[0];
   if (!definition) throw new Blocked("PROVIDER_UNKNOWN", provider);
   if (definition.auth === "mock")
-    throw new Blocked("MOCK_AUTH", "A mock provider has no account login");
+    throw new Blocked(
+      "MOCK_AUTH",
+      "Un proveedor simulado no tiene inicio de sesión",
+    );
   if (!account && new Set(definitions.map((d) => d.accountRef)).size > 1)
     throw new Blocked(
       "ACCOUNT_REQUIRED",
-      "Select the configured account with --account",
+      "Seleccioná la cuenta configurada con --cuenta",
     );
   const runtime = await new PiRuntime(home, config).modelRuntime(definition);
   const controller = new AbortController(),
-    cancel = () => controller.abort(new Error("Login cancelled"));
+    cancel = () => controller.abort(new Error("Conexión cancelada"));
   process.once("SIGINT", cancel);
   try {
     await runtime.login(provider, definition.auth, {
       signal: controller.signal,
       notify: (event) => {
         if (event.type === "auth_url")
-          console.log(`Open: ${event.url}\n${event.instructions ?? ""}`);
+          console.log(
+            `Abrí: ${event.url}\n${humanMessage(event.instructions ?? "")}`,
+          );
         else if (event.type === "device_code")
           console.log(
-            `Open: ${event.verificationUri}\nDevice code: ${event.userCode}`,
+            `Abrí: ${event.verificationUri}\nCódigo del dispositivo: ${event.userCode}`,
           );
-        else console.log(event.message);
+        else console.log(humanMessage(event.message));
       },
       prompt: async (prompt) => {
         if (prompt.type === "secret" && keyEnv) {
@@ -84,7 +90,7 @@ export async function login(
             prompt.options
               .map(
                 (option, index) =>
-                  `${index + 1}. ${option.label}${option.description ? ` — ${option.description}` : ""}`,
+                  `${index + 1}. ${humanMessage(option.label)}${option.description ? ` — ${humanMessage(option.description)}` : ""}`,
               )
               .join("\n"),
           );
@@ -92,14 +98,14 @@ export async function login(
           const selected =
             prompt.options.find((o) => o.id === value) ??
             prompt.options[Number(value) - 1];
-          if (!selected) throw new Error("Invalid selection");
+          if (!selected) throw new Error("Selección inválida");
           return selected.id;
         }
         return answer(prompt.message, prompt.type === "secret", prompt.signal);
       },
     });
     console.log(
-      `Authentication saved locally for ${definition.accountRef}. No token was added to the repository.`,
+      `Autenticación guardada localmente para ${definition.accountRef}. No se añadió ningún token al repositorio.`,
     );
   } finally {
     process.removeListener("SIGINT", cancel);

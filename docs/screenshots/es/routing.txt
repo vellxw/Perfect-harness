@@ -1,0 +1,36 @@
+ ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮ 
+ │                                                                                                                    │ 
+ │ ◈ Perfect / ShopFront                                                   ◌ ejecutando  1 activo · pruebas 4/5  DEMO │ 
+ │╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  │ 
+ ││                                                                                                                │  │ 
+ ││  Modelos y proveedores                                                                             Esc cerrar  │  │ 
+ ││                                                                                                                │  │ 
+ ││  › Planificador · completado                                                                                   │  │ 
+ ││   xai/grok-4.6 · extraalto (xhigh)                                                                             │  │ 
+ ││  ◌ Interfaz · en curso                                                                                         │  │ 
+ ││   opencode/muse-spark-1.3-contributor-free · extraalto (xhigh)                                                 │  │ 
+ ││  ✓ Servidor · completado                                                                                       │  │ 
+ ││   openai-codex/gpt-6-astra · alto (high)                                                                       │  │ 
+ ││  ✓ Asistente · completado                                                                                      │  │ 
+ ││   xai/grok-4.6 · medio (medium)                                                                                │  │ 
+ ││  ○ Revisor experto · inactivo                                                                                  │  │ 
+ ││   openai-codex/gpt-6-astra · extraalto (xhigh)                                                                 │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││                                                                                                                │  │ 
+ ││  ↑↓ elegir · Enter detalle · Esc cerrar                                                                        │  │ 
+ ││                                                                                                                │  │ 
+ │╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  │ 
+ │  /agentes /plan /verificar /cambios    Ctrl+K acciones                                            PRIVADO · 0.2.1  │ 
+ │                                                                                                                    │ 
+ ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ 

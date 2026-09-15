@@ -1,0 +1,36 @@
+ ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮ 
+ │                                                                                                                    │ 
+ │ ◈ Perfect / ShopFront                                                          ○ idle  0 active · checks 0/0  DEMO │ 
+ │                                                                                                                    │ 
+ │  YOUR NEXT IDEA                                                                                                    │ 
+ │                                                                                                                    │ 
+ │  What do you want to build?                                                                                        │ 
+ │                                                                                                                    │ 
+ │  Describe a goal below. Perfect plans, builds and verifies it.                                                     │ 
+ │                                                                                                                    │ 
+ │  Synthetic display data · no accounts, code changes or inference calls                                             │ 
+ │                                                                                                                    │ 
+ │  START WITH A GOAL                                                                                 Tab to inspect  │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │  Plan clearly. Build carefully. Verify the result.                                                                 │ 
+ │                                                                                                                    │ 
+ │  Your code stays in its original folder until you apply a verified result.                                         │ 
+ │                                                                                                                    │ 
+ │  /workspace choose folder /doctor setup /login connect                                                             │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │                                                                                                                    │ 
+ │  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  │ 
+ │  │ › Ask Perfect what to build…  / for actions                                                                  │  │ 
+ │  │                                                                                                              │  │ 
+ │  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  │ 
+ │  /agents /plan /verify /diff    Ctrl+K actions                                                    PRIVATE · 0.2.0  │ 
+ │                                                                                                                    │ 
+ ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ 
