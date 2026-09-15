@@ -1,4 +1,4 @@
-name: V5 local workbench export (temporary)
+name: V5 local source continuation (temporary)
 on:
   push:
     branches: [feat/perfect-desktop-v5]
@@ -8,30 +8,22 @@ permissions:
 jobs:
   export:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '26.4.0'
-      - run: npm ci
-      - name: Download the pinned official Electron distribution and Playwright recorder
+          fetch-depth: 0
+      - name: Export tracked source and Git objects only
         run: |
-          node node_modules/electron/install.js
-          node node_modules/playwright/cli.js install ffmpeg
-      - name: Archive only downloaded test runtime binaries
-        run: |
-          mkdir -p "$RUNNER_TEMP/perfect-v5-binaries/electron" "$RUNNER_TEMP/perfect-v5-binaries/playwright"
-          cp -R node_modules/electron/dist "$RUNNER_TEMP/perfect-v5-binaries/electron/"
-          cp node_modules/electron/path.txt "$RUNNER_TEMP/perfect-v5-binaries/electron/"
-          cp -R "$HOME"/.cache/ms-playwright/ffmpeg-* "$RUNNER_TEMP/perfect-v5-binaries/playwright/"
-          tar -czf "$RUNNER_TEMP/perfect-v5-binaries.tar.gz" -C "$RUNNER_TEMP/perfect-v5-binaries" .
-          sha256sum "$RUNNER_TEMP/perfect-v5-binaries.tar.gz"
+          mkdir -p "$RUNNER_TEMP/perfect-v5-source"
+          git bundle create "$RUNNER_TEMP/perfect-v5-source/history.bundle" --all
+          git rev-parse HEAD > "$RUNNER_TEMP/perfect-v5-source/SOURCE_COMMIT"
+          git rev-parse 'HEAD^{tree}' > "$RUNNER_TEMP/perfect-v5-source/SOURCE_TREE"
+          sha256sum "$RUNNER_TEMP/perfect-v5-source/history.bundle"
       - uses: actions/upload-artifact@v4
         with:
-          name: perfect-v5-local-binaries
-          path: ${{ runner.temp }}/perfect-v5-binaries.tar.gz
+          name: perfect-v5-current-source
+          path: ${{ runner.temp }}/perfect-v5-source
           retention-days: 3
           compression-level: 0
