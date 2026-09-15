@@ -8,9 +8,10 @@ $manifest=Get-Content (Join-Path $root 'build-manifest.json') -Raw | ConvertFrom
 if($manifest.version -ne $version -or $manifest.sourceCommit -notmatch '^[a-f0-9]{40}$'){throw 'Invalid build manifest'}
 $temporary=Join-Path $env:RUNNER_TEMP ('Perfect verificación ñ '+[Guid]::NewGuid())
 $destination=Join-Path $temporary 'Perfect instalado ñ'
-$home=Join-Path $temporary 'Datos del usuario'
+# PowerShell variables are case-insensitive: $home would overwrite read-only $HOME.
+$dataHome=Join-Path $temporary 'Datos del usuario'
 $workspace=Join-Path $temporary 'Proyecto español'
-New-Item -ItemType Directory $home,$workspace -Force | Out-Null
+New-Item -ItemType Directory $dataHome,$workspace -Force | Out-Null
 $beforePath=[Environment]::GetEnvironmentVariable('Path','User')
 $oldEnvPath=$env:PATH
 $fragment=Join-Path $env:LOCALAPPDATA 'Microsoft/Windows Terminal/Fragments/PerfectHarness/PerfectHarness.json'
@@ -28,7 +29,7 @@ try{
  $report.checks+='portable executable'
  if($PreviousInstaller){
   Install-Perfect (Resolve-Path $PreviousInstaller).Path
-  & "$destination/runtime/node.exe" "$PSScriptRoot/windows-upgrade-data.mjs" seed $destination $home $workspace
+  & "$destination/runtime/node.exe" "$PSScriptRoot/windows-upgrade-data.mjs" seed $destination $dataHome $workspace
   if($LASTEXITCODE -ne 0){throw 'Could not create previous-version synthetic data'}
   $report.checks+='previous version installed; synthetic state and DPAPI seeded'
  }
@@ -41,14 +42,14 @@ try{
  $report.checks+='installed V4 runs without global Node; Spanish commands available'
  $env:PATH=$oldEnvPath
  if($PreviousInstaller){
-  & "$destination/runtime/node.exe" "$PSScriptRoot/windows-upgrade-data.mjs" verify $destination $home $workspace
+  & "$destination/runtime/node.exe" "$PSScriptRoot/windows-upgrade-data.mjs" verify $destination $dataHome $workspace
   if($LASTEXITCODE -ne 0){throw 'Upgrade preservation failed'}
   $report.checks+='upgrade: goals, immutable snapshots, skills, UI and encrypted credential preserved'
  }
- $args=@('--no-ui','--home',$home,'--workspace',$workspace,'--json','habilidades')
- $state=(& $exe @args | ConvertFrom-Json)
+ $cliArgs=@('--no-ui','--home',$dataHome,'--workspace',$workspace,'--json','habilidades')
+ $state=(& $exe @cliArgs | ConvertFrom-Json)
  if($LASTEXITCODE -ne 0 -or -not $state){throw 'Installed skills command failed'}
- $second=(& $exe @args | ConvertFrom-Json)
+ $second=(& $exe @cliArgs | ConvertFrom-Json)
  if(($state | ConvertTo-Json -Depth 30 -Compress) -ne ($second | ConvertTo-Json -Depth 30 -Compress)){throw 'State changed unexpectedly across restarted CLI processes'}
  $report.checks+='skills state persists across process restart'
  if((Get-Content "$destination/build-manifest.json" -Raw | ConvertFrom-Json).sourceCommit -ne $manifest.sourceCommit){throw 'Installer payload differs from tested source'}
@@ -63,7 +64,7 @@ try{
  $p=Start-Process "$destination/unins000.exe" -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait -PassThru
  if($p.ExitCode -ne 0){throw 'Uninstaller failed'}
  if([Environment]::GetEnvironmentVariable('Path','User') -ne $beforePath){throw 'Uninstall changed unrelated PATH entries'}
- if(-not(Test-Path "$home/state.sqlite")){throw 'Uninstall removed user data'}
+ if(-not(Test-Path "$dataHome/state.sqlite")){throw 'Uninstall removed user data'}
  if($settingsHash -and (Get-FileHash $personalSettings).Hash -ne $settingsHash){throw 'Uninstall changed personal Terminal settings'}
  if((Get-FileHash $setup -Algorithm SHA256).Hash -ne $sumBefore){throw 'Installer changed after being tested'}
  $report.checks+='uninstall preserves data, PATH and Terminal settings; binary hash unchanged'
