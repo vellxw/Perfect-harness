@@ -2,7 +2,7 @@ name: V4 completion source gate (temporary)
 on:
   push:
     branches: [feat/perfect-harness-v4-skills-studios]
-    paths: [scripts/v4-completion-source.mjs, src/skills/**, tests/skills/**, .github/workflows/v4-completion-source.yml]
+    paths: [scripts/v4-completion-source.mjs, scripts/v4-completion-fixes.mjs, src/skills/**, tests/skills/**, .github/workflows/v4-completion-source.yml]
 permissions:
   contents: write
 concurrency:
@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: '26.4.0'
       - run: npm ci
-      - run: node scripts/v4-completion-source.mjs
+      - run: node scripts/v4-completion-source.mjs && node scripts/v4-completion-fixes.mjs
       - run: npx --no-install prettier --write src tests/skills
       - run: npm run typecheck
       - run: npm run lint
