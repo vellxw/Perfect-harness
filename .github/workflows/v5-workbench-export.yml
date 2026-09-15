@@ -1,0 +1,56 @@
+name: V5 local workbench export (temporary)
+on:
+  push:
+    branches: [feat/perfect-desktop-v5]
+    paths: [.github/workflows/v5-workbench-export.yml]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - name: Prepare source and installed packages only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/perfect-v5-workbench"
+          mkdir -p "$output/source" "$output/runtime" "$output/pending"
+          git archive HEAD | tar -x -C "$output/source"
+          git bundle create "$output/history.bundle" --all
+          git rev-parse HEAD > "$output/SOURCE_COMMIT"
+          cp "$(command -v node)" "$output/runtime/node"
+          cp -R "$(dirname "$(dirname "$(command -v node)")")/lib/node_modules/npm" "$output/runtime/npm"
+          tar -czf "$output/dependencies.tar.gz" node_modules
+          python3 - "$output" <<'PY'
+          import sys,json,pathlib,subprocess,base64,hashlib
+          root=pathlib.Path(sys.argv[1])/'pending'
+          tree=json.loads(subprocess.check_output(['gh','api','repos/vellxw/Perfect-harness/git/trees/f1ce5d7ba49103b4fc9c98c09b901d04ec6b4e22?recursive=1']))
+          assert not tree['truncated']
+          paths={'src/domain/references.ts','src/tools/references.ts','src/desktop/main/media.ts','tests/desktop/references.test.ts','tests/desktop/media.test.ts','src/desktop/engine/demo.ts','src/desktop/platform/launch.ts','src/desktop/contracts/limits.ts','tests/desktop/limits.test.ts'}
+          for e in tree['tree']:
+            if e['path'] not in paths:continue
+            assert e['type']=='blob' and e['mode']=='100644' and e.get('size',0)<40000
+            blob=json.loads(subprocess.check_output(['gh','api','repos/vellxw/Perfect-harness/git/blobs/'+e['sha']]))
+            data=base64.b64decode(blob['content'])
+            assert hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()==e['sha']
+            p=root/e['path'];p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(data)
+          (root/'provenance.json').write_text(json.dumps({'tree':tree['sha'],'files':sorted(paths)},indent=2))
+          PY
+          tar -czf "$RUNNER_TEMP/perfect-v5-workbench.tar.gz" -C "$output" .
+          sha256sum "$RUNNER_TEMP/perfect-v5-workbench.tar.gz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: perfect-v5-workbench
+          path: ${{ runner.temp }}/perfect-v5-workbench.tar.gz
+          retention-days: 3
+          compression-level: 0
