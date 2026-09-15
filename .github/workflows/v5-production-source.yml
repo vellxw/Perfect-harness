@@ -23,16 +23,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
       - name: Preserve DOM JSX and backward-compatible goal input
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('src/desktop/renderer/index.tsx');s=p.read_text()
-          s=s.replace('/** @jsxImportSource react */','')
-          p.write_text('/** @jsxImportSource react */\n'+s)
-          p=Path('src/presentation/protocol.ts');s=p.read_text()
-          old='referenceIds:z.array(z.string().uuid()).max(8).default([]),'
-          assert s.count(old)==1
-          p.write_text(s.replace(old,'referenceIds:z.array(z.string().uuid()).max(8).optional(),'))
-          PY
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import ts from 'typescript';
+          const ui='src/desktop/renderer/index.tsx';
+          fs.writeFileSync(ui,'/** @jsxImportSource react */\n'+fs.readFileSync(ui,'utf8').replaceAll('/** @jsxImportSource react */',''));
+          const path='src/presentation/protocol.ts',source=fs.readFileSync(path,'utf8'),file=ts.createSourceFile(path,source,ts.ScriptTarget.Latest,true),matches=[];
+          function visit(n){if(ts.isPropertyAssignment(n)&&n.name.getText(file)==='referenceIds')matches.push(n.initializer);ts.forEachChild(n,visit);}visit(file);
+          if(matches.length!==1)throw Error('Expected one referenceIds schema, found '+matches.length);
+          const n=matches[0];
+          if(!ts.isCallExpression(n)||!ts.isPropertyAccessExpression(n.expression))throw Error('Expected reference schema call');
+          if(n.expression.name.text==='default')fs.writeFileSync(path,source.slice(0,n.getStart(file))+n.expression.expression.getText(file)+'.optional()'+source.slice(n.end));
+          else if(n.expression.name.text!=='optional')throw Error('Unexpected referenceIds schema: '+n.getText(file));
+          JS
       - run: npx --no-install prettier --write src tests/desktop
       - run: npm run typecheck
       - run: npm run lint
