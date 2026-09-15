@@ -2,7 +2,7 @@ name: V5 production bridge gate (temporary)
 on:
   push:
     branches: [feat/perfect-desktop-v5]
-    paths: [scripts/desktop/connect-production.mjs, .github/workflows/v5-production-source.yml]
+    paths: [scripts/desktop/connect-production.mjs, scripts/desktop/prepare-production.mjs, .github/workflows/v5-production-source.yml]
 permissions:
   contents: read
 jobs:
@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: '26.4.0'
       - run: npm ci
-      - run: node scripts/desktop/connect-production.mjs
+      - run: node scripts/desktop/prepare-production.mjs
         env:
           GH_TOKEN: ${{ github.token }}
       - run: npx --no-install prettier --write src tests/desktop
@@ -55,7 +55,7 @@ jobs:
         with:
           node-version: '26.4.0'
       - run: npm ci
-      - run: node scripts/desktop/connect-production.mjs
+      - run: node scripts/desktop/prepare-production.mjs
         env:
           GH_TOKEN: ${{ github.token }}
       - run: npx --no-install prettier --write src tests/desktop
