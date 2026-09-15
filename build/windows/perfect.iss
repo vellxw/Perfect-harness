@@ -37,29 +37,32 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 
 [Tasks]
 Name: desktopicon; Description: "Crear un acceso directo en el escritorio"; Flags: unchecked
-Name: addpath; Description: "Añadir Perfect al PATH del usuario"; Flags: checkedonce
+Name: addpath; Description: "Añadir el comando perfect al PATH del usuario"; Flags: checkedonce
+
 [Files]
 Source: "{#Payload}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
 [Dirs]
 Name: "{userdocs}\Perfect Projects\Workspace"; Flags: uninsneveruninstall
+
 [Icons]
-Name: "{group}\Perfect Harness"; Filename: "{app}\Perfect.exe"; Parameters: "--window"; WorkingDir: "{userdocs}\Perfect Projects\Workspace"
-Name: "{autodesktop}\Perfect Harness"; Filename: "{app}\Perfect.exe"; Parameters: "--window"; WorkingDir: "{userdocs}\Perfect Projects\Workspace"; Tasks: desktopicon
+Name: "{group}\Perfect Harness"; Filename: "{app}\Perfect.exe"; WorkingDir: "{userdocs}\Perfect Projects\Workspace"
+Name: "{autodesktop}\Perfect Harness"; Filename: "{app}\Perfect.exe"; WorkingDir: "{userdocs}\Perfect Projects\Workspace"; Tasks: desktopicon
+
 [Run]
-Filename: "{app}\Perfect.exe"; Parameters: "--install-profile"; Flags: runhidden waituntilterminated
-Filename: "{app}\Perfect.exe"; Parameters: "--window"; Description: "Abrir Perfect Harness"; WorkingDir: "{userdocs}\Perfect Projects\Workspace"; Flags: postinstall nowait skipifsilent
-[UninstallRun]
-Filename: "{app}\Perfect.exe"; Parameters: "--remove-profile"; Flags: runhidden waituntilterminated; RunOnceId: "PerfectTerminalProfile"
+Filename: "{app}\Perfect.exe"; Description: "Abrir Perfect Harness"; WorkingDir: "{userdocs}\Perfect Projects\Workspace"; Flags: postinstall nowait skipifsilent
+
 [Code]
 function HasPath(Value, Entry: String): Boolean;
 begin
   Result := Pos(';' + Lowercase(Entry) + ';', ';' + Lowercase(Value) + ';') > 0;
 end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var Value, Entry: String;
 begin
   if (CurStep = ssPostInstall) and WizardIsTaskSelected('addpath') then begin
-    Entry := ExpandConstant('{app}');
+    Entry := ExpandConstant('{app}\bin');
     RegQueryStringValue(HKCU, 'Environment', 'Path', Value);
     if not HasPath(Value, Entry) then begin
       if Value = '' then Value := Entry else Value := Value + ';' + Entry;
@@ -68,11 +71,12 @@ begin
     end;
   end;
 end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var Value, Entry, Stored, Item, Updated: String; P: Integer;
 begin
   if CurUninstallStep = usPostUninstall then begin
-    Entry := ExpandConstant('{app}');
+    Entry := ExpandConstant('{app}\bin');
     if RegQueryStringValue(HKCU, 'Software\PerfectHarness', 'PathAdded', Stored) and (CompareText(Stored, Entry) = 0) then begin
       RegQueryStringValue(HKCU, 'Environment', 'Path', Value);
       Updated := '';

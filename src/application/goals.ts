@@ -1,3 +1,7 @@
+import {
+  resolveUserReferences,
+  copyGoalReferences,
+} from "../tools/references.js";
 import { SkillsRegistry } from "../skills/registry.js";
 import { mkdir, realpath } from "node:fs/promises";
 import { join, resolve, relative, sep } from "node:path";
@@ -17,6 +21,7 @@ export async function createGoal(
     privacy: Privacy;
     mode?: "real" | "mock";
     workMode?: string;
+    referenceIds?: string[];
   },
   store: StateStore,
 ): Promise<Goal> {
@@ -46,7 +51,15 @@ export async function createGoal(
   try {
     const workspace = new GitWorkspace(root, input.config),
       snapshot = await workspace.initialize(source);
+    const references = await resolveUserReferences(
+      home,
+      source,
+      input.referenceIds ?? [],
+      input.privacy ?? "private",
+    );
+    await copyGoalReferences(home, root, references);
     const goal: Goal = {
+      references,
       id: goalId,
       schemaVersion: 1,
       originalRequest: input.request,

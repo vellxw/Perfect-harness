@@ -1,3 +1,4 @@
+import type { UserReference } from "./references.js";
 import { z } from "zod";
 
 export const Id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$/);
@@ -281,6 +282,7 @@ export interface AgentRun {
   stopReason?: string;
 }
 export interface ContextPackage {
+  references?: UserReference[];
   specialization?: {
     profileId: string;
     setIds: string[];
@@ -451,6 +453,8 @@ export interface Task extends TaskSpec {
   updatedAt: string;
 }
 export interface Goal {
+  references?: UserReference[];
+  demonstration?: "reservation-v4";
   studioSnapshotId?: string;
   id: string;
   schemaVersion: 1;

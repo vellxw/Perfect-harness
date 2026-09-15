@@ -17,3 +17,7 @@ assets/windows/desktop/*.exe
 assets/windows/desktop/*.dll
 assets/windows/desktop/*LICENSE*
 assets/windows/desktop/provenance.json
+
+# Desktop compiled output
+/desktop/
+/desktop-package/

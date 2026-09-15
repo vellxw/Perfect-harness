@@ -602,7 +602,10 @@ export class Orchestrator {
         "Persisted configuration fingerprint mismatch",
       );
     const owner = id("controller");
-    this.store.lock(initial.workspaceId, owner, process.pid);
+    this.store.transaction(() => {
+      this.store.lock("perfect-active-goal-loop", owner, process.pid);
+      this.store.lock(initial.workspaceId, owner, process.pid);
+    });
     const started = Date.now(),
       controller = new AbortController();
     let requested: "pause" | "abort" | undefined;
@@ -668,7 +671,10 @@ export class Orchestrator {
         },
         "goal.checkpointed",
       );
-      this.store.unlock(initial.workspaceId, owner);
+      this.store.transaction(() => {
+        this.store.unlock(initial.workspaceId, owner);
+        this.store.unlock("perfect-active-goal-loop", owner);
+      });
       const goal = this.goal();
       await writeFile(
         join(goal.root, "report.json"),

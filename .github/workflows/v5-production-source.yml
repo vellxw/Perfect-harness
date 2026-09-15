@@ -1,0 +1,86 @@
+name: V5 production bridge gate (temporary)
+on:
+  push:
+    branches: [feat/perfect-desktop-v5]
+    paths: [scripts/desktop/connect-production.mjs, scripts/desktop/prepare-production.mjs, .github/workflows/v5-production-source.yml]
+permissions:
+  contents: read
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - run: node scripts/desktop/prepare-production.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: npx --no-install prettier --write src tests/desktop
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run check:config
+      - run: npm run build:desktop
+      - run: npm test
+      - run: node node_modules/electron/install.js
+      - run: node node_modules/playwright/cli.js install ffmpeg
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2t64
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+      - run: xvfb-run -a -s '-screen 0 1920x1080x24' node scripts/desktop/ui-e2e.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v5-production-bridge
+          path: test-results/desktop
+          retention-days: 14
+  stage:
+    needs: gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - run: node scripts/desktop/prepare-production.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: npx --no-install prettier --write src tests/desktop
+      - uses: actions/download-artifact@v4
+        with:
+          name: v5-production-bridge
+          path: desktop-review-evidence
+      - name: Stage source and inspectable images, never publish a branch automatically
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import pathlib,json,subprocess,base64,os,shutil
+          names=set(subprocess.check_output(['git','diff','--name-only'],text=True).splitlines())
+          names.update(subprocess.check_output(['git','ls-files','--others','--exclude-standard','src','tests/desktop'],text=True).splitlines())
+          for p in pathlib.Path('desktop-review-evidence').glob('*.png'):
+            assert p.stat().st_size<5000000
+            dst=pathlib.Path('docs/screenshots/v5')/p.name;dst.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(p,dst);names.add(dst.as_posix())
+          prov=pathlib.Path('docs/screenshots/v5/provenance.json');prov.write_text(json.dumps({'sourceCommit':os.environ['GITHUB_SHA'],'workflowRun':os.environ['GITHUB_RUN_ID'],'method':'Real Electron screenshot, synthetic local workspace, no provider inference','inspection':'Awaiting visual review; file existence alone is not approval'},indent=2));names.add(prov.as_posix())
+          entries=[]
+          for name in sorted(names):
+            assert name.startswith(('src/','tests/desktop/','docs/screenshots/v5/')) or name=='scripts/desktop/build.mjs'
+            p=pathlib.Path(name);assert p.is_file() and not p.is_symlink() and p.stat().st_size<6000000
+            blob=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/vellxw/Perfect-harness/git/blobs','--input','-'],input=json.dumps({'encoding':'base64','content':base64.b64encode(p.read_bytes()).decode()}),text=True))['sha']
+            entries.append({'path':name,'mode':'100644','type':'blob','sha':blob})
+          tree=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/vellxw/Perfect-harness/git/trees','--input','-'],input=json.dumps({'base_tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),'tree':entries}),text=True))['sha']
+          print('VALIDATED_TREE='+tree);print('PARENT='+os.environ['GITHUB_SHA'])
+          PY
