@@ -3,7 +3,9 @@ $ErrorActionPreference='Stop'
 if(-not $IsWindows){throw 'El módulo de escritorio se prepara en Windows x64'}
 $root=Split-Path $PSScriptRoot -Parent
 Set-Location $root
-$out=[IO.Path]::GetFullPath($Output)
+# PowerShell's location is not necessarily the .NET process current directory.
+# Resolve against this checkout, including when it lives in a nested upgrade fixture.
+$out=[IO.Path]::GetFullPath($Output,$root)
 New-Item -ItemType Directory $out -Force | Out-Null
 $tmp=Join-Path ([IO.Path]::GetTempPath()) ('perfect-winapp-'+[Guid]::NewGuid())
 New-Item -ItemType Directory $tmp | Out-Null
@@ -29,6 +31,9 @@ try {
   $vaultSource=(Resolve-Path 'src/windows/CredentialVault.cs').Path
   & $csc /nologo /target:exe /platform:x64 /optimize+ "/out:$out/Perfect.CredentialVault.exe" /reference:System.Security.dll $vaultSource
   if($LASTEXITCODE -ne 0){throw 'No se compiló el almacén cifrado de credenciales'}
+  foreach($required in @('winapp.exe','libSkiaSharp.dll','Perfect.DesktopGuard.exe','Perfect.DesktopElementGuard.exe','Perfect.CredentialVault.exe')){
+    if(-not(Test-Path (Join-Path $out $required) -PathType Leaf)){throw "Falta recurso nativo en la carpeta de este checkout: $required"}
+  }
   @{backend='Microsoft WinApp CLI';version='0.6.0';archiveSha256='f6dc42e3b4e4709c8f617003008e2cfdd9a51735e04e7170d60edda258db78a8';files=@(Get-ChildItem $out -File | ForEach-Object {@{name=$_.Name;sha256=(Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}})} | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $out 'provenance.json') -Encoding utf8NoBOM
 } finally {Remove-Item $tmp -Recurse -Force}
 Write-Host 'Módulo de escritorio preparado: UIA, ventana limitada y Ctrl+Alt+F10. No se activó el control del equipo.'

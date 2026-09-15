@@ -36,21 +36,30 @@ jobs:
         shell: pwsh
         run: |
           $log=Join-Path $env:RUNNER_TEMP 'perfect-previous-build.log'
+          $processDirectory=[Environment]::CurrentDirectory
           Push-Location previous-version
           try {
+            # The historical preparation script resolves relative paths through .NET.
+            # Preserve its source and reproduce its original standalone checkout environment.
+            [Environment]::CurrentDirectory=$PWD.Path
             npm ci
             if($LASTEXITCODE -ne 0){throw 'Previous install failed'}
             try {
-              # Keep the historical application source unchanged. Compile its historical installer with the pinned modern compiler.
               ./scripts/package-windows.ps1 *> $log
               $payload=(Resolve-Path 'release/Perfect-Harness-Windows-x64').Path
               $output=(Resolve-Path release).Path
+              foreach($name in @('Perfect.CredentialVault.exe','Perfect.DesktopGuard.exe','Perfect.DesktopElementGuard.exe','winapp.exe','libSkiaSharp.dll')){
+                if(-not(Test-Path (Join-Path $payload "assets/windows/desktop/$name") -PathType Leaf)){throw "Historical payload missing native helper: $name"}
+              }
               & $env:PERFECT_ISCC /Qp "/DPayload=$payload" "/DOutput=$output" build/windows/perfect.iss *>> $log
               if($LASTEXITCODE -ne 0){throw 'Previous installer compilation failed'}
             } catch { Get-Content $log -Tail 60; throw }
             Copy-Item release/Perfect-Harness-Setup-x64.exe "$env:RUNNER_TEMP/Perfect-Previous-0.3.0.exe"
             Get-Content $log -Tail 5
-          } finally {Pop-Location}
+          } finally {
+            [Environment]::CurrentDirectory=$processDirectory
+            Pop-Location
+          }
           Remove-Item previous-version -Recurse -Force
       - run: npm ci
       - name: Build V4 installer and portable once
@@ -60,6 +69,9 @@ jobs:
           try { ./scripts/package-windows.ps1 -Installer *> $log }
           catch { Get-Content $log -Tail 60; throw }
           Get-Content $log -Tail 5
+          foreach($name in @('Perfect.CredentialVault.exe','Perfect.DesktopGuard.exe','Perfect.DesktopElementGuard.exe','winapp.exe','libSkiaSharp.dll')){
+            if(-not(Test-Path "release/Perfect-Harness-Windows-x64/assets/windows/desktop/$name" -PathType Leaf)){throw "V4 payload missing native helper: $name"}
+          }
       - name: Test actual portable and installed payload plus upgrade
         shell: pwsh
         run: |
