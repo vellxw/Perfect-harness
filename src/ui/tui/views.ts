@@ -1,3 +1,4 @@
+import { studioRows, studioScreens } from "./studio-view.js";
 import {
   commandName,
   fold,
@@ -27,6 +28,48 @@ export interface PaletteItem {
   args?: string;
 }
 export const commands: PaletteItem[] = [
+  {
+    name: "validacion",
+    description: "Cuentas, editores y pruebas locales verificables",
+  },
+  {
+    name: "evaluaciones",
+    description: "Contratos y resultados A/B de habilidades",
+  },
+  {
+    name: "unity",
+    description: "Conectar el Editor al MCP local con proyecto autorizado",
+  },
+  {
+    name: "capacidades",
+    description: "Comprobar Blender, PostgreSQL y requisitos de editores",
+  },
+  {
+    name: "skills",
+    description: "Activar, desactivar y asignar habilidades por equipo",
+  },
+  { name: "teams", description: "Equipos y pertenencia de perfiles" },
+  {
+    name: "profiles",
+    description: "Elegir modelo, cuenta y conocimientos de cada perfil",
+  },
+  { name: "modes", description: "Aplicaciones, Motion Studio y Game Creator" },
+  { name: "juegos", description: "Seleccionar Game Creator" },
+  { name: "motion", description: "Seleccionar Motion Studio" },
+  {
+    name: "crear-skill",
+    description: "Crear un borrador de habilidad y sus pruebas",
+    args: "descripción y equipo",
+  },
+  {
+    name: "equipo",
+    description: "Crear o renombrar equipo",
+    args: "id Nombre del equipo",
+  },
+  {
+    name: "adoptar-perfiles",
+    description: "Reiniciar una goal en pausa con ajustes actuales",
+  },
   {
     name: "integrations",
     description: "Conexiones MCP, permisos y ventanas autorizadas",
@@ -187,7 +230,9 @@ export function orderedTasks(
     .map((task) => ({ task, depth: depth(task.id, new Set()) }))
     .sort((a, b) => a.depth - b.depth || a.task.id.localeCompare(b.task.id));
 }
-export function viewRows(s: UiSnapshot, screen: Screen): Row[] {
+export function viewRows(s: UiSnapshot, screen: Screen, subject = ""): Row[] {
+  if ((studioScreens as readonly string[]).includes(screen))
+    return studioRows(s, screen, subject);
   switch (screen) {
     case "integrations":
       return integrationRows(s);

@@ -4,10 +4,13 @@
 #ifndef Output
   #define Output "..\..\release"
 #endif
+#ifndef AppVersion
+  #error "AppVersion must come from package.json through package-windows.ps1"
+#endif
 [Setup]
 AppId={{F4D924BE-7843-4CF7-BA6D-7B207D000200}
 AppName=Perfect Harness
-AppVersion=0.2.1
+AppVersion={#AppVersion}
 AppPublisher=Perfect Harness
 AppPublisherURL=https://github.com/vellxw/Perfect-harness
 DefaultDirName={localappdata}\Programs\PerfectHarness

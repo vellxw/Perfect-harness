@@ -1,0 +1,105 @@
+name: Perfect V4 Windows distribution
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: v4-windows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows-package:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    env:
+      WINAPP_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - name: Prepare pinned Inno Setup 7 with extended path support
+        shell: pwsh
+        run: ./scripts/prepare-installer.ps1
+      - uses: actions/checkout@v4
+        with:
+          ref: '1f3876b481a10c096ec7423541696ecd2a603306'
+          path: previous-version
+          persist-credentials: false
+      - name: Build actual previous installer for upgrade test
+        shell: pwsh
+        run: |
+          $log=Join-Path $env:RUNNER_TEMP 'perfect-previous-build.log'
+          Push-Location previous-version
+          try {
+            npm ci
+            if($LASTEXITCODE -ne 0){throw 'Previous install failed'}
+            try { ./scripts/package-windows.ps1 -Installer *> $log }
+            catch { Get-Content $log -Tail 60; throw }
+            Copy-Item release/Perfect-Harness-Setup-x64.exe "$env:RUNNER_TEMP/Perfect-Previous-0.3.0.exe"
+            Get-Content $log -Tail 5
+          } finally {Pop-Location}
+          Remove-Item previous-version -Recurse -Force
+      - run: npm ci
+      - name: Build V4 installer and portable once
+        shell: pwsh
+        run: |
+          $log=Join-Path $env:RUNNER_TEMP 'perfect-v4-build.log'
+          try { ./scripts/package-windows.ps1 -Installer *> $log }
+          catch { Get-Content $log -Tail 60; throw }
+          Get-Content $log -Tail 5
+      - name: Test actual portable and installed payload plus upgrade
+        shell: pwsh
+        run: |
+          ./scripts/smoke-windows.ps1 -Installer
+          ./scripts/smoke-v4-windows.ps1 -PreviousInstaller "$env:RUNNER_TEMP/Perfect-Previous-0.3.0.exe" -Capture
+      - name: Exercise native desktop guards with a synthetic local application
+        shell: pwsh
+        run: |
+          $framework=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319'
+          & "$framework/csc.exe" /nologo /target:winexe /platform:x64 /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /out:"$env:RUNNER_TEMP/Perfect.DesktopFixture.exe" tests/windows/DesktopFixture.cs
+          if($LASTEXITCODE -ne 0){throw 'Desktop fixture did not compile'}
+          & "$framework/csc.exe" /nologo /target:exe /platform:x64 /out:"$env:RUNNER_TEMP/Perfect.StartUnelevated.exe" tests/windows/StartUnelevated.cs
+          if($LASTEXITCODE -ne 0){throw 'Fixture launcher did not compile'}
+          $env:PERFECT_DESKTOP_FIXTURE="$env:RUNNER_TEMP/Perfect.DesktopFixture.exe"
+          $env:PERFECT_DESKTOP_LAUNCHER="$env:RUNNER_TEMP/Perfect.StartUnelevated.exe"
+          node --import tsx scripts/desktop-contract-diagnose.mjs
+          if($LASTEXITCODE -ne 0){throw 'Native desktop contract failed'}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Perfect-V4-Windows-Espanol-Instalador
+          path: |
+            release/*Setup*.exe
+            release/SHA256SUMS.txt
+            release/Perfect-Harness-Windows-x64/build-manifest.json
+            test-results/windows-installation/report.json
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Perfect-V4-Windows-Espanol-Portable
+          path: |
+            release/*.zip
+            release/SHA256SUMS.txt
+            release/Perfect-Harness-Windows-x64/build-manifest.json
+            test-results/windows-installation/report.json
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Perfect-V4-Windows-Capturas-y-Pruebas
+          path: |
+            test-results/windows-installed
+            test-results/windows-installation
+            test-results/desktop
+          if-no-files-found: warn
+          retention-days: 30

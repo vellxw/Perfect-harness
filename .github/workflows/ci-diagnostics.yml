@@ -1,0 +1,45 @@
+name: CI failure diagnostics
+on:
+  push:
+    branches: [feat/perfect-harness-v4-skills-studios]
+    paths: [.github/workflows/ci-diagnostics.yml]
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: Optional numeric job ID from this repository
+        required: false
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnostics:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Read bounded failure logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          JOB_ID: ${{ inputs.job_id }}
+          GODEBUG: http2client=0
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,subprocess
+          repo=os.environ['REPO']; assert repo=='vellxw/Perfect-harness'
+          requested=os.environ.get('JOB_ID','')
+          if requested: assert requested.isdigit()
+          jobs=[requested] if requested else ['104236196365']
+          failed=False
+          for job in jobs:
+            r=subprocess.run(['gh','run','view','--repo',repo,'--job',job,'--log-failed'],capture_output=True,text=True,timeout=120)
+            print('JOB',job,'EXIT',r.returncode)
+            print(r.stderr[-2500:])
+            lines=r.stdout.splitlines(); keep=set(range(max(0,len(lines)-70),len(lines)))
+            for i,l in enumerate(lines):
+              if any(t in l.lower() for t in ['##[error]','parsererror','error cs','error ts','exception:']):keep.update(range(max(0,i-8),min(len(lines),i+10)))
+            for i in sorted(keep)[-150:]:print(lines[i][:1500])
+            failed=failed or bool(r.returncode)
+          if failed: raise SystemExit(1)
+          PY

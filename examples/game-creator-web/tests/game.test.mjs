@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {initial,move} from '../src/game.mjs';
+test('victoria, derrota, límites y reinicio son estados funcionales',()=>{let g=initial();assert.equal(move(g,-1,0),g);for(const [x,y]of[[1,0],[1,0],[0,1],[0,1]])g=move(g,x,y);assert.equal(g.status,'won');assert.equal(move(g,-1,0),g);g=initial();g=move(move(g,0,1),1,0);assert.equal(g.status,'lost');assert.equal(move(g,1,0),g);assert.deepEqual(initial(),{x:0,y:0,status:'playing',steps:0});});

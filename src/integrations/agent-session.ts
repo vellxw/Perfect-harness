@@ -1,3 +1,10 @@
+import {
+  unityEffect,
+  validateUnityCall,
+  validateUnityWorkspace,
+} from "./unity/policy.js";
+import { verifyUnityBinding } from "./unity/registration.js";
+import { UnityLease } from "./unity/lease.js";
 import { watch, type FSWatcher } from "node:fs";
 import { mkdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
@@ -120,6 +127,7 @@ export class AgentIntegrations implements RunIntegrations {
     }
     return session;
   }
+  private unityLeases = new Map<string, UnityLease>();
   private available(): IntegrationRecord[] {
     return this.registry
       .list(this.scope.workspace)
@@ -127,6 +135,11 @@ export class AgentIntegrations implements RunIntegrations {
         (r) =>
           r.config.enabled &&
           r.config.roles.includes(this.scope.role) &&
+          (r.config.kind !== "mcp" ||
+            !r.config.unity ||
+            r.config.unity.profileIds.includes(
+              this.request.run.profileId ?? this.scope.role,
+            )) &&
           (!this.scope.model.includes("contributor") ||
             (r.config.kind === "browser" && !this.scope.privateData)),
       );
@@ -159,6 +172,17 @@ export class AgentIntegrations implements RunIntegrations {
         "MCP_CONTRIBUTOR_DENIED",
         "No se envían datos de integraciones o del escritorio a Contributor",
       );
+    if (
+      record.config.kind === "mcp" &&
+      record.config.unity &&
+      !record.config.unity.profileIds.includes(
+        this.request.run.profileId ?? this.scope.role,
+      )
+    )
+      throw new Blocked(
+        "UNITY_PROFILE_DENIED",
+        "El perfil no tiene acceso a este Editor",
+      );
     const fixed = this.records.get(server);
     if (fixed && fixed.configHash !== record.configHash)
       throw new Blocked(
@@ -175,10 +199,12 @@ export class AgentIntegrations implements RunIntegrations {
     return (record.catalog?.tools ?? []).filter((t) =>
       config.kind === "github"
         ? githubEffect(config, t.name)
-        : Object.hasOwn(config.tools, t.name),
+        : config.unity
+          ? Boolean(unityEffect(config.unity, t.name))
+          : Object.hasOwn(config.tools, t.name),
     );
   }
-  async list(server?: string): Promise<unknown> {
+  async list(server?: string, query = "", offset = 0): Promise<unknown> {
     const records = server ? [this.record(server)] : this.available();
     return records.map((r) => ({
       id: r.config.id,
@@ -189,13 +215,23 @@ export class AgentIntegrations implements RunIntegrations {
           ? true
           : Boolean(r.catalog && r.authorizedCatalog === r.catalog.hash),
       readOnly: this.scope.readOnly,
+      totalTools: this.tools(r).length,
+      nextOffset:
+        offset + 12 <
+        this.tools(r).filter((t) =>
+          t.name.toLowerCase().includes(query.toLowerCase()),
+        ).length
+          ? offset + 12
+          : null,
       tools: this.tools(r)
+        .filter((t) => t.name.toLowerCase().includes(query.toLowerCase()))
+        .slice(offset, offset + 12)
         .filter(
           (t) => !this.scope.readOnly || this.effect(r, t.name) === "read",
         )
         .map((t) => ({
           name: t.name,
-          description: t.description,
+          description: t.description?.slice(0, 800),
           inputSchema: t.inputSchema,
           effect: this.effect(r, t.name),
         })),
@@ -210,7 +246,9 @@ export class AgentIntegrations implements RunIntegrations {
         ? browserEffect(tool)
         : c.kind === "desktop"
           ? desktopEffect(tool)
-          : c.tools[tool];
+          : c.unity
+            ? unityEffect(c.unity, tool)
+            : c.tools[tool];
   }
   private async wire(record: IntegrationRecord): Promise<McpConnection> {
     const c = record.config;
@@ -224,6 +262,18 @@ export class AgentIntegrations implements RunIntegrations {
         "MCP_CATALOG_REQUIRED",
         `Revisá y autorizá el catálogo de ${c.id} desde /integraciones antes de usarlo`,
       );
+    if (c.kind === "mcp" && c.unity) {
+      if (
+        c.transport.type !== "http" ||
+        c.transport.url !== c.unity.endpoint ||
+        c.transport.bearerEnv !== "PERFECT_UNITY_TOKEN"
+      )
+        throw new Blocked(
+          "UNITY_ENDPOINT_MISMATCH",
+          "El transporte no coincide con el Editor autorizado",
+        );
+      await verifyUnityBinding(c.unity);
+    }
     let connection = this.wires.get(c.id);
     if (!connection) {
       connection = await McpConnection.open(
@@ -297,6 +347,19 @@ export class AgentIntegrations implements RunIntegrations {
         );
       validateInput(descriptor, args);
       if (c.kind === "github") validateGithub(c, tool, args);
+      if (c.kind === "mcp" && c.unity) {
+        validateUnityCall(c.unity, tool, args);
+        await validateUnityWorkspace(
+          c.unity,
+          {
+            profileId: this.request.run.profileId ?? this.scope.role,
+            cwd: this.request.cwd,
+            readOnly: this.scope.readOnly,
+            task: this.request.context.task,
+          },
+          effect,
+        );
+      }
       let remote: McpConnection | undefined;
       if (c.kind === "mcp" || c.kind === "github")
         remote = await this.wire(record);
@@ -326,6 +389,25 @@ export class AgentIntegrations implements RunIntegrations {
         this.record(server);
       });
       if (remote) remote = await this.wire(this.record(server));
+      if (c.kind === "mcp" && c.unity && effect !== "read") {
+        let lease = this.unityLeases.get(server);
+        if (!lease) {
+          lease = new UnityLease(this.home, c.unity, this.scope.runId);
+          this.unityLeases.set(server, lease);
+        }
+        await lease.acquire();
+        await verifyUnityBinding(c.unity);
+        await validateUnityWorkspace(
+          c.unity,
+          {
+            profileId: this.request.run.profileId ?? this.scope.role,
+            cwd: this.request.cwd,
+            readOnly: this.scope.readOnly,
+            task: this.request.context.task,
+          },
+          effect,
+        );
+      }
       this.registry.claim(op.id, op.digest);
       const start = performance.now();
       try {
@@ -400,6 +482,7 @@ export class AgentIntegrations implements RunIntegrations {
           ],
         };
       } catch (error) {
+        if (effect !== "read") this.unityLeases.get(server)?.markUncertain();
         this.registry.uncertain(
           op.id,
           error instanceof Blocked
@@ -416,7 +499,18 @@ export class AgentIntegrations implements RunIntegrations {
       }
     });
   }
+  private countRead(server: string): void {
+    const record = this.record(server),
+      count = (this.calls.get(server) ?? 0) + 1;
+    this.calls.set(server, count);
+    if (count > record.config.maxCallsPerRun)
+      throw new Blocked(
+        "MCP_CALL_LIMIT",
+        "Límite de lecturas de integración agotado",
+      );
+  }
   async resources(server: string, cursor?: string): Promise<unknown> {
+    this.countRead(server);
     const r = this.record(server);
     if (r.config.kind !== "mcp" || !r.config.resourcePrefixes.length)
       throw new Blocked(
@@ -430,15 +524,26 @@ export class AgentIntegrations implements RunIntegrations {
     );
   }
   async readResource(server: string, uri: string): Promise<IntegrationResult> {
+    this.countRead(server);
     const r = this.record(server);
     if (r.config.kind !== "mcp" || !r.config.resourcePrefixes.length)
       throw new Blocked(
         "MCP_RESOURCE_DENIED",
         "No se autorizaron recursos de este servidor",
       );
+    const started = performance.now();
     const result = await (
       await this.wire(r)
     ).readResource(uri, r.config.resourcePrefixes, this.signal);
+    this.record(server);
+    await this.request.observeIntegration?.({
+      server,
+      tool: "resources/read",
+      operationId: "resource-" + hash({ uri, run: this.scope.runId }),
+      argumentHash: hash({ uri }),
+      elapsedMs: performance.now() - started,
+      response: result,
+    });
     this.request.event("integration.resource_read", {
       server,
       uriHash: hash(uri),
@@ -451,9 +556,26 @@ export class AgentIntegrations implements RunIntegrations {
     this.watcher?.close();
     this.abort.abort();
     await Promise.allSettled([...this.wires.values()].map((c) => c.close()));
-    await Promise.allSettled([...this.browsers.values()].map((c) => c.close()));
-    await Promise.allSettled([...this.desktops.values()].map((c) => c.close()));
+    const cleanup = await Promise.allSettled(
+      [...this.browsers.values(), ...this.desktops.values()].map((c) =>
+        c.close(),
+      ),
+    );
+    if (cleanup.some((result) => result.status === "rejected")) {
+      this.registry.event(this.scope.workspace, "integration.cleanup_pending", {
+        runId: this.scope.runId,
+        goalId: this.scope.goalId,
+      });
+      this.request.event("integration.cleanup_pending", {
+        runId: this.scope.runId,
+        message:
+          "Hay recursos nativos pendientes de reconciliar; no se declaró una limpieza correcta.",
+      });
+    }
     await this.queue.catch(() => {});
+    await Promise.allSettled(
+      [...this.unityLeases.values()].map((lease) => lease.close()),
+    );
     this.registry.interruptRun(this.scope.runId);
     this.registry.close();
   }
@@ -470,6 +592,8 @@ export async function probeIntegration(
     const record = registry.require(workspace, serverId),
       config = record.config;
     if (config.kind === "browser" || config.kind === "desktop") return record;
+    if (config.kind === "mcp" && config.unity)
+      await verifyUnityBinding(config.unity);
     wire = await McpConnection.open(
       config.kind === "github" ? githubTransport(config) : config.transport,
       join(home, "integrations-runtime", "diagnostics", serverId),

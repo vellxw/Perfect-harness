@@ -94,6 +94,7 @@ export const VisualScenarioSchema = z
     actions: z.array(BrowserActionSchema).default([]),
     targetFiles: z.array(z.string()).default([]),
     maxConsoleErrors: z.number().int().min(0).default(0),
+    reducedMotion: z.enum(["reduce", "no-preference"]).default("no-preference"),
     frames: z.array(z.number().int().nonnegative()).default([]),
   })
   .strict();
@@ -102,11 +103,22 @@ export const VerificationSpecSchema = z
   .object({
     id: Id,
     title: z.string(),
-    kind: z.enum(["command", "browser", "remotion"]),
+    kind: z.enum(["command", "browser", "remotion", "postgres", "blender"]),
     criteriaIds: z.array(Id).min(1),
     mandatory: z.boolean().default(true),
     command: CommandSchema.optional(),
     scenario: VisualScenarioSchema.optional(),
+    blender: z
+      .object({
+        script: z.string().min(1),
+        sourceFile: z.string().default("source.blend"),
+        width: z.number().int().min(128).max(1920).default(640),
+        height: z.number().int().min(128).max(1080).default(480),
+        timeoutMs: z.number().int().min(1000).max(1200000).default(240000),
+        maxBytes: z.number().int().min(100000).max(32000000).default(16000000),
+      })
+      .strict()
+      .optional(),
     remotion: z
       .object({
         composition: z.string(),
@@ -123,8 +135,13 @@ export const VerificationSpecSchema = z
   })
   .strict()
   .superRefine((s, ctx) => {
-    if (s.kind === "command" && !s.command)
+    if ((s.kind === "command" || s.kind === "postgres") && !s.command)
       ctx.addIssue({ code: "custom", message: "Command required" });
+    if (s.kind === "blender" && !s.blender)
+      ctx.addIssue({
+        code: "custom",
+        message: "Blender specification required",
+      });
     if (s.kind === "browser" && !s.scenario)
       ctx.addIssue({ code: "custom", message: "Scenario required" });
     if (s.kind === "remotion" && !s.remotion)
@@ -156,6 +173,11 @@ export const TaskSpecSchema = z
       .default("public"),
     dependencies: z.array(Id).default([]),
     assignedAgent: z.enum(["general", "frontend", "backend", "integrator"]),
+    profileId: z
+      .string()
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+      .max(64)
+      .optional(),
     ownedFiles: z.array(z.string()).default([]),
     ownedSurfaces: z.array(z.string()).default([]),
     acceptanceCriteria: z.array(Id).min(1),
@@ -238,6 +260,9 @@ export interface Usage {
   createdAt: string;
 }
 export interface AgentRun {
+  profileId?: string;
+  setIds?: string[];
+  studioSnapshotId?: string;
   id: string;
   goalId: string;
   taskId?: string;
@@ -256,6 +281,20 @@ export interface AgentRun {
   stopReason?: string;
 }
 export interface ContextPackage {
+  specialization?: {
+    profileId: string;
+    setIds: string[];
+    workMode: string;
+    instruction: string;
+    catalog: { id: string; description: string; loaded: boolean }[];
+    procedures: string;
+    availableProfiles?: {
+      id: string;
+      role: Role;
+      setIds: string[];
+      readOnly: boolean;
+    }[];
+  };
   id: string;
   hash: string;
   goalId: string;
@@ -412,6 +451,7 @@ export interface Task extends TaskSpec {
   updatedAt: string;
 }
 export interface Goal {
+  studioSnapshotId?: string;
   id: string;
   schemaVersion: 1;
   originalRequest: string;

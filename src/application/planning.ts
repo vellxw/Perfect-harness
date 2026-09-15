@@ -93,6 +93,8 @@ export class PlanningService {
       signal,
     );
     const proposal = this.validate(invocation.output.result, previous);
+    for (const spec of proposal.tasks)
+      this.executor.definition(goal, spec.assignedAgent, spec);
     for (const extra of this.config.verificationPolicy.extraChecks)
       if (!proposal.verification.some((v) => canonical(v) === canonical(extra)))
         throw new Error(
@@ -153,7 +155,7 @@ export class PlanningService {
           );
       for (const spec of plan.tasks) {
         const existing = this.store.get("tasks", spec.id),
-          definition = this.config.agents[spec.assignedAgent];
+          definition = this.executor.definition(goal, spec.assignedAgent, spec);
         const same =
           existing &&
           !impacted.has(spec.id) &&
@@ -243,7 +245,11 @@ export class PlanningService {
     const previous = this.store.get("plans", goal.activePlanId!)!;
     const replacement = parent.status !== "accepted";
     const repairId = id("repair"),
-      definition = this.config.agents[agent];
+      definition = this.executor.definition(
+        goal,
+        agent,
+        agent === parent.assignedAgent ? parent : undefined,
+      );
     const task: Task = {
       ...parent,
       id: repairId,
@@ -251,6 +257,7 @@ export class PlanningService {
       description,
       type: agent === "integrator" ? "integration" : "repair",
       assignedAgent: agent,
+      profileId: agent === parent.assignedAgent ? parent.profileId : undefined,
       model: definition.model,
       reasoning: definition.reasoning,
       status: "pending",

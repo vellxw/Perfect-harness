@@ -1,3 +1,7 @@
+import { draftInstruction } from "../skills/creator.js";
+import { StudioAdmin } from "../skills/admin.js";
+import { studioId } from "../skills/registry.js";
+import { defaultConfig } from "../config/schema.js";
 import { watch, type FSWatcher } from "node:fs";
 import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
@@ -45,6 +49,8 @@ import { snapshot } from "./snapshot.js";
 export class PresentationEngine {
   readonly store: SqliteStore;
   readonly integrations: IntegrationAdmin;
+  readonly studios: StudioAdmin;
+  private studioTask?: Promise<void>;
   readonly home: string;
   private workspace: string;
   private selected?: string;
@@ -71,6 +77,7 @@ export class PresentationEngine {
     this.workspace = workspace;
     this.store = new SqliteStore(join(home, "state.sqlite"));
     this.integrations = new IntegrationAdmin(home);
+    this.studios = new StudioAdmin(this.store, home);
     this.unsubscribe = onDatabaseChange(join(home, "state.sqlite"), () =>
       this.wake(),
     );
@@ -139,6 +146,8 @@ export class PresentationEngine {
       integrationState.windows.length
     )
       state.integrations = integrationState;
+    if (this.store.get("studios", studioId(this.workspace)))
+      state.studio = this.studios.panel(this.workspace, defaultConfig());
     const serialized = JSON.stringify(state);
     if (force || serialized !== this.lastPayload) {
       this.lastPayload = serialized;
@@ -170,6 +179,11 @@ export class PresentationEngine {
     };
   }
   private idle(): void {
+    if (this.studioTask)
+      throw new Blocked(
+        "EVAL_BUSY",
+        "Hay una evaluación de skills activa; cancelala o esperá antes de iniciar otro trabajo",
+      );
     if (this.active || this.authAbort)
       throw new Blocked(
         "ENGINE_BUSY",
@@ -240,6 +254,109 @@ export class PresentationEngine {
         path: string | undefined,
         operation: string | undefined;
       switch (action.type) {
+        case "create-skill-brief": {
+          this.idle();
+          const cfg = await ctx.config(),
+            studio = this.studios.panel(this.workspace, cfg);
+          if (
+            !studio.config.sets.some(
+              (s) => s.id === action.brief.team && s.enabled,
+            )
+          )
+            throw new Blocked("SKILL_CREATOR_TEAM", "Equipo no disponible");
+          const goal = await createGoal(
+            {
+              request: draftInstruction(action.brief),
+              source: this.workspace,
+              home: this.home,
+              config: cfg,
+              privacy: "private",
+              workMode: "skill-studio",
+            },
+            this.store,
+          );
+          this.start(goal);
+          message =
+            "Creación privada iniciada. El resultado será un borrador; aprobación y activación son independientes.";
+          break;
+        }
+        case "studio": {
+          if (
+            ["trial-run", "validation-profile", "validation-blender"].includes(
+              action.action.command,
+            )
+          ) {
+            this.idle();
+            const configuration = await ctx.config();
+            this.studioTask = this.studios
+              .perform(
+                this.workspace,
+                configuration,
+                action.action,
+                AbortSignal.timeout(1200000),
+              )
+              .then((result) => {
+                this.send({
+                  type: "result",
+                  requestId,
+                  ok: true,
+                  message: result.message,
+                  content: result.content,
+                  operation: "studio",
+                });
+              })
+              .catch((error) => {
+                this.send({
+                  type: "result",
+                  requestId,
+                  ok: false,
+                  message:
+                    error instanceof Error
+                      ? error.message
+                      : "Evaluación interrumpida",
+                  operation: "studio",
+                });
+              })
+              .finally(() => {
+                this.studioTask = undefined;
+                this.publish();
+              });
+            message =
+              "Prueba iniciada sin bloquear la interfaz. /evaluaciones y /validacion muestran progreso, evidencia y cancelación.";
+            break;
+          }
+          const result = await this.studios.perform(
+            this.workspace,
+            await ctx.config(),
+            action.action,
+          );
+          message = result.message;
+          content =
+            action.action.command === "status" ? undefined : result.content;
+          path = result.path;
+          operation = "studio";
+          break;
+        }
+        case "create-skill": {
+          this.idle();
+          const goal = await createGoal(
+            {
+              request:
+                "Crear un borrador de habilidad con SKILL.md, recursos pertinentes y casos de selección positivos/negativos separados en desarrollo y reservados. No autoaprobar ni activar. Necesidad del usuario: " +
+                action.description,
+              source: this.workspace,
+              home: this.home,
+              config: await ctx.config(),
+              privacy: "private",
+              workMode: "skill-studio",
+            },
+            this.store,
+          );
+          this.start(goal);
+          message =
+            "Creador iniciado como goal privada; requiere proveedores configurados y aprobación independiente del borrador.";
+          break;
+        }
         case "integration": {
           if (action.action.command === "login") {
             this.idle();
@@ -700,6 +817,8 @@ export class PresentationEngine {
     }
   }
   async dispose(): Promise<void> {
+    await this.studios.close();
+    await this.studioTask;
     if (this.closing) return;
     await this.actionQueue;
     this.authAbort?.abort();

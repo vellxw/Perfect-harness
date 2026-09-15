@@ -1,0 +1,74 @@
+name: Perfect V4
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: v4-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - name: Parse every PowerShell script before building
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $errorsFound = @()
+          Get-ChildItem scripts -Filter '*.ps1' | ForEach-Object {
+            $tokens=$null; $parseErrors=$null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName,[ref]$tokens,[ref]$parseErrors)
+            $errorsFound += @($parseErrors)
+          }
+          if($errorsFound.Count){$errorsFound | Format-List; throw 'Invalid PowerShell source'}
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run check:config
+      - run: npm run build
+      - run: npm test
+      - run: npm run test:package
+      - run: npm run audit:production
+  docker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - run: npm run build
+      - name: Preparar todas las imágenes requeridas sin depender del caché
+        run: |
+          docker pull node:24-bookworm-slim
+          docker pull mcr.microsoft.com/playwright:v1.63.0-noble
+          docker pull postgres:18.6-bookworm
+      - run: npm run test:e2e
+        env:
+          PERFECT_TEST_DOCKER: '1'
+          PERFECT_ARTIFACT_DIR: test-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v4-e2e-evidence
+          path: test-results
+          retention-days: 30

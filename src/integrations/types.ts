@@ -1,3 +1,4 @@
+import { UnityPolicySchema } from "./unity/schema.js";
 import { z } from "zod";
 import { RoleSchema, type Role } from "../domain/model.js";
 
@@ -64,6 +65,7 @@ export const IntegrationSchema = z.discriminatedUnion("kind", [
       kind: z.literal("mcp"),
       transport: TransportSchema,
       tools: z.record(toolName, EffectSchema),
+      unity: UnityPolicySchema.optional(),
       resourcePrefixes: z.array(z.string().max(2048)).max(32).default([]),
     })
     .strict(),

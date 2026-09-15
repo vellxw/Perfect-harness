@@ -1,0 +1,42 @@
+name: V4 Blender real
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: v4-blender-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  blender:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - run: npm run build
+      - name: Preparar recursos declarados desde origen público
+        run: |
+          docker pull node:24-bookworm-slim
+          docker pull mcr.microsoft.com/playwright:v1.63.0-noble
+          node scripts/prepare-blender.mjs --allow-network
+      - name: Crear, reabrir, exportar y renderizar con software real
+        run: node --experimental-ffi --import tsx --test tests/e2e/blender.test.ts
+        env:
+          PERFECT_TEST_BLENDER: '1'
+          PERFECT_ARTIFACT_DIR: test-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Perfect-V4-Blender-Evidence
+          path: test-results
+          if-no-files-found: error
+          retention-days: 30

@@ -44,7 +44,21 @@ export class VerificationService {
     };
     let output: ExecutionOutput;
     try {
-      if (spec.kind === "browser")
+      if (spec.kind === "blender") {
+        if (!this.runner.blender)
+          throw new Blocked(
+            "BLENDER_RUNNER_REQUIRED",
+            "Falta el runner aislado de Blender",
+          );
+        output = await this.runner.blender(request, spec.blender!);
+      } else if (spec.kind === "postgres") {
+        if (!this.runner.postgres)
+          throw new Blocked(
+            "POSTGRES_RUNNER_REQUIRED",
+            "La verificación requiere PostgreSQL real aislado; no se sustituye por SQLite",
+          );
+        output = await this.runner.postgres(request, spec.command!);
+      } else if (spec.kind === "browser")
         output = await this.runner.browser(request, spec.scenario!);
       else if (spec.kind === "remotion")
         output = await this.runner.remotion(request, spec.remotion!);

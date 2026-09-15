@@ -15,7 +15,7 @@ export interface IntegrationObservation {
   response: IntegrationResponse;
 }
 export interface RunIntegrations {
-  list(server?: string): Promise<unknown>;
+  list(server?: string, query?: string, offset?: number): Promise<unknown>;
   call(
     server: string,
     tool: string,

@@ -293,7 +293,13 @@
               "title": { "type": "string" },
               "kind": {
                 "type": "string",
-                "enum": ["command", "browser", "remotion"]
+                "enum": [
+                  "command",
+                  "browser",
+                  "remotion",
+                  "postgres",
+                  "blender"
+                ]
               },
               "criteriaIds": {
                 "minItems": 1,
@@ -437,6 +443,11 @@
                     "minimum": 0,
                     "maximum": 9007199254740991
                   },
+                  "reducedMotion": {
+                    "default": "no-preference",
+                    "type": "string",
+                    "enum": ["reduce", "no-preference"]
+                  },
                   "frames": {
                     "default": [],
                     "type": "array",
@@ -456,7 +467,48 @@
                   "actions",
                   "targetFiles",
                   "maxConsoleErrors",
+                  "reducedMotion",
                   "frames"
+                ],
+                "additionalProperties": false
+              },
+              "blender": {
+                "type": "object",
+                "properties": {
+                  "script": { "type": "string", "minLength": 1 },
+                  "sourceFile": { "default": "source.blend", "type": "string" },
+                  "width": {
+                    "default": 640,
+                    "type": "integer",
+                    "minimum": 128,
+                    "maximum": 1920
+                  },
+                  "height": {
+                    "default": 480,
+                    "type": "integer",
+                    "minimum": 128,
+                    "maximum": 1080
+                  },
+                  "timeoutMs": {
+                    "default": 240000,
+                    "type": "integer",
+                    "minimum": 1000,
+                    "maximum": 1200000
+                  },
+                  "maxBytes": {
+                    "default": 16000000,
+                    "type": "integer",
+                    "minimum": 100000,
+                    "maximum": 32000000
+                  }
+                },
+                "required": [
+                  "script",
+                  "sourceFile",
+                  "width",
+                  "height",
+                  "timeoutMs",
+                  "maxBytes"
                 ],
                 "additionalProperties": false
               },

@@ -14,6 +14,7 @@ import { Blocked, hash, now } from "../domain/util.js";
 import { text } from "../presentation/protocol.js";
 import { imageMime } from "../tools/evidence.js";
 import { secretContent } from "../tools/paths.js";
+import { integrationFailure } from "./errors.js";
 import {
   MCP_SDK_VERSION,
   toolName,
@@ -189,8 +190,14 @@ export function cleanEnvironment(
   source: NodeJS.ProcessEnv = process.env,
 ): Record<string, string> {
   const env: Record<string, string> = Object.fromEntries(
-    DEFAULT_INHERITED_ENV_VARS.map((k) => [k, ""]),
+    DEFAULT_INHERITED_ENV_VARS.map((k) => [k.toUpperCase(), ""]),
   );
+  const lookup = (key: string) =>
+    source[key] ??
+    source[
+      Object.keys(source).find((k) => k.toUpperCase() === key.toUpperCase()) ??
+        ""
+    ];
   for (const key of [
     "PATH",
     "SYSTEMROOT",
@@ -199,7 +206,7 @@ export function cleanEnvironment(
     "PROCESSOR_ARCHITECTURE",
     "PROGRAMFILES",
   ])
-    if (source[key]) env[key] = source[key]!;
+    if (lookup(key)) env[key] = lookup(key)!;
   Object.assign(env, {
     HOME: directory,
     USERPROFILE: directory,
@@ -218,7 +225,7 @@ export function cleanEnvironment(
   });
   for (const [key, sourceKey] of Object.entries(refs)) {
     if (
-      /^(?:NODE_|PYTHON|LD_|DYLD_|PATH$|HOME$|USERPROFILE$|APPDATA$|LOCALAPPDATA$|TEMP$|TMP$|COMSPEC$)/.test(
+      /^(?:NODE_|PYTHON|LD_|DYLD_|PATH$|HOME$|USERPROFILE$|APPDATA$|LOCALAPPDATA$|TEMP$|TMP$|COMSPEC$|SYSTEMROOT$|WINDIR$|SYSTEMDRIVE$)/i.test(
         key,
       )
     )
@@ -226,13 +233,13 @@ export function cleanEnvironment(
         "MCP_ENV_DENIED",
         `Variable de control no permitida: ${key}`,
       );
-    const value = source[sourceKey];
+    const value = lookup(sourceKey);
     if (!value || /[\r\n\0]/.test(value))
       throw new Blocked(
         "MCP_CREDENTIAL_REQUIRED",
         `Falta la variable local ${sourceKey}`,
       );
-    env[key] = value;
+    env[key.toUpperCase()] = value;
   }
   return env;
 }
@@ -301,6 +308,10 @@ export function confinedFetch(
       signal,
       redirect: "error",
     });
+    if ([401, 403, 429, 500, 502, 503, 504].includes(response.status)) {
+      await response.body?.cancel();
+      throw integrationFailure({ status: response.status });
+    }
     if (response.status >= 300 && response.status < 400) {
       await response.body?.cancel();
       throw new Blocked(
@@ -340,6 +351,7 @@ export class McpConnection {
     { name: "perfect-harness", version: "0.3.0" },
     { capabilities: {}, versionNegotiation: { mode: "legacy" } },
   );
+  private closing?: Promise<void>;
   private abort?: () => void;
   private signal?: AbortSignal;
   private constructor() {}
@@ -407,7 +419,7 @@ export class McpConnection {
       }
       connection.signal = signal;
       connection.abort = () => {
-        void connection.client.close().catch(() => {});
+        void connection.close().catch(() => {});
       };
       signal.addEventListener("abort", connection.abort, { once: true });
       await connection.client.connect(transport, { timeout, signal });
@@ -415,10 +427,20 @@ export class McpConnection {
       return connection;
     } catch (error) {
       await connection.close();
-      throw error;
+      throw integrationFailure(error, signal);
     }
   }
   async catalog(signal: AbortSignal, timeout = 30000): Promise<Catalog> {
+    try {
+      return await this.readCatalog(signal, timeout);
+    } catch (error) {
+      throw integrationFailure(error, signal);
+    }
+  }
+  private async readCatalog(
+    signal: AbortSignal,
+    timeout: number,
+  ): Promise<Catalog> {
     const tools: CatalogTool[] = [],
       seen = new Set<string>(),
       cursors = new Set<string>();
@@ -491,10 +513,11 @@ export class McpConnection {
     timeout: number,
   ): Promise<IntegrationResult> {
     validateInput(tool, args);
-    const result = await this.client.callTool(
-      { name: tool.name, arguments: args },
-      { signal, timeout },
-    );
+    const result = await this.client
+      .callTool({ name: tool.name, arguments: args }, { signal, timeout })
+      .catch((error) => {
+        throw integrationFailure(error, signal);
+      });
     return boundedResult(result);
   }
   async resources(
@@ -542,6 +565,7 @@ export class McpConnection {
   async close(): Promise<void> {
     if (this.abort && this.signal)
       this.signal.removeEventListener("abort", this.abort);
-    await this.client.close().catch(() => {});
+    this.closing ??= this.client.close().catch(() => {});
+    await this.closing;
   }
 }

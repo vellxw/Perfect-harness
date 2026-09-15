@@ -183,7 +183,12 @@ export class GitWorkspace {
     return path;
   }
   async checkpoint(worktree: string, task: Task): Promise<string> {
-    if (relative(join(this.root, "worktrees"), resolve(worktree)).startsWith("..") || relative(join(this.root, "worktrees"), resolve(worktree)) === "")
+    if (
+      relative(join(this.root, "worktrees"), resolve(worktree)).startsWith(
+        "..",
+      ) ||
+      relative(join(this.root, "worktrees"), resolve(worktree)) === ""
+    )
       throw new Blocked("WORKTREE_DENIED", worktree);
     await git(worktree, ["add", "--all"]);
     await git(worktree, [

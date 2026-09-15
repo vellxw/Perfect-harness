@@ -1,3 +1,12 @@
+import { GuidedForm, type FormSpec } from "./form.js";
+import { skillWizard } from "./skill-wizard.js";
+import {
+  studioScreens,
+  studioCommand,
+  studioRowIntent,
+  type StudioIntent,
+} from "./studio-view.js";
+import { BindingForm } from "./binding-form.js";
 import type { TextareaRenderable } from "@opentui/core";
 import {
   useKeyboard,
@@ -64,6 +73,7 @@ export interface AppProps {
   openExternal?: (path: string) => Promise<void>;
 }
 const screens: Screen[] = [
+  ...studioScreens,
   "integrations",
   "agents",
   "plan",
@@ -95,6 +105,9 @@ export function App({
     { width, height } = useTerminalDimensions();
   const compact = width < 100 || height < 30,
     rail = width >= 130 && height >= 30;
+  const [studioSubject, setStudioSubject] = useState("");
+  const [bindingProfile, setBindingProfile] = useState<string>();
+  const [wizard, setWizard] = useState<FormSpec>();
   const [screen, setScreen] = useState<Screen>(initialScreen),
     [selected, setSelected] = useState(0),
     [focus, setFocus] = useState<"composer" | "feed">("composer");
@@ -217,7 +230,10 @@ export function App({
         : filterCommands(query),
     [query, quick],
   );
-  const rows = useMemo(() => viewRows(s, screen), [s, screen]);
+  const rows = useMemo(
+    () => viewRows(s, screen, studioSubject),
+    [s, screen, studioSubject],
+  );
   const rowHeight = compact ? 2 : 3,
     visibleRows = Math.max(
       1,
@@ -294,8 +310,50 @@ export function App({
         navigate("integrations");
     }
   };
+  const applyStudioIntent = (intent: StudioIntent) => {
+    if (intent.wizard) {
+      try {
+        setWizard(
+          skillWizard(
+            intent.wizard,
+            s,
+            studioSubject,
+            (action, title, body, phrase) => {
+              setWizard(undefined);
+              setConfirmation({ action, title, body, phrase });
+            },
+          ),
+        );
+      } catch (error) {
+        notify(String(error));
+      }
+      return;
+    }
+    if (intent.subject !== undefined) setStudioSubject(intent.subject);
+    if (intent.screen) navigate(intent.screen);
+    if (intent.editProfile) setBindingProfile(intent.editProfile);
+    if (intent.notice) notify(intent.notice);
+    if (intent.composer !== undefined) {
+      navigate("home");
+      setFocus("composer");
+      setComposer(intent.composer);
+    }
+    if (intent.phrase && intent.title && intent.body && intent.action)
+      setConfirmation({
+        title: intent.title,
+        body: intent.body,
+        phrase: intent.phrase,
+        action: intent.action,
+      });
+    else if (intent.action) mutate(intent.action);
+  };
   const command = (name: string, rest = "") => {
     name = canonicalCommand(name);
+    const skillIntent = studioCommand(name, rest, s);
+    if (skillIntent) {
+      applyStudioIntent(skillIntent);
+      return;
+    }
     const integrationIntent = integrationCommand(name, rest, s);
     if (integrationIntent) {
       setQuick(false);
@@ -493,6 +551,13 @@ export function App({
     } else command("goal", value);
   };
   const activate = (row: Row | undefined) => {
+    if (row && (studioScreens as readonly string[]).includes(screen)) {
+      const intent = studioRowIntent(s, screen, studioSubject, row.id);
+      if (intent) {
+        applyStudioIntent(intent);
+        return;
+      }
+    }
     if (row && screen === "integrations") {
       const intent = integrationRowIntent(row.id, s);
       if (intent) {
@@ -550,7 +615,7 @@ export function App({
     showDocument(row.title, row.body);
   };
   useKeyboard((key) => {
-    if (confirmation) return;
+    if (confirmation || bindingProfile || wizard) return;
     if (auth?.promptId) {
       if (key.name === "escape" || (key.ctrl && key.name === "c")) {
         key.preventDefault();
@@ -1155,6 +1220,48 @@ export function App({
             offset={offset}
           />
         </Plate>
+      )}
+      {bindingProfile &&
+        s.studio?.config.profiles.find((p) => p.id === bindingProfile) && (
+          <BindingForm
+            profile={
+              s.studio.config.profiles.find((p) => p.id === bindingProfile)!
+            }
+            width={width}
+            height={height}
+            motion={motion}
+            onCancel={() => setBindingProfile(undefined)}
+            onSave={(binding) => {
+              const profileId = bindingProfile;
+              setBindingProfile(undefined);
+              setConfirmation({
+                title: "Cambiar modelo del perfil",
+                phrase: "CAMBIAR",
+                body:
+                  JSON.stringify(binding, null, 2) +
+                  "\n\nNo cambia equipos ni permisos. Las sesiones antiguas conservan su binding. Se valida compatibilidad antes de guardar, autenticación antes de inferir.",
+                action: {
+                  type: "studio",
+                  action: {
+                    command: "binding",
+                    profileId,
+                    binding,
+                    expectedHash: s.studio!.hash,
+                    confirmation: "CAMBIAR",
+                  },
+                },
+              });
+            }}
+          />
+        )}
+      {wizard && (
+        <GuidedForm
+          spec={wizard}
+          width={width}
+          height={height}
+          motion={motion}
+          onCancel={() => setWizard(undefined)}
+        />
       )}
       {confirmation && (
         <Confirm

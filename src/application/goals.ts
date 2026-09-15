@@ -1,3 +1,4 @@
+import { SkillsRegistry } from "../skills/registry.js";
 import { mkdir, realpath } from "node:fs/promises";
 import { join, resolve, relative, sep } from "node:path";
 import type { Goal, Privacy } from "../domain/model.js";
@@ -15,6 +16,7 @@ export async function createGoal(
     config: PerfectConfig;
     privacy: Privacy;
     mode?: "real" | "mock";
+    workMode?: string;
   },
   store: StateStore,
 ): Promise<Goal> {
@@ -69,6 +71,11 @@ export async function createGoal(
       createdAt: now(),
       updatedAt: now(),
     };
+    goal.studioSnapshotId = new SkillsRegistry(store).snapshot(
+      goal,
+      input.config,
+      input.workMode,
+    ).id;
     store.put("goals", goal, "goal.created");
     store.event(goal.id, "workspace.snapshotted", {
       head: snapshot.manifest.head,
