@@ -1,0 +1,61 @@
+name: Preparar entrega V3 comprobada (temporal)
+on:
+  push:
+    branches: [feat/perfect-harness-v3-integraciones]
+    paths: [.github/workflows/v3-finalize.yml, scripts/v3-finalize.mjs, scripts/v3-finalize-safe.mjs]
+permissions:
+  contents: write
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - run: node scripts/v3-finalize-safe.mjs
+      - name: Ordenar imports y formatear el código nuevo
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';import ts from 'typescript';import path from 'node:path';import {execFileSync} from 'node:child_process';
+          const walk=dir=>fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(dir,e.name)):[path.join(dir,e.name)]);
+          const files=[...new Set([...execFileSync('git',['diff','--name-only'],{encoding:'utf8'}).trim().split('\n'),...walk('src/integrations'),...walk('tests/integrations')])].filter(p=>p.endsWith('.ts')||p.endsWith('.tsx'));
+          const config=ts.readConfigFile('tsconfig.json',ts.sys.readFile),parsed=ts.parseJsonConfigFileContent(config.config,ts.sys,'.');
+          const service=ts.createLanguageService({getScriptFileNames:()=>parsed.fileNames,getScriptVersion:()=> '0',getScriptSnapshot:p=>fs.existsSync(p)?ts.ScriptSnapshot.fromString(fs.readFileSync(p,'utf8')):undefined,getCurrentDirectory:()=>process.cwd(),getCompilationSettings:()=>parsed.options,getDefaultLibFileName:o=>ts.getDefaultLibFilePath(o),fileExists:ts.sys.fileExists,readFile:ts.sys.readFile,readDirectory:ts.sys.readDirectory});
+          for(const file of files){for(const edit of service.organizeImports({type:'file',fileName:file},{},{})){let s=fs.readFileSync(edit.fileName,'utf8');for(const c of edit.textChanges.toReversed())s=s.slice(0,c.span.start)+c.newText+s.slice(c.span.start+c.span.length);fs.writeFileSync(edit.fileName,s);}}service.dispose();
+          execFileSync(process.execPath,['node_modules/prettier/bin/prettier.cjs','--write',...files],{stdio:'inherit'});
+          JS
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run check:config
+      - run: npm run build
+      - run: npm test
+      - run: npm run test:package
+      - run: npm run audit:production
+      - name: Revisar espacios de código sin alterar las celdas vacías de las referencias TUI
+        run: git diff --check -- . ':!docs/screenshots/es/*.txt'
+      - name: Preparar árbol exacto validado sin modificar ramas
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import pathlib,json,subprocess,base64,os
+          changed=subprocess.check_output(['git','diff','--name-only'],text=True).splitlines();entries=[]
+          for name in changed:
+            assert name.startswith(('src/','scripts/','tests/','docs/screenshots/es/','build/windows/')) or name in ['README.md','package.json','package-lock.json']
+            p=pathlib.Path(name);assert p.is_file() and not p.is_symlink()
+            response=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/vellxw/Perfect-harness/git/blobs','--input','-'],input=json.dumps({'encoding':'base64','content':base64.b64encode(p.read_bytes()).decode()}),text=True))
+            entries.append({'path':name,'mode':'100644','type':'blob','sha':response['sha']})
+          tree=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/vellxw/Perfect-harness/git/trees','--input','-'],input=json.dumps({'base_tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),'tree':entries}),text=True))['sha']
+          result={'parent':os.environ['GITHUB_SHA'],'tree':tree,'files':changed};pathlib.Path('test-results').mkdir(exist_ok=True);pathlib.Path('test-results/final-tree.json').write_text(json.dumps(result,indent=2));print(json.dumps(result,indent=2))
+          print('VERIFIED_TREE='+tree)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v3-final-source
+          path: test-results/final-tree.json

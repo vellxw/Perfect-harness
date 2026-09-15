@@ -1,0 +1,18 @@
+{
+  "id": "mi-servidor",
+  "title": "Servidor local revisado",
+  "kind": "mcp",
+  "enabled": false,
+  "roles": ["general"],
+  "dataClass": "private",
+  "transport": {
+    "type": "stdio",
+    "command": "C:\\RUTA\\REVISADA\\node.exe",
+    "args": ["C:\\RUTA\\REVISADA\\servidor-mcp.mjs"],
+    "envRefs": {"SERVICE_TOKEN": "PERFECT_MI_SERVICIO_TOKEN"},
+    "trustLocalProcess": true
+  },
+  "tools": {"consultar": "read"},
+  "resourcePrefixes": [],
+  "maxCallsPerRun": 20
+}

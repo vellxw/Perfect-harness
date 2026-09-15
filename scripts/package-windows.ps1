@@ -8,6 +8,7 @@ $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
 $out = Join-Path $root 'release\Perfect-Harness-Windows-x64'
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory "$out\runtime","$out\app","$out\assets" -Force | Out-Null
+& (Join-Path $PSScriptRoot 'prepare-desktop.ps1')
 node scripts/build-brand.mjs
 if ($LASTEXITCODE -ne 0) { throw 'Icon build failed' }
 npm run build

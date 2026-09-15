@@ -13,6 +13,7 @@ import type {
   UiTask,
 } from "../../presentation/protocol.js";
 import { text } from "../../presentation/protocol.js";
+import { integrationRows } from "./integration-view.js";
 export interface Row {
   id: string;
   title: string;
@@ -26,6 +27,34 @@ export interface PaletteItem {
   args?: string;
 }
 export const commands: PaletteItem[] = [
+  {
+    name: "integrations",
+    description: "Conexiones MCP, permisos y ventanas autorizadas",
+  },
+  {
+    name: "github",
+    description: "Conectar el servidor oficial a un repositorio",
+    args: "propietario/repositorio",
+  },
+  {
+    name: "browser",
+    description: "Navegador interactivo de la aplicación aislada",
+  },
+  { name: "desktop", description: "Elegir una ventana de Windows" },
+  {
+    name: "detener-escritorio",
+    description: "Revocar el control del escritorio",
+  },
+  {
+    name: "mcp-importar",
+    description: "Importar una conexión MCP revisada",
+    args: "archivo.json",
+  },
+  {
+    name: "clave",
+    description: "Ingresar la credencial local sin mostrarla",
+    args: "id",
+  },
   {
     name: "goal",
     description: "Iniciar un objetivo sin tocar la carpeta original",
@@ -160,6 +189,8 @@ export function orderedTasks(
 }
 export function viewRows(s: UiSnapshot, screen: Screen): Row[] {
   switch (screen) {
+    case "integrations":
+      return integrationRows(s);
     case "agents":
     case "routing":
       return s.agents.map((a) => ({

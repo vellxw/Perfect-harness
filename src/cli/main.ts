@@ -30,6 +30,7 @@ import {
 } from "./control.js";
 import { renderStatus, statusSnapshot } from "./display.js";
 import { doctor } from "./doctor.js";
+import { registerIntegrations } from "./integrations.js";
 import { login } from "./login.js";
 import { registerPrepare } from "./prepare.js";
 import { fullstackSmoke, providerSmoke } from "./smoke.js";
@@ -106,6 +107,7 @@ export async function main(
       );
       exitCode = goalExit(finished);
     });
+  registerIntegrations(program, globals);
   registerPrepare(program, context);
   program
     .command("goal <description...>")

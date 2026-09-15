@@ -1,5 +1,9 @@
 import { z } from "zod";
 import type { GoalState, Role } from "../domain/model.js";
+import {
+  IntegrationActionSchema,
+  type IntegrationPanelSnapshot,
+} from "../integrations/actions.js";
 export const PROTOCOL_VERSION = 1;
 export const MotionSchema = z.enum(["auto", "full", "reduced", "off"]);
 export type Motion = z.infer<typeof MotionSchema>;
@@ -20,6 +24,7 @@ export const UiPreferencesSchema = z.object({
 });
 export type UiPreferences = z.infer<typeof UiPreferencesSchema>;
 export type Screen =
+  | "integrations"
   | "home"
   | "agents"
   | "plan"
@@ -97,6 +102,7 @@ export interface UiDiagnostic {
   detail: string;
 }
 export interface UiSnapshot {
+  integrations?: IntegrationPanelSnapshot;
   protocol: 1;
   version: string;
   sequence: number;
@@ -146,6 +152,9 @@ export interface UiSnapshot {
 }
 const goalId = z.string().min(1).max(96);
 export const UiActionSchema = z.discriminatedUnion("type", [
+  z
+    .object({ type: z.literal("integration"), action: IntegrationActionSchema })
+    .strict(),
   z
     .object({
       type: z.literal("goal"),

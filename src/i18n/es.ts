@@ -1,6 +1,9 @@
 /** Español de la aplicación. Los identificadores de protocolo y proveedor nunca se traducen. */
 export const locale = "es-AR";
 export const commandNames: Readonly<Record<string, string>> = {
+  integrations: "integraciones",
+  browser: "navegador",
+  desktop: "escritorio",
   goal: "objetivo",
   status: "estado",
   agents: "agentes",
@@ -120,6 +123,7 @@ export function roleLabel(value: string): string {
   return roleNames[value] ?? value;
 }
 const screenNames: Readonly<Record<string, string>> = {
+  integrations: "Integraciones",
   home: "Inicio",
   agents: "Agentes",
   plan: "Plan",
