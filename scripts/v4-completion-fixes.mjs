@@ -5,4 +5,5 @@ fix('src/skills/experiments.ts','environment=check.environment;','environment=ch
 fix('src/skills/experiments.ts','!goal||!goal.source.startsWith(t.workspace)&&!store.events(goal.id)','!goal||!store.events(goal.id)');
 fix('src/skills/experiments.ts','AgentProfile, StudioConfig, SkillRelease','AgentProfile, StudioConfig');
 fix('src/skills/experiments.ts','Goal, Usage, Task','Usage, Task');
-console.log('Correct Task contract, optional environment metadata and strict evaluation-goal linkage.');
+fix('src/skills/registry.ts','            commit: r.provenance.commit,','            ...(r.provenance.commit ? {commit:r.provenance.commit} : {}),');
+console.log('Complete Task contracts, strict scope and stable JSON snapshot serialization.');
