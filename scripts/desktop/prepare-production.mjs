@@ -34,6 +34,12 @@ if(!copyTarget)throw Error('Missing composer authorization copy insertion');
 const copyAnchor='No se publica ni se aplica código sin\n          autorización';
 const copyInsertion='Las referencias seleccionadas se importan con la privacidad indicada. No se aplica código sin\n          autorización';
 source=source.replace(copyTarget,`change('src/desktop/renderer/index.tsx',${JSON.stringify(copyAnchor)},${JSON.stringify(copyInsertion)});`);
+const rendererImportTarget=source.split('\n').find(line=>line.startsWith("prepend('src/desktop/renderer/index.tsx','import type { UserReference }"));
+if(!rendererImportTarget)throw Error('Missing renderer reference import insertion');
+const reactImport='import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";';
+const reactWithReference=reactImport+'\nimport type { UserReference } from "../../domain/references.js";';
+source=source.replace(rendererImportTarget,`change('src/desktop/renderer/index.tsx',${JSON.stringify(reactImport)},${JSON.stringify(reactWithReference)});`);
+source=source.replace('referenceIds:z.array(z.string().uuid()).max(8).default([]),','referenceIds:z.array(z.string().uuid()).max(8).optional(),');
 try {
   fs.writeFileSync(filename,source);
   await import('./connect-production.mjs');
