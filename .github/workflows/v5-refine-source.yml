@@ -62,7 +62,7 @@ jobs:
           import pathlib,json,subprocess,base64,os
           names=subprocess.check_output(['git','diff','--name-only'],text=True).splitlines();entries=[]
           for name in names:
-            assert name.startswith('src/desktop/renderer/')
+            assert name.startswith('src/desktop/renderer/') or name=='scripts/desktop/ui-e2e.mjs'
             p=pathlib.Path(name);assert p.is_file() and not p.is_symlink()
             blob=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/vellxw/Perfect-harness/git/blobs','--input','-'],input=json.dumps({'encoding':'base64','content':base64.b64encode(p.read_bytes()).decode()}),text=True))['sha']
             entries.append({'path':name,'mode':'100644','type':'blob','sha':blob})
