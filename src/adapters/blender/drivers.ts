@@ -40,7 +40,7 @@ scene.render.engine='CYCLES';scene.cycles.device='CPU';scene.cycles.samples=16
 scene.render.resolution_x=spec['width'];scene.render.resolution_y=spec['height'];scene.render.resolution_percentage=100
 scene.render.image_settings.file_format='PNG';scene.render.filepath='/workspace/output/preview.png'
 bpy.ops.render.render(write_still=True)
-report={'blender':bpy.app.version_string,'sourceReopened':True,'meshCount':len(meshes),'vertices':sum(len(o.data.vertices)for o in meshes),'bounds':[list(lo),list(hi)],'export':'asset.glb','width':spec['width'],'height':spec['height'],'validator':'trusted-controller-script-separate-process'}
+report={'blender':'.'.join(str(v) for v in bpy.app.version),'blenderDisplay':bpy.app.version_string,'sourceReopened':True,'meshCount':len(meshes),'vertices':sum(len(o.data.vertices)for o in meshes),'bounds':[list(lo),list(hi)],'export':'asset.glb','width':spec['width'],'height':spec['height'],'validator':'trusted-controller-script-separate-process'}
 with open('/workspace/output/verification.json','w')as f:json.dump(report,f)
 `;
 export const glbBrowserDriver = String.raw`

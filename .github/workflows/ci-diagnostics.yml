@@ -17,36 +17,29 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Read bounded tails of failed jobs in this repository
+      - name: Read bounded failure logs
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           JOB_ID: ${{ inputs.job_id }}
+          GODEBUG: http2client=0
         shell: bash
         run: |
           python3 - <<'PY'
-          import os,subprocess,json
-          repo=os.environ['REPO']
-          assert repo=='vellxw/Perfect-harness'
+          import os,subprocess
+          repo=os.environ['REPO']; assert repo=='vellxw/Perfect-harness'
           requested=os.environ.get('JOB_ID','')
-          if requested:
-            assert requested.isdigit()
-            jobs=[{'id':int(requested),'name':'requested job'}]
-          else:
-            runs=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs?branch=feat%2Fperfect-harness-v4-skills-studios&status=failure&per_page=12'],text=True))['workflow_runs']
-            jobs=[]; seen=set()
-            for run in runs:
-              candidates=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/actions/runs/{run["id"]}/jobs?per_page=100'],text=True))['jobs']
-              for job in candidates:
-                if job['conclusion']=='failure' and job['name'] in ['windows-package','blender'] and job['name'] not in seen:
-                  seen.add(job['name']);jobs.append(job)
-          for job in jobs[:2]:
-            result=subprocess.run(['gh','api',f'repos/{repo}/actions/jobs/{job["id"]}/logs'],capture_output=True,text=True,timeout=60)
-            if result.returncode: raise RuntimeError('Failed to retrieve job log '+str(job['id']))
-            lines=result.stdout.splitlines()
-            print('\nJOB',job['id'],job['name'],'TOTAL_LINES',len(lines))
-            errors=[i for i,line in enumerate(lines) if '##[error]' in line]
-            keep=set(range(max(0,len(lines)-55),len(lines)))
-            for index in errors[-3:]: keep.update(range(max(0,index-35),min(len(lines),index+3)))
-            for i in sorted(keep): print(lines[i][:1800])
+          if requested: assert requested.isdigit()
+          jobs=[requested] if requested else ['104236196365']
+          failed=False
+          for job in jobs:
+            r=subprocess.run(['gh','run','view','--repo',repo,'--job',job,'--log-failed'],capture_output=True,text=True,timeout=120)
+            print('JOB',job,'EXIT',r.returncode)
+            print(r.stderr[-2500:])
+            lines=r.stdout.splitlines(); keep=set(range(max(0,len(lines)-70),len(lines)))
+            for i,l in enumerate(lines):
+              if any(t in l.lower() for t in ['##[error]','parsererror','error cs','error ts','exception:']):keep.update(range(max(0,i-8),min(len(lines),i+10)))
+            for i in sorted(keep)[-150:]:print(lines[i][:1500])
+            failed=failed or bool(r.returncode)
+          if failed: raise SystemExit(1)
           PY
