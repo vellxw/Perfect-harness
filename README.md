@@ -6,12 +6,14 @@ Un harness local sobre Pi SDK con interfaz de terminal en español: objetivo →
 
 ## Instalar
 
-Windows x64: descargar el **instalador** o el **portable completo** del workflow *Perfect V4 Windows distribution*, correspondiente al commit que se quiere probar. Los artifacts incluyen versión, commit y SHA256. No copiar solamente Perfect.exe: necesita su runtime y módulos incluidos. El ejecutable está sin firma Authenticode; no desactivar protecciones del sistema.
+Windows x64: descargar **Perfect-Harness-Setup-x64.exe** o el **portable completo** desde [GitHub Releases](https://github.com/vellxw/Perfect-harness/releases). El workflow de publicación exige que Linux, Windows, Docker, Blender, UI e instalación/actualización aprueben para el mismo commit antes de publicar. Si todavía no aparece una release, consultar el [workflow de publicación](https://github.com/vellxw/Perfect-harness/actions/workflows/v4-release.yml), no instalar un artifact fallido como si fuera una entrega verificada.
+
+Cada release incluye versión, commit, SHA256, manifiesto e informes de prueba. No copiar solamente Perfect.exe: necesita su runtime y módulos incluidos. El ejecutable está sin firma Authenticode; no desactivar protecciones del sistema. Pausar y cerrar Perfect antes de actualizar; la instalación no actualiza automáticamente tus cuentas ni ejecuta objetivos.
 
 Desde el código, con Node 26.4.x y Git:
 
 ```sh
-git clone --branch feat/perfect-harness-v4-skills-studios https://github.com/vellxw/Perfect-harness.git
+git clone https://github.com/vellxw/Perfect-harness.git
 cd Perfect-harness
 npm ci
 npm run build
@@ -71,4 +73,6 @@ La conexión de GitHub de una conversación no se transfiere al producto. Consul
 
 CI permanente: Linux/Windows nativo, Docker E2E, Blender real, UI y distribución Windows con instalación/actualización/desinstalación. Consultar los resultados del **commit exacto**, no el color de una revisión anterior. Los jobs ligeros omiten los E2E que ejecutan los jobs especializados. Los artifacts distinguen modelos sintéticos, renderizador nativo y capturas del escritorio.
 
-Windows CI utiliza Windows Server 2025; no implica una prueba personal de Windows 11, Docker Desktop ni OAuth del usuario. No hay merge o despliegue automático. [Seguridad](SECURITY.md) · [Diseño](docs/design/perfect-v2.md) · [Guía V4](docs/v4-user-guide.md).
+Windows CI utiliza Windows Server 2025; no implica una prueba personal de Windows 11, Docker Desktop ni OAuth del usuario. Las PRs se fusionan por decisión del propietario. Los commits de main pueden publicar una release únicamente después de superar las comprobaciones; los objetivos ejecutados por el producto conservan sus permisos y no obtienen autorización de despliegue por esta automatización del repositorio.
+
+[Seguridad](SECURITY.md) · [Diseño](docs/design/perfect-v2.md) · [Guía V4](docs/v4-user-guide.md) · [Descargas](https://github.com/vellxw/Perfect-harness/releases)
