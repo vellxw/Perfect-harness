@@ -10,4 +10,7 @@ change('src/desktop/renderer/index.tsx','Empty,VirtualList,label','Empty,label')
 change('src/desktop/renderer/work.tsx','label,Detail,jsonResult','label,jsonResult');
 change('src/desktop/renderer/integrations.tsx','Row,splitLines,options','Row,splitLines');
 change('src/desktop/renderer/trials.tsx','Row,Modal,Status,options','Row,Modal,options');
-console.log('Repaired JSX delimiters, focus restoration and unused imports; no assertions weakened.');
+change('src/desktop/renderer/index.tsx','<button key={p.id} onClick={()=>navigate(p.id)}><span>{p.name}</span>','<button key={p.id} aria-label={p.name} onClick={()=>navigate(p.id)}><span>{p.name}</span>');
+// The palette exposes unique accessible labels; exact matching prevents Habilidades matching Estudio de habilidades.
+change('scripts/desktop/ui-e2e.mjs',"getByRole('button',{name,exact:false})","getByRole('button',{name,exact:true})");
+console.log('Repaired JSX/focus and unique palette labels. Functional assertions are unchanged.');
