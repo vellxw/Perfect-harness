@@ -1,4 +1,4 @@
-import packager from '@electron/packager';
+import { packager } from '@electron/packager';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 const pkg = JSON.parse(await readFile('package.json', 'utf8'));
