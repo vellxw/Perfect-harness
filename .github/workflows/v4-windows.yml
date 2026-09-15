@@ -1,13 +1,13 @@
 name: Perfect V4 Windows distribution
 on:
-  push:
-    branches: [feat/perfect-harness-v4-skills-studios]
   pull_request:
+    branches: [main]
   workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 concurrency:
-  group: v4-windows-${{ github.ref }}
+  group: v4-windows-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   windows-package:
@@ -24,13 +24,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '26.4.0'
-      - name: Install public packaging compiler
+      - name: Prepare pinned Inno Setup 7 with extended path support
         shell: pwsh
-        run: |
-          if (-not (Get-ChildItem "${env:ProgramFiles(x86)}/Inno Setup*/ISCC.exe" -ErrorAction SilentlyContinue)) {
-            choco install innosetup --version=6.7.0 --yes --no-progress
-            if ($LASTEXITCODE -ne 0) { throw 'No se pudo preparar Inno Setup' }
-          }
+        run: ./scripts/prepare-installer.ps1
       - uses: actions/checkout@v4
         with:
           ref: '1f3876b481a10c096ec7423541696ecd2a603306'
@@ -39,18 +35,25 @@ jobs:
       - name: Build actual previous installer for upgrade test
         shell: pwsh
         run: |
+          $log=Join-Path $env:RUNNER_TEMP 'perfect-previous-build.log'
           Push-Location previous-version
           try {
             npm ci
             if($LASTEXITCODE -ne 0){throw 'Previous install failed'}
-            ./scripts/package-windows.ps1 -Installer
+            try { ./scripts/package-windows.ps1 -Installer *> $log }
+            catch { Get-Content $log -Tail 60; throw }
             Copy-Item release/Perfect-Harness-Setup-x64.exe "$env:RUNNER_TEMP/Perfect-Previous-0.3.0.exe"
+            Get-Content $log -Tail 5
           } finally {Pop-Location}
           Remove-Item previous-version -Recurse -Force
       - run: npm ci
       - name: Build V4 installer and portable once
         shell: pwsh
-        run: ./scripts/package-windows.ps1 -Installer
+        run: |
+          $log=Join-Path $env:RUNNER_TEMP 'perfect-v4-build.log'
+          try { ./scripts/package-windows.ps1 -Installer *> $log }
+          catch { Get-Content $log -Tail 60; throw }
+          Get-Content $log -Tail 5
       - name: Test actual portable and installed payload plus upgrade
         shell: pwsh
         run: |

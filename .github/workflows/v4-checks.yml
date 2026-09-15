@@ -1,29 +1,41 @@
 name: Perfect V4
 on:
-  push:
-    branches: [feat/perfect-harness-v4-skills-studios]
   pull_request:
+    branches: [main]
   workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 concurrency:
-  group: v4-${{ github.ref }}
+  group: v4-checks-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   native:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-2025]
+        os: [ubuntu-24.04, windows-2025]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '26.4.0'
+      - name: Parse every PowerShell script before building
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $errorsFound = @()
+          Get-ChildItem scripts -Filter '*.ps1' | ForEach-Object {
+            $tokens=$null; $parseErrors=$null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName,[ref]$tokens,[ref]$parseErrors)
+            $errorsFound += @($parseErrors)
+          }
+          if($errorsFound.Count){$errorsFound | Format-List; throw 'Invalid PowerShell source'}
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
@@ -33,11 +45,12 @@ jobs:
       - run: npm run test:package
       - run: npm run audit:production
   docker:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:

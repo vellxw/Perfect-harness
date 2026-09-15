@@ -1,0 +1,40 @@
+name: Perfect V4 release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: perfect-release-main
+  cancel-in-progress: false
+jobs:
+  checks:
+    uses: ./.github/workflows/v4-checks.yml
+  blender:
+    uses: ./.github/workflows/v4-blender.yml
+  ui:
+    uses: ./.github/workflows/v4-ui.yml
+  windows:
+    uses: ./.github/workflows/v4-windows.yml
+  publish:
+    if: github.ref == 'refs/heads/main'
+    needs: [checks, blender, ui, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          path: downloaded
+      - name: Publish only the tested binary bytes from this run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: python3 scripts/publish-release.py

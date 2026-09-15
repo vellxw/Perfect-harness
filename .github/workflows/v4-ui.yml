@@ -1,17 +1,17 @@
 name: Perfect V4 UI evidence
 on:
-  push:
-    branches: [feat/perfect-harness-v4-skills-studios]
   pull_request:
+    branches: [main]
   workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 concurrency:
-  group: v4-ui-${{ github.ref }}
+  group: v4-ui-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   ui:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
