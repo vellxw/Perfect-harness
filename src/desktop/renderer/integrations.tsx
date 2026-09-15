@@ -1,12 +1,595 @@
 /** @jsxImportSource react */
-import type {UiSnapshot} from '../contracts/protocol.js';
-import {useUI,Heading,Empty,Row,splitLines,options} from './ui.js';
-const defaultRoles=['planner','general','backend','integrator','oracle'];
-export function Integrations({s}:{s:UiSnapshot}){
- const ui=useUI(),p=s.integrations;const perform=(action:Record<string,unknown>,show=false)=>ui.execute({type:'integration',action},show);
- const github=()=>ui.form({title:'Conectar GitHub oficial',description:'Solo repositorios explícitos. La conexión de este chat no se hereda. La credencial se introduce localmente después.',submit:'Registrar conexión',phrase:'CONFIAR',fields:[{name:'repos',label:'Repositorios, uno por línea',type:'textarea',required:true,help:'propietario/repositorio'},{name:'writes',label:'Escrituras',type:'select',value:'deny',options:[{value:'deny',label:'Solo lectura'},{value:'confirm',label:'Solicitar confirmación para cada escritura'}]}],onSubmit:async v=>{await perform({command:'configure',config:{id:'github',title:'GitHub oficial',kind:'github',roles:defaultRoles,repositories:splitLines(v.repos??''),writeMode:v.writes,enabled:true,dataClass:'private'},confirmation:'CONFIAR'});}});
- const mcp=(kind:'http'|'stdio')=>ui.form({title:kind==='http'?'Servidor MCP remoto':'Servidor MCP local',description:kind==='stdio'?'Autorizar un programa local no lo convierte en un sandbox. Revisá ejecutable, argumentos y herramientas.':'La conexión conserva origen, herramientas y permisos. El Bearer se ingresa por separado.',submit:'Registrar servidor',phrase:'CONFIAR',fields:[{name:'id',label:'Identificador',required:true},{name:'title',label:'Nombre visible',required:true},...(kind==='http'?[{name:'url',label:'Endpoint HTTPS o loopback autorizado',required:true},{name:'bearer',label:'Nombre de credencial local (opcional)',help:'Por ejemplo PERFECT_MCP_TOKEN, nunca el token en este campo'},{name:'loopback',label:'Acceso loopback',type:'select' as const,value:'false',options:[{value:'false',label:'No permitir HTTP local'},{value:'true',label:'Permitir servidor local explícito'}]}]:[{name:'command',label:'Ejecutable local revisado',type:'file' as const,required:true},{name:'args',label:'Argumentos, uno por línea',type:'textarea' as const}]),{name:'reads',label:'Herramientas de lectura, una por línea',type:'textarea'},{name:'writes',label:'Herramientas de escritura, una por línea',type:'textarea',help:'Siempre sujetas a autorización de operación'},{name:'roles',label:'Roles autorizados (separados por coma)',value:'general',required:true}],onSubmit:async v=>{const tools=Object.fromEntries([...splitLines(v.reads??'').map(t=>[t,'read']),...splitLines(v.writes??'').map(t=>[t,'write'])]);await perform({command:'configure',config:{id:v.id,title:v.title,kind:'mcp',roles:(v.roles??'').split(',').map(r=>r.trim()),enabled:true,dataClass:'private',transport:kind==='http'?{type:'http',url:v.url,bearerEnv:v.bearer||undefined,headers:{},allowLoopback:v.loopback==='true'}:{type:'stdio',command:v.command,args:splitLines(v.args??''),envRefs:{},trustLocalProcess:true},tools,resourcePrefixes:[]},confirmation:'CONFIAR'});}});
- return <><Heading title="Integraciones" description="Herramientas conectadas, con permisos visibles por operación."><button onClick={github}>GitHub</button><button onClick={()=>mcp('http')}>MCP remoto</button><button onClick={()=>mcp('stdio')}>MCP local</button><button onClick={()=>void perform({command:'refresh'})}>Actualizar</button></Heading><div className="actions-block"><button onClick={()=>ui.confirm('Habilitar navegador interactivo','La aplicación de la tarea se ejecuta aislada. No se utiliza tu navegador personal ni se comparte la sesión de pruebas.','CONFIAR',async()=>{await perform({command:'configure',config:{id:'navegador',title:'Navegador interactivo',kind:'browser',roles:['frontend','backend','general'],enabled:true},confirmation:'CONFIAR'});})}>Navegador de la tarea</button><button onClick={()=>void perform({command:'windows'})}>Elegir ventana de Windows</button><button className="danger-button" onClick={()=>void perform({command:'stop-desktop'})}>Detener control de escritorio</button></div>{p?.pending.length? <section><h3>Operaciones que requieren atención</h3>{p.pending.map(op=><Row key={op.id} title={`${op.serverId} · ${op.tool}`} detail={`${op.effect} · ${op.role} · ${op.state}`} onOpen={()=>ui.document('Operación y argumentos',op)}>{op.state==='pending'?<><button onClick={()=>ui.confirm('Autorizar esta operación',`${op.serverId}/${op.tool}\n${op.arguments}\n\nHash: ${op.digest}\nSolo esta operación, no permisos generales.`,'AUTORIZAR',async()=>{await perform({command:'approve',id:op.id,digest:op.digest,confirmation:'AUTORIZAR'});})}>Autorizar</button><button onClick={()=>void perform({command:'deny',id:op.id,digest:op.digest})}>Rechazar</button></>:op.state==='unknown'?<button onClick={()=>ui.confirm('Reconciliar operación incierta','Comprobá externamente que NO se ejecutó antes de autorizar otro intento. La falta de respuesta no demuestra que no ocurrió.\n'+op.arguments,'NO_EJECUTADO',async()=>{await perform({command:'reconcile',id:op.id,digest:op.digest,confirmation:'NO_EJECUTADO'});})}>Reconciliar</button>:null}</Row>)}</section>:null}<section><h3>Conexiones</h3>{p?.connections.length?p.connections.map(c=><Row key={c.id} title={c.title} detail={`${c.kind} · ${c.status} · ${c.tools} herramientas · ${c.roles.join(', ')}`} onOpen={()=>void perform({command:'inspect',id:c.id},true)}><button onClick={()=>void perform({command:'login',id:c.id})}>Credencial</button><button onClick={()=>void perform({command:'probe',id:c.id},true)}>Comprobar</button>{c.catalogHash&&!c.authorized&&<button onClick={()=>ui.confirm('Autorizar catálogo revisado',`${c.title}\n${c.catalogHash}\nUna actualización del catálogo requerirá nueva revisión.`,'CONECTAR',async()=>{await perform({command:'authorize',id:c.id,hash:c.catalogHash,confirmation:'CONECTAR'});})}>Conectar</button>}<button onClick={()=>void perform({command:'disable',id:c.id})}>Desactivar</button></Row>):<Empty title="Sin conexiones registradas">Conectar una herramienta no le concede acceso a todos tus proyectos.</Empty>}</section>{Boolean(p?.windows.length)&&<section><h3>Ventanas disponibles</h3>{p!.windows.map(w=><Row key={w.handle} title={w.title} detail={`${w.executable} · ${w.width}×${w.height}`}><button onClick={()=>ui.confirm('Control temporal de esta ventana',`${w.title}\n${w.executable}\nPID ${w.pid}. Diez minutos máximo. No equivale a aislamiento de la aplicación. Ctrl+Alt+F10 detiene la sesión.`,'CONTROLAR',async()=>{await perform({command:'window',handle:w.handle,hash:w.hash,minutes:10,confirmation:'CONTROLAR'});})}>Autorizar ventana</button></Row>)}</section>}</>;
+import type { UiSnapshot } from "../contracts/protocol.js";
+import { useUI, Heading, Empty, Row, splitLines } from "./ui.js";
+const defaultRoles = ["planner", "general", "backend", "integrator", "oracle"];
+export function Integrations({ s }: { s: UiSnapshot }) {
+  const ui = useUI(),
+    p = s.integrations;
+  const perform = (action: Record<string, unknown>, show = false) =>
+    ui.execute({ type: "integration", action }, show);
+  const github = () =>
+    ui.form({
+      title: "Conectar GitHub oficial",
+      description:
+        "Solo repositorios explícitos. La conexión de este chat no se hereda. La credencial se introduce localmente después.",
+      submit: "Registrar conexión",
+      phrase: "CONFIAR",
+      fields: [
+        {
+          name: "repos",
+          label: "Repositorios, uno por línea",
+          type: "textarea",
+          required: true,
+          help: "propietario/repositorio",
+        },
+        {
+          name: "writes",
+          label: "Escrituras",
+          type: "select",
+          value: "deny",
+          options: [
+            { value: "deny", label: "Solo lectura" },
+            {
+              value: "confirm",
+              label: "Solicitar confirmación para cada escritura",
+            },
+          ],
+        },
+      ],
+      onSubmit: async (v) => {
+        await perform({
+          command: "configure",
+          config: {
+            id: "github",
+            title: "GitHub oficial",
+            kind: "github",
+            roles: defaultRoles,
+            repositories: splitLines(v.repos ?? ""),
+            writeMode: v.writes,
+            enabled: true,
+            dataClass: "private",
+          },
+          confirmation: "CONFIAR",
+        });
+      },
+    });
+  const mcp = (kind: "http" | "stdio") =>
+    ui.form({
+      title: kind === "http" ? "Servidor MCP remoto" : "Servidor MCP local",
+      description:
+        kind === "stdio"
+          ? "Autorizar un programa local no lo convierte en un sandbox. Revisá ejecutable, argumentos y herramientas."
+          : "La conexión conserva origen, herramientas y permisos. El Bearer se ingresa por separado.",
+      submit: "Registrar servidor",
+      phrase: "CONFIAR",
+      fields: [
+        { name: "id", label: "Identificador", required: true },
+        { name: "title", label: "Nombre visible", required: true },
+        ...(kind === "http"
+          ? [
+              {
+                name: "url",
+                label: "Endpoint HTTPS o loopback autorizado",
+                required: true,
+              },
+              {
+                name: "bearer",
+                label: "Nombre de credencial local (opcional)",
+                help: "Por ejemplo PERFECT_MCP_TOKEN, nunca el token en este campo",
+              },
+              {
+                name: "loopback",
+                label: "Acceso loopback",
+                type: "select" as const,
+                value: "false",
+                options: [
+                  { value: "false", label: "No permitir HTTP local" },
+                  { value: "true", label: "Permitir servidor local explícito" },
+                ],
+              },
+            ]
+          : [
+              {
+                name: "command",
+                label: "Ejecutable local revisado",
+                type: "file" as const,
+                required: true,
+              },
+              {
+                name: "args",
+                label: "Argumentos, uno por línea",
+                type: "textarea" as const,
+              },
+            ]),
+        {
+          name: "reads",
+          label: "Herramientas de lectura, una por línea",
+          type: "textarea",
+        },
+        {
+          name: "writes",
+          label: "Herramientas de escritura, una por línea",
+          type: "textarea",
+          help: "Siempre sujetas a autorización de operación",
+        },
+        {
+          name: "roles",
+          label: "Roles autorizados (separados por coma)",
+          value: "general",
+          required: true,
+        },
+      ],
+      onSubmit: async (v) => {
+        const tools = Object.fromEntries([
+          ...splitLines(v.reads ?? "").map((t) => [t, "read"]),
+          ...splitLines(v.writes ?? "").map((t) => [t, "write"]),
+        ]);
+        await perform({
+          command: "configure",
+          config: {
+            id: v.id,
+            title: v.title,
+            kind: "mcp",
+            roles: (v.roles ?? "").split(",").map((r) => r.trim()),
+            enabled: true,
+            dataClass: "private",
+            transport:
+              kind === "http"
+                ? {
+                    type: "http",
+                    url: v.url,
+                    bearerEnv: v.bearer || undefined,
+                    headers: {},
+                    allowLoopback: v.loopback === "true",
+                  }
+                : {
+                    type: "stdio",
+                    command: v.command,
+                    args: splitLines(v.args ?? ""),
+                    envRefs: {},
+                    trustLocalProcess: true,
+                  },
+            tools,
+            resourcePrefixes: [],
+          },
+          confirmation: "CONFIAR",
+        });
+      },
+    });
+  return (
+    <>
+      <Heading
+        title="Integraciones"
+        description="Herramientas conectadas, con permisos visibles por operación."
+      >
+        <button onClick={github}>GitHub</button>
+        <button onClick={() => mcp("http")}>MCP remoto</button>
+        <button onClick={() => mcp("stdio")}>MCP local</button>
+        <button onClick={() => void perform({ command: "refresh" })}>
+          Actualizar
+        </button>
+      </Heading>
+      <div className="actions-block">
+        <button
+          onClick={() =>
+            ui.confirm(
+              "Habilitar navegador interactivo",
+              "La aplicación de la tarea se ejecuta aislada. No se utiliza tu navegador personal ni se comparte la sesión de pruebas.",
+              "CONFIAR",
+              async () => {
+                await perform({
+                  command: "configure",
+                  config: {
+                    id: "navegador",
+                    title: "Navegador interactivo",
+                    kind: "browser",
+                    roles: ["frontend", "backend", "general"],
+                    enabled: true,
+                  },
+                  confirmation: "CONFIAR",
+                });
+              },
+            )
+          }
+        >
+          Navegador de la tarea
+        </button>
+        <button onClick={() => void perform({ command: "windows" })}>
+          Elegir ventana de Windows
+        </button>
+        <button
+          className="danger-button"
+          onClick={() => void perform({ command: "stop-desktop" })}
+        >
+          Detener control de escritorio
+        </button>
+      </div>
+      {p?.pending.length ? (
+        <section>
+          <h3>Operaciones que requieren atención</h3>
+          {p.pending.map((op) => (
+            <Row
+              key={op.id}
+              title={`${op.serverId} · ${op.tool}`}
+              detail={`${op.effect} · ${op.role} · ${op.state}`}
+              onOpen={() => ui.document("Operación y argumentos", op)}
+            >
+              {op.state === "pending" ? (
+                <>
+                  <button
+                    onClick={() =>
+                      ui.confirm(
+                        "Autorizar esta operación",
+                        `${op.serverId}/${op.tool}\n${op.arguments}\n\nHash: ${op.digest}\nSolo esta operación, no permisos generales.`,
+                        "AUTORIZAR",
+                        async () => {
+                          await perform({
+                            command: "approve",
+                            id: op.id,
+                            digest: op.digest,
+                            confirmation: "AUTORIZAR",
+                          });
+                        },
+                      )
+                    }
+                  >
+                    Autorizar
+                  </button>
+                  <button
+                    onClick={() =>
+                      void perform({
+                        command: "deny",
+                        id: op.id,
+                        digest: op.digest,
+                      })
+                    }
+                  >
+                    Rechazar
+                  </button>
+                </>
+              ) : op.state === "unknown" ? (
+                <button
+                  onClick={() =>
+                    ui.confirm(
+                      "Reconciliar operación incierta",
+                      "Comprobá externamente que NO se ejecutó antes de autorizar otro intento. La falta de respuesta no demuestra que no ocurrió.\n" +
+                        op.arguments,
+                      "NO_EJECUTADO",
+                      async () => {
+                        await perform({
+                          command: "reconcile",
+                          id: op.id,
+                          digest: op.digest,
+                          confirmation: "NO_EJECUTADO",
+                        });
+                      },
+                    )
+                  }
+                >
+                  Reconciliar
+                </button>
+              ) : null}
+            </Row>
+          ))}
+        </section>
+      ) : null}
+      <section>
+        <h3>Conexiones</h3>
+        {p?.connections.length ? (
+          p.connections.map((c) => (
+            <Row
+              key={c.id}
+              title={c.title}
+              detail={`${c.kind} · ${c.status} · ${c.tools} herramientas · ${c.roles.join(", ")}`}
+              onOpen={() =>
+                void perform({ command: "inspect", id: c.id }, true)
+              }
+            >
+              <button
+                onClick={() => void perform({ command: "login", id: c.id })}
+              >
+                Credencial
+              </button>
+              <button
+                onClick={() =>
+                  void perform({ command: "probe", id: c.id }, true)
+                }
+              >
+                Comprobar
+              </button>
+              {c.catalogHash && !c.authorized && (
+                <button
+                  onClick={() =>
+                    ui.confirm(
+                      "Autorizar catálogo revisado",
+                      `${c.title}\n${c.catalogHash}\nUna actualización del catálogo requerirá nueva revisión.`,
+                      "CONECTAR",
+                      async () => {
+                        await perform({
+                          command: "authorize",
+                          id: c.id,
+                          hash: c.catalogHash,
+                          confirmation: "CONECTAR",
+                        });
+                      },
+                    )
+                  }
+                >
+                  Conectar
+                </button>
+              )}
+              <button
+                onClick={() => void perform({ command: "disable", id: c.id })}
+              >
+                Desactivar
+              </button>
+            </Row>
+          ))
+        ) : (
+          <Empty title="Sin conexiones registradas">
+            Conectar una herramienta no le concede acceso a todos tus proyectos.
+          </Empty>
+        )}
+      </section>
+      {Boolean(p?.windows.length) && (
+        <section>
+          <h3>Ventanas disponibles</h3>
+          {p!.windows.map((w) => (
+            <Row
+              key={w.handle}
+              title={w.title}
+              detail={`${w.executable} · ${w.width}×${w.height}`}
+            >
+              <button
+                onClick={() =>
+                  ui.confirm(
+                    "Control temporal de esta ventana",
+                    `${w.title}\n${w.executable}\nPID ${w.pid}. Diez minutos máximo. No equivale a aislamiento de la aplicación. Ctrl+Alt+F10 detiene la sesión.`,
+                    "CONTROLAR",
+                    async () => {
+                      await perform({
+                        command: "window",
+                        handle: w.handle,
+                        hash: w.hash,
+                        minutes: 10,
+                        confirmation: "CONTROLAR",
+                      });
+                    },
+                  )
+                }
+              >
+                Autorizar ventana
+              </button>
+            </Row>
+          ))}
+        </section>
+      )}
+    </>
+  );
 }
-export function Validation({s}:{s:UiSnapshot}){const ui=useUI(),p=s.studio;return <><Heading title="Validación local" description="Instalado, configurado, autorizado y probado son estados diferentes."><button onClick={()=>void ui.execute({type:'doctor',online:false})}>Diagnóstico sin inferencias</button><button onClick={()=>void ui.execute({type:'studio',action:{command:'validation-check'}})}>Comprobar capacidades</button></Heading>{s.diagnostics.map(d=><Row key={d.name} title={d.name} detail={d.detail} status={d.status}/>)}{p?.validation&&<section><button onClick={()=>ui.document('Informe local detallado',p.validation)}>Abrir informe de capacidades</button></section>}<section><h3>Prueba real de perfiles</h3><p className="explanation">Las pruebas consumen cuota. Se usa la ruta exacta, sin cambiar de modelo ni habilitar pago automáticamente.</p>{p?.config.profiles.filter(a=>a.enabled).map(a=><Row key={a.id} title={a.name} detail={`${a.binding.provider}/${a.binding.model} · ${a.binding.reasoning}`}><button onClick={()=>void ui.execute({type:'login',provider:a.binding.provider})}>Conectar cuenta</button><button onClick={()=>ui.confirm('Ejecutar prueba del perfil',`${a.name}: ${a.binding.provider}/${a.binding.model}. Se hará una inferencia mínima y se comprobarán herramientas/metadatos. Contributor se mantiene bloqueado sin consentimiento.`,'PROBAR',async()=>{await ui.execute({type:'studio',action:{command:'validation-profile',profileId:a.id,contributorConsent:false,confirmation:'PROBAR'}});})}>Probar perfil</button></Row>)}</section><div className="actions-block"><button onClick={()=>ui.confirm('Probar Blender aislado','Requiere imagen preparada. Creará y reabrirá una fuente, exportará GLB y verificará su carga. No instala Blender ni ejecuta scripts en el host.','RENDERIZAR',async()=>{await ui.execute({type:'studio',action:{command:'validation-blender',confirmation:'RENDERIZAR'}});})}>Validar Blender</button><button onClick={()=>void ui.execute({type:'studio',action:{command:'validation-export'}},true)}>Exportar informe saneado</button><button onClick={()=>void ui.execute({type:'studio',action:{command:'validation-cancel'}})}>Cancelar prueba</button></div></>;}
-export function Settings({s}:{s:UiSnapshot}){const ui=useUI(),value=s.preferences;const save=(change:Record<string,unknown>)=>ui.execute({type:'preferences',preferences:{ui:{...value.ui,...change}}});return <><Heading title="Ajustes" description="Preferencias locales. No se envía telemetría ni se amplían permisos."/><div className="settings-grid"><label className="field"><span>Movimiento</span><select aria-label="Movimiento" value={value.ui.motion} onChange={e=>void save({motion:e.target.value})}><option value="auto">Según el sistema</option><option value="full">Completo</option><option value="reduced">Reducido</option><option value="off">Desactivado</option></select></label><label className="field"><span>Contraste</span><select aria-label="Contraste" value={value.ui.contrast} onChange={e=>void save({contrast:e.target.value})}><option value="normal">Normal</option><option value="high">Alto contraste</option></select></label><label className="field"><span>Superficies</span><select aria-label="Superficies" value={String(value.ui.transparent)} onChange={e=>void save({transparent:e.target.value==='true'})}><option value="true">Vidrio oscuro</option><option value="false">Opacas</option></select></label></div><section className="reading"><h3>Privacidad de Contributor</h3><p>Las rutas Contributor pueden utilizar prompts y respuestas para entrenamiento. Nunca se autoriza por tener una clave configurada.</p><div className="actions"><button onClick={()=>ui.confirm('Consentimiento para esta carpeta','Revisá que solo haya contenido público autorizado. Este permiso no cambia la clasificación de objetivos ni habilita el envío de secretos.','COMPARTIR',async()=>{await ui.execute({type:'contributor',allow:true});})}>Revisar consentimiento</button><button onClick={()=>void ui.execute({type:'contributor',allow:false})}>Revocar consentimiento</button></div><h3>Configuración de proveedores</h3>{['xai','openai-codex','opencode'].map(provider=><button key={provider} onClick={()=>void ui.execute({type:'login',provider})}>Conectar {provider}</button>)}</section></>;}
+export function Validation({ s }: { s: UiSnapshot }) {
+  const ui = useUI(),
+    p = s.studio;
+  return (
+    <>
+      <Heading
+        title="Validación local"
+        description="Instalado, configurado, autorizado y probado son estados diferentes."
+      >
+        <button
+          onClick={() => void ui.execute({ type: "doctor", online: false })}
+        >
+          Diagnóstico sin inferencias
+        </button>
+        <button
+          onClick={() =>
+            void ui.execute({
+              type: "studio",
+              action: { command: "validation-check" },
+            })
+          }
+        >
+          Comprobar capacidades
+        </button>
+      </Heading>
+      {s.diagnostics.map((d) => (
+        <Row key={d.name} title={d.name} detail={d.detail} status={d.status} />
+      ))}
+      {p?.validation && (
+        <section>
+          <button
+            onClick={() => ui.document("Informe local detallado", p.validation)}
+          >
+            Abrir informe de capacidades
+          </button>
+        </section>
+      )}
+      <section>
+        <h3>Prueba real de perfiles</h3>
+        <p className="explanation">
+          Las pruebas consumen cuota. Se usa la ruta exacta, sin cambiar de
+          modelo ni habilitar pago automáticamente.
+        </p>
+        {p?.config.profiles
+          .filter((a) => a.enabled)
+          .map((a) => (
+            <Row
+              key={a.id}
+              title={a.name}
+              detail={`${a.binding.provider}/${a.binding.model} · ${a.binding.reasoning}`}
+            >
+              <button
+                onClick={() =>
+                  void ui.execute({
+                    type: "login",
+                    provider: a.binding.provider,
+                  })
+                }
+              >
+                Conectar cuenta
+              </button>
+              <button
+                onClick={() =>
+                  ui.confirm(
+                    "Ejecutar prueba del perfil",
+                    `${a.name}: ${a.binding.provider}/${a.binding.model}. Se hará una inferencia mínima y se comprobarán herramientas/metadatos. Contributor se mantiene bloqueado sin consentimiento.`,
+                    "PROBAR",
+                    async () => {
+                      await ui.execute({
+                        type: "studio",
+                        action: {
+                          command: "validation-profile",
+                          profileId: a.id,
+                          contributorConsent: false,
+                          confirmation: "PROBAR",
+                        },
+                      });
+                    },
+                  )
+                }
+              >
+                Probar perfil
+              </button>
+            </Row>
+          ))}
+      </section>
+      <div className="actions-block">
+        <button
+          onClick={() =>
+            ui.confirm(
+              "Probar Blender aislado",
+              "Requiere imagen preparada. Creará y reabrirá una fuente, exportará GLB y verificará su carga. No instala Blender ni ejecuta scripts en el host.",
+              "RENDERIZAR",
+              async () => {
+                await ui.execute({
+                  type: "studio",
+                  action: {
+                    command: "validation-blender",
+                    confirmation: "RENDERIZAR",
+                  },
+                });
+              },
+            )
+          }
+        >
+          Validar Blender
+        </button>
+        <button
+          onClick={() =>
+            void ui.execute(
+              { type: "studio", action: { command: "validation-export" } },
+              true,
+            )
+          }
+        >
+          Exportar informe saneado
+        </button>
+        <button
+          onClick={() =>
+            void ui.execute({
+              type: "studio",
+              action: { command: "validation-cancel" },
+            })
+          }
+        >
+          Cancelar prueba
+        </button>
+      </div>
+    </>
+  );
+}
+export function Settings({ s }: { s: UiSnapshot }) {
+  const ui = useUI(),
+    value = s.preferences;
+  const save = (change: Record<string, unknown>) =>
+    ui.execute({
+      type: "preferences",
+      preferences: { ui: { ...value.ui, ...change } },
+    });
+  return (
+    <>
+      <Heading
+        title="Ajustes"
+        description="Preferencias locales. No se envía telemetría ni se amplían permisos."
+      />
+      <div className="settings-grid">
+        <label className="field">
+          <span>Movimiento</span>
+          <select
+            aria-label="Movimiento"
+            value={value.ui.motion}
+            onChange={(e) => void save({ motion: e.target.value })}
+          >
+            <option value="auto">Según el sistema</option>
+            <option value="full">Completo</option>
+            <option value="reduced">Reducido</option>
+            <option value="off">Desactivado</option>
+          </select>
+        </label>
+        <label className="field">
+          <span>Contraste</span>
+          <select
+            aria-label="Contraste"
+            value={value.ui.contrast}
+            onChange={(e) => void save({ contrast: e.target.value })}
+          >
+            <option value="normal">Normal</option>
+            <option value="high">Alto contraste</option>
+          </select>
+        </label>
+        <label className="field">
+          <span>Superficies</span>
+          <select
+            aria-label="Superficies"
+            value={String(value.ui.transparent)}
+            onChange={(e) =>
+              void save({ transparent: e.target.value === "true" })
+            }
+          >
+            <option value="true">Vidrio oscuro</option>
+            <option value="false">Opacas</option>
+          </select>
+        </label>
+      </div>
+      <section className="reading">
+        <h3>Privacidad de Contributor</h3>
+        <p>
+          Las rutas Contributor pueden utilizar prompts y respuestas para
+          entrenamiento. Nunca se autoriza por tener una clave configurada.
+        </p>
+        <div className="actions">
+          <button
+            onClick={() =>
+              ui.confirm(
+                "Consentimiento para esta carpeta",
+                "Revisá que solo haya contenido público autorizado. Este permiso no cambia la clasificación de objetivos ni habilita el envío de secretos.",
+                "COMPARTIR",
+                async () => {
+                  await ui.execute({ type: "contributor", allow: true });
+                },
+              )
+            }
+          >
+            Revisar consentimiento
+          </button>
+          <button
+            onClick={() =>
+              void ui.execute({ type: "contributor", allow: false })
+            }
+          >
+            Revocar consentimiento
+          </button>
+        </div>
+        <h3>Configuración de proveedores</h3>
+        {["xai", "openai-codex", "opencode"].map((provider) => (
+          <button
+            key={provider}
+            onClick={() => void ui.execute({ type: "login", provider })}
+          >
+            Conectar {provider}
+          </button>
+        ))}
+      </section>
+    </>
+  );
+}

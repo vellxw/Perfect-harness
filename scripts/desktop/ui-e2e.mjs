@@ -6,7 +6,7 @@ await writeFile(join(workspace,'README.md'),'# Proyecto de prueba\nArchivo públ
 const app=await electron.launch({args:[resolve('desktop'),'--home',home,'--workspace',workspace],recordVideo:{dir:join(out,'video'),size:{width:1440,height:900}},timeout:30000});
 const page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(String(e)));let success=false;
 const screenshot=async name=>page.screenshot({path:join(out,name+'.png')});
-const go=async name=>{await page.getByRole('button',{name:'Abrir comandos y navegación'}).click();await page.getByRole('textbox',{name:'Buscar sección'}).fill(name);await page.getByRole('dialog').getByRole('button',{name,exact:false}).click();await page.getByRole('heading',{name,exact:true}).waitFor();};
+const go=async name=>{await page.getByRole('button',{name:'Abrir comandos y navegación'}).click();await page.getByRole('textbox',{name:'Buscar sección'}).fill(name);await page.getByRole('dialog').getByRole('button',{name,exact:true}).click();await page.getByRole('heading',{name,exact:true}).waitFor();};
 try{
  await page.locator('.connection').filter({hasText:'Motor conectado'}).waitFor({timeout:30000});
  await page.getByRole('heading',{name:'¿Qué querés construir?'}).waitFor();await screenshot('home');
