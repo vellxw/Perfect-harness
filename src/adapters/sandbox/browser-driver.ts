@@ -15,7 +15,7 @@ const browser=await chromium.launch({headless:true});
 try{
   for(const viewport of spec.viewports){
     const label=viewport.width+'x'+viewport.height;
-    const context=await browser.newContext({viewport,deviceScaleFactor:1,locale:'en-US',timezoneId:'UTC',colorScheme:'light'});
+    const context=await browser.newContext({viewport,deviceScaleFactor:1,locale:'en-US',timezoneId:'UTC',colorScheme:'light',reducedMotion:spec.reducedMotion??'no-preference'});
     await context.tracing.start({screenshots:true,snapshots:true,sources:false});
     const page=await context.newPage(),errors=[];
     page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});

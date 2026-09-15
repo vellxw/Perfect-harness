@@ -1,3 +1,4 @@
+import { builtinSkills } from "./library.js";
 import { studioCapabilities } from "../modes/capabilities.js";
 import { mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -200,6 +201,26 @@ export class StudioAdmin {
       };
     };
     switch (action.command) {
+      case "refresh-bundled": {
+        for (const release of builtinSkills()) {
+          if (!this.store.get("skillReleases", release.id))
+            this.store.put(
+              "skillReleases",
+              release,
+              "skill.bundled_discovered",
+            );
+          this.store.event(
+            studioId(workspace),
+            "skill.import_pending",
+            { releaseId: release.id, hash: release.hash },
+            "user",
+          );
+        }
+        return {
+          message:
+            "Versiones incluidas añadidas a revisión; no se sustituyó ni activó ninguna selección anterior.",
+        };
+      }
       case "capabilities":
         return {
           message: "Capacidades locales de los estudios",

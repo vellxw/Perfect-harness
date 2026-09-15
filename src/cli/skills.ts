@@ -144,6 +144,15 @@ export function registerSkills(
   root
     .command("capacidades")
     .action(() => run(async () => ({ command: "capabilities" })));
+  root
+    .command("actualizar-catalogo")
+    .requiredOption("--yes", "Mostrar nuevas versiones incluidas para revisión")
+    .action(() =>
+      run(async () => ({
+        command: "refresh-bundled",
+        confirmation: "REVISAR",
+      })),
+    );
   root.command("lock").action(() => run(async () => ({ command: "lock" })));
   root
     .command("adoptar <goalId>")

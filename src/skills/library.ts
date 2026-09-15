@@ -1,3 +1,4 @@
+import { curatedSkills } from "./curated.js";
 import { releaseFromFiles } from "./importer.js";
 import type { SkillRelease } from "./model.js";
 
@@ -226,7 +227,7 @@ Borrador, revisión de estructura, prueba conductual y aprobación para un perfi
 Las preferencias del usuario y la seguridad del harness prevalecen. Referencia del formato: https://agentskills.io/specification .`,
   },
 ];
-export function builtinSkills(): SkillRelease[] {
+function originalSkills(): SkillRelease[] {
   return definitions.map((d) => {
     const files: Record<string, Buffer> = {
       "SKILL.md": Buffer.from(
@@ -245,6 +246,9 @@ export function builtinSkills(): SkillRelease[] {
             ? "https://github.com/achimala/dream-loop"
             : "perfect-harness",
         license: "MIT",
+        ...(d.id === "perfect-dream-loop"
+          ? { commit: "9bddb901f7d071cfefdd21e264267c757177a9df" }
+          : {}),
         redistribution: "allowed",
         reviewedBy: "project-maintainers",
         adaptation:
@@ -337,3 +341,7 @@ export const skillCandidates = [
     reason: "Evaluaciones de estructura/selección/comportamiento separadas",
   },
 ] as const;
+
+export function builtinSkills(): SkillRelease[] {
+  return [...originalSkills(), ...curatedSkills()];
+}

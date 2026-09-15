@@ -94,6 +94,7 @@ export const VisualScenarioSchema = z
     actions: z.array(BrowserActionSchema).default([]),
     targetFiles: z.array(z.string()).default([]),
     maxConsoleErrors: z.number().int().min(0).default(0),
+    reducedMotion: z.enum(["reduce", "no-preference"]).default("no-preference"),
     frames: z.array(z.number().int().nonnegative()).default([]),
   })
   .strict();
@@ -102,7 +103,7 @@ export const VerificationSpecSchema = z
   .object({
     id: Id,
     title: z.string(),
-    kind: z.enum(["command", "browser", "remotion"]),
+    kind: z.enum(["command", "browser", "remotion", "postgres"]),
     criteriaIds: z.array(Id).min(1),
     mandatory: z.boolean().default(true),
     command: CommandSchema.optional(),
@@ -123,7 +124,7 @@ export const VerificationSpecSchema = z
   })
   .strict()
   .superRefine((s, ctx) => {
-    if (s.kind === "command" && !s.command)
+    if ((s.kind === "command" || s.kind === "postgres") && !s.command)
       ctx.addIssue({ code: "custom", message: "Command required" });
     if (s.kind === "browser" && !s.scenario)
       ctx.addIssue({ code: "custom", message: "Scenario required" });

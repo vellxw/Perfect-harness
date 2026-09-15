@@ -22,6 +22,10 @@ export interface ExecutionOutput {
   }[];
 }
 export interface ExecutionRunner {
+  postgres?(
+    request: ExecutionRequest,
+    command: CommandSpec,
+  ): Promise<ExecutionOutput>;
   available(): Promise<boolean>;
   command(
     request: ExecutionRequest,
