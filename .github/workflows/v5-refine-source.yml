@@ -1,0 +1,71 @@
+name: V5 complete UI source validation (temporary)
+on:
+  push:
+    branches: [feat/perfect-desktop-v5]
+    paths: [scripts/desktop/refine-source.mjs, .github/workflows/v5-refine-source.yml]
+permissions:
+  contents: read
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - run: node scripts/desktop/refine-source.mjs
+      - run: npx --no-install prettier --write src/desktop/renderer
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run check:config
+      - run: npm run build:desktop
+      - run: npm test
+      - run: node node_modules/electron/install.js
+      - run: node node_modules/playwright/cli.js install ffmpeg
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2t64
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+      - run: xvfb-run -a -s '-screen 0 1920x1080x24' node scripts/desktop/ui-e2e.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v5-ui-refinement
+          path: test-results/desktop
+          retention-days: 14
+  stage:
+    needs: gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - run: node scripts/desktop/refine-source.mjs
+      - run: npx --no-install prettier --write src/desktop/renderer
+      - name: Stage validated source only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import pathlib,json,subprocess,base64,os
+          names=subprocess.check_output(['git','diff','--name-only'],text=True).splitlines();entries=[]
+          for name in names:
+            assert name.startswith('src/desktop/renderer/')
+            p=pathlib.Path(name);assert p.is_file() and not p.is_symlink()
+            blob=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/vellxw/Perfect-harness/git/blobs','--input','-'],input=json.dumps({'encoding':'base64','content':base64.b64encode(p.read_bytes()).decode()}),text=True))['sha']
+            entries.append({'path':name,'mode':'100644','type':'blob','sha':blob})
+          tree=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/vellxw/Perfect-harness/git/trees','--input','-'],input=json.dumps({'base_tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),'tree':entries}),text=True))['sha']
+          print('VALIDATED_TREE='+tree);print('PARENT='+os.environ['GITHUB_SHA'])
+          PY
