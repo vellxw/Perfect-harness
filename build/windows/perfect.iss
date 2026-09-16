@@ -63,14 +63,20 @@ begin
   else Result := Copy(Wrapped, 2, Length(Wrapped) - 2);
 end;
 procedure RemoveOwnedTerminalFragment;
-var Filename, Content, EscapedExecutable: String;
+var Filename, Content, EscapedExecutable: String; Lines: TArrayOfString; I: Integer;
 begin
   Filename := ExpandConstant('{localappdata}\Microsoft\Windows Terminal\Fragments\PerfectHarness\PerfectHarness.json');
   EscapedExecutable := ExpandConstant('{app}\Perfect.exe');
   StringChangeEx(EscapedExecutable, '\', '\\', True);
-  if LoadStringFromFile(Filename, Content) and
-     (Pos(Lowercase(EscapedExecutable), Lowercase(Content)) > 0) then
-    DeleteFile(Filename);
+  { LoadStringFromFile requires AnsiString; LoadStringsFromFile decodes UTF-8
+    correctly, including installation paths containing Spanish characters. }
+  if LoadStringsFromFile(Filename, Lines) then begin
+    Content := '';
+    for I := 0 to GetArrayLength(Lines) - 1 do
+      Content := Content + Lines[I] + #13#10;
+    if Pos(Lowercase(EscapedExecutable), Lowercase(Content)) > 0 then
+      DeleteFile(Filename);
+  end;
 end;
 procedure CurStepChanged(CurStep: TSetupStep);
 var Value, Entry, Stored, OldEntry: String;
@@ -92,7 +98,6 @@ begin
         RaiseException('No se pudo registrar el comando perfect en el PATH del usuario.');
       RegWriteStringValue(HKCU, 'Software\PerfectHarness', 'PathAdded', Entry);
     end;
-    { The fragment belongs to this installation only; settings.json is never touched. }
     RemoveOwnedTerminalFragment;
   end;
 end;
