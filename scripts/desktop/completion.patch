@@ -1,7 +1,7 @@
 diff --git a/src/desktop/renderer/ui.tsx b/src/desktop/renderer/ui.tsx
 --- a/src/desktop/renderer/ui.tsx
 +++ b/src/desktop/renderer/ui.tsx
-@@ -5,6 +5,7 @@
+@@ -5,5 +5,6 @@
  } from "react";
  import { request } from "./store.js";
 +import "./modal-material.css";
@@ -11,20 +11,20 @@ diff --git a/src/desktop/renderer/ui.tsx b/src/desktop/renderer/ui.tsx
 diff --git a/src/desktop/renderer/index.tsx b/src/desktop/renderer/index.tsx
 --- a/src/desktop/renderer/index.tsx
 +++ b/src/desktop/renderer/index.tsx
-@@ -1,7 +1,8 @@
+@@ -1,5 +1,6 @@
  /** @jsxImportSource react */
  import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 +import { StartingWorkspace, useComposerDraft, type ComposerDraftHandle } from "./drafts.js";
  import type { UserReference } from "../../domain/references.js";
  import { createRoot } from "react-dom/client";
  import { connect, useDesktop, request } from "./store.js";
-@@ -75,6 +76,7 @@
+@@ -75,4 +76,5 @@
      [previewHidden, setPreviewHidden] = useState(false);
 +  const draft = useComposerDraft(state.boot?.workspaceId);
    const consumed = useRef(new WeakSet<object>()),
      initialized = useRef(""),
      noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-@@ -258,7 +260,9 @@
+@@ -258,6 +260,8 @@
    const motion = s?.preferences.ui.motion ?? "auto",
      contrast = s?.preferences.ui.contrast ?? "normal";
 -  let content: ReactNode = (
@@ -34,21 +34,21 @@ diff --git a/src/desktop/renderer/index.tsx b/src/desktop/renderer/index.tsx
      <Empty title="Conectando al motor local…">
        No se iniciará trabajo antes de confirmar la conexión.
      </Empty>
-@@ -271,6 +275,7 @@
+@@ -271,5 +275,6 @@
            <Work
              s={s}
 +            draft={draft}
              connected={state.connected}
              execute={execute}
              navigate={navigate}
-@@ -512,6 +517,7 @@
+@@ -512,5 +517,6 @@
  function Work({
    s,
 +  draft,
    connected,
    execute,
    navigate,
-@@ -520,6 +526,7 @@
+@@ -520,4 +526,5 @@
  }: {
    s: UiSnapshot;
 +  draft: ComposerDraftHandle;
@@ -74,27 +74,29 @@ diff --git a/src/desktop/renderer/index.tsx b/src/desktop/renderer/index.tsx
 -    if (!value.trim()) return;
 +    if (!connected || !value.trim() || pending || s.busy) return;
      setPending(true);
-@@ -762,6 +768,7 @@
+@@ -762,9 +768,10 @@
            <textarea
              ref={field}
 +            maxLength={20000}
              aria-label="¿Qué querés construir?"
              placeholder={
                s.busy
-
+                 ? "Pausá el objetivo antes de iniciar otro"
+                 : "Describí el resultado que querés…"
+             }
+             value={value}
 diff --git a/scripts/desktop/windows-smoke.ps1 b/scripts/desktop/windows-smoke.ps1
 --- a/scripts/desktop/windows-smoke.ps1
 +++ b/scripts/desktop/windows-smoke.ps1
-@@ -84,10 +84,34 @@
+@@ -84,6 +84,22 @@
  function Uninstall([string]$Destination,[string]$Name){
   $log=Join-Path $testRoot "$Name-uninstall.log"
 - try{Invoke-Probe @('uninstall',(Join-Path $Destination 'unins000.exe'),$log)}finally{if(Test-Path $log){Copy-Item $log (Join-Path $out "$Name-uninstall.log")}}
 - if(([string][Environment]::GetEnvironmentVariable('Path','User')) -ne $beforePath){throw 'Uninstall did not preserve unrelated PATH entries'}
 + try{
 +  Invoke-Probe @('uninstall',(Join-Path $Destination 'unins000.exe'),$log)
-+  # Inno's first phase exits before its temporary second phase executes
-+  # usPostUninstall. Wait for observable cleanup, not a guessed delay or merely
-+  # the bootstrapper's exit code. Assertions and expected PATH are unchanged.
++  # Inno first phase exits before its temporary second phase executes
++  # usPostUninstall. Await observable cleanup; expected PATH is unchanged.
 +  $watch=[Diagnostics.Stopwatch]::StartNew();$complete=$false
 +  do {
 +   $pathNow=[string][Environment]::GetEnvironmentVariable('Path','User')
