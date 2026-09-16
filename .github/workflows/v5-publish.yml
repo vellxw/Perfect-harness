@@ -1,0 +1,116 @@
+name: Perfect V5 publish reviewed candidate
+# No push/PR publication. The owner reviews exact main evidence first.
+# The V4 release and all published version tags remain immutable.
+on:
+  workflow_dispatch:
+    inputs:
+      acceptance_run:
+        description: Completed V5 acceptance run on the current main commit
+        required: true
+        type: string
+      review_comment:
+        description: Owner visual-review comment on PR 5 bound to exact artifacts
+        required: true
+        type: string
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+concurrency:
+  group: perfect-v5-stable-publication
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.repository == 'vellxw/Perfect-harness' && github.actor == 'vellxw' &&
+      (github.event_name == 'workflow_dispatch' ||
+      (github.event.issue.number == 5 && startsWith(github.event.comment.body, '<!-- perfect-desktop-visual-review:v1 -->')))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+      issues: read
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      source_commit: ${{ steps.release.outputs.source_commit }}
+      release_id: ${{ steps.release.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: node --test scripts/desktop/release-policy.test.mjs scripts/desktop/publish-release.test.mjs
+      - name: Validate, publish and redownload exact approved files
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/desktop/publish-release.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Perfect-V5-Publication-Receipt
+          path: test-results/desktop/publication/result.json
+          retention-days: 90
+  public-windows-smoke:
+    needs: publish
+    runs-on: windows-2025
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+    env:
+      WINAPP_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.publish.outputs.source_commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - uses: actions/download-artifact@v4
+        with:
+          name: Perfect-V5-Publication-Receipt
+          path: receipt
+      - run: npm ci --ignore-scripts
+      - name: Redownload public installer/portable and exercise hardened GUI and CLI
+        shell: pwsh
+        run: ./scripts/desktop/public-download-smoke.ps1 -Receipt receipt/result.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Perfect-V5-Public-Download-Smoke
+          path: test-results/desktop/public-smoke
+          retention-days: 90
+  finalize:
+    if: always() && needs.publish.result == 'success'
+    needs: [publish, public-windows-smoke]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Confirm native public smoke or withdraw the unverified candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.publish.outputs.release_id }}
+          SOURCE_COMMIT: ${{ needs.publish.outputs.source_commit }}
+          SMOKE_STATUS: ${{ needs.public-windows-smoke.result }}
+        run: |
+          python3 - <<'PY'
+          import json,os,re,subprocess
+          release_id=os.environ['RELEASE_ID'];sha=os.environ['SOURCE_COMMIT']
+          assert re.fullmatch(r'[1-9][0-9]*',release_id) and re.fullmatch(r'[a-f0-9]{40}',sha)
+          endpoint='repos/vellxw/Perfect-harness/releases/'+release_id
+          release=json.loads(subprocess.check_output(['gh','api',endpoint],text=True))
+          assert release['target_commitish']==sha and re.fullmatch(r'v0\.5\.\d+',release['tag_name'])
+          if os.environ['SMOKE_STATUS']!='success':
+            subprocess.run(['gh','api','--method','PATCH',endpoint,'--input','-'],input=json.dumps({'draft':True}),text=True,check=True)
+            raise RuntimeError('Public Windows smoke did not pass; candidate returned to draft. Tag/assets were not overwritten.')
+          assert release['draft'] is False
+          print('PUBLISHED_PUBLIC_HASH_AND_NATIVE_SMOKE_VERIFIED',release['tag_name'],sha)
+          PY

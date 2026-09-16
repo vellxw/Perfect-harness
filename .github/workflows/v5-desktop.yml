@@ -29,7 +29,7 @@ jobs:
       - run: npm run lint
       - run: npm run check:config
       - run: npm run build:desktop
-      - run: node --test scripts/desktop/release-policy.test.mjs
+      - run: node --test scripts/desktop/release-policy.test.mjs scripts/desktop/publish-release.test.mjs
       - name: Linux desktop dependencies
         if: runner.os == 'Linux'
         run: |
