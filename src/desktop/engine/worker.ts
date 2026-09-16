@@ -1,7 +1,7 @@
 import { importUserReferences } from "../../tools/references.js";
 import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { join, extname } from "node:path";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { PresentationEngine } from "../../presentation/engine.js";
 import { EngineQuerySchema, type UiMessage, type UiSnapshot } from "../contracts/protocol.js";
@@ -12,24 +12,29 @@ import { safePath } from "../../tools/paths.js";
 import { readEvidence } from "../../tools/evidence.js";
 import { DesktopPreview } from "./preview.js";
 import { prepareDesktopState } from "./state-upgrade.js";
+import { RequestReceipts } from "./request-receipts.js";
 
 const Input = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("initialize"), options: z.object({ home: z.string(), workspace: z.string() }).strict() }).strict(),
+  z.object({ type: z.literal("initialize"), options: z.object({ home: z.string(), workspace: z.string(), desktopSessionId: z.string().uuid().optional() }).strict() }).strict(),
   z.object({ type: z.literal("action"), requestId: z.string().uuid(), action: z.unknown() }).strict(),
   z.object({ type: z.literal("query"), requestId: z.string().uuid(), query: EngineQuerySchema }).strict(),
   z.object({ type: z.literal("shutdown") }).strict(),
 ]);
 let engine: PresentationEngine | undefined, snapshot: UiSnapshot | undefined,
-  initializing: Promise<void> | undefined, preview: DesktopPreview | undefined, closing = false;
+  initializing: Promise<void> | undefined, preview: DesktopPreview | undefined,
+  receipts: RequestReceipts | undefined, closing = false, queued = 0;
 let actionQueue = Promise.resolve();
-const seen = new Set<string>();
 function send(message: unknown) { if (process.connected) process.send?.(message); }
 const emit = (message: UiMessage) => { if (message.type === "snapshot") snapshot = message.snapshot; send(message); };
 async function query(requestId: string, raw: unknown) {
   try {
     await initializing;
-    if (!engine || !snapshot) throw Error("El motor aún no está conectado");
+    if (!engine || !snapshot || closing) throw Error("El motor aún no está conectado o se está deteniendo");
     const q = EngineQuerySchema.parse(raw);
+    if (q.kind === "metrics") {
+      send({ type: "desktop-result", requestId, ok: true, data: { pid: process.pid, rss: process.memoryUsage().rss, cpu: process.cpuUsage(), uptime: process.uptime() } });
+      return;
+    }
     const goal = "goalId" in q && q.goalId ? engine.store.get("goals", q.goalId) : undefined;
     if ("goalId" in q && q.goalId && (!goal || goal.source !== snapshot.workspace)) throw Error("El objetivo no pertenece a esta carpeta");
     const config = goal ? goalConfig(goal) : await loadConfig(snapshot.workspace, engine.home);
@@ -37,8 +42,6 @@ async function query(requestId: string, raw: unknown) {
     let data: unknown;
     if (q.kind === "reference-import") {
       data = await importUserReferences(engine.home, snapshot.workspace, q.paths, q.privacy);
-    } else if (q.kind === "metrics") {
-      data = { pid: process.pid, rss: process.memoryUsage().rss, cpu: process.cpuUsage(), uptime: process.uptime() };
     } else if (q.kind === "files") {
       const files = (await manifest(root, config)).files.map(f => f.path);
       data = { paths: files.slice(q.offset, q.offset + 200), total: files.length, next: files.length > q.offset + 200 ? q.offset + 200 : null };
@@ -62,7 +65,9 @@ async function query(requestId: string, raw: unknown) {
       data = { path, extension, sha256, size: bytes.length, evidenceId: evidence.id, revision: evidence.revision, current: evidence.revision === goal.candidateRevision };
     } else if (q.kind === "preview-start") {
       if (!goal) throw Error("Seleccioná un objetivo");
-      await preview?.close(); preview = new DesktopPreview(engine.store, config, engine.home); data = await preview.start(goal, q.checkId);
+      await preview?.close();
+      preview = new DesktopPreview(engine.store, config, engine.home);
+      data = await preview.start(goal, q.checkId);
     } else { await preview?.close(); preview = undefined; data = { closed: true }; }
     send({ type: "desktop-result", requestId, ok: true, data });
   } catch (error) { send({ type: "desktop-result", requestId, ok: false, message: error instanceof Error ? error.message : "Operación interrumpida" }); }
@@ -75,20 +80,34 @@ process.on("message", (raw: unknown) => {
     initializing = (async () => {
       const workspace = await realpath(m.options.workspace);
       await prepareDesktopState(m.options.home);
-      engine = await PresentationEngine.create({ ...m.options, workspace }, emit);
+      receipts = new RequestReceipts(m.options.home, m.options.desktopSessionId ?? randomUUID(), "engine");
+      engine = await PresentationEngine.create({ home: m.options.home, workspace }, emit);
     })();
     void initializing.catch(e => { send({ type: "fault", message: String(e) }); process.exitCode = 1; });
   } else if (m.type === "shutdown") { void close(); }
   else if (m.type === "query" || m.type === "action") {
-    if (seen.has(m.requestId)) { send({ type: "desktop-result", requestId: m.requestId, ok: false, message: "Solicitud duplicada: no se repitió el efecto" }); return; }
-    if (seen.size >= 10000) { send({ type: "fault", message: "Límite de solicitudes de esta sesión; reiniciá después de pausar" }); return; }
-    seen.add(m.requestId);
-    actionQueue = actionQueue.then(async () => { await initializing; if (m.type === "query") await query(m.requestId, m.query); else await engine?.dispatch(m.requestId, m.action); }).catch(e => emit({ type: "fault", message: String(e) }));
+    if (closing || queued >= 128) {
+      send({ type: "desktop-result", requestId: m.requestId, ok: false, message: "El motor está deteniéndose o tiene demasiadas solicitudes pendientes" });
+      return;
+    }
+    queued++;
+    actionQueue = actionQueue.then(async () => {
+      await initializing;
+      if (!receipts || !engine || closing) throw Error("El motor no admite nuevas operaciones");
+      await receipts.claim(m.requestId);
+      if (closing) throw Error("Operación interrumpida antes de ejecutarse; no se reintentó");
+      if (m.type === "query") await query(m.requestId, m.query);
+      else await engine.dispatch(m.requestId, m.action);
+    }).catch(error => send({ type: "desktop-result", requestId: m.requestId, ok: false, message: error instanceof Error ? error.message : "Operación rechazada" })).finally(() => { queued--; });
   }
 });
 async function close() {
-  if (closing) return; closing = true;
-  await initializing?.catch(() => {}); await preview?.close(); await engine?.dispose();
+  if (closing) return;
+  closing = true;
+  await initializing?.catch(() => {});
+  await receipts?.close();
+  await preview?.close();
+  await engine?.dispose();
   if (process.connected) process.disconnect();
 }
 process.on("disconnect", () => void close());

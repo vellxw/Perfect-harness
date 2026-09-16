@@ -32,15 +32,13 @@ export class EngineBroker extends EventEmitter {
     reject: (error: Error) => void;
     timer: ReturnType<typeof setTimeout>;
   }>();
-  constructor(readonly node: string, readonly worker: string, readonly home: string, readonly workspace: string) {
+  constructor(readonly node: string, readonly worker: string, readonly home: string, readonly workspace: string, readonly desktopSessionId: string = randomUUID()) {
     super();
     this.logFile = join(home, `desktop-startup-${randomUUID()}.jsonl`);
   }
   private log(stage: string, data: Record<string, unknown> = {}): void {
     if (this.diagnostics++ >= 32) return;
     const line = JSON.stringify({ at: new Date().toISOString(), stage, ...data }) + "\n";
-    // Bounded, owner-local startup diagnostics only. No model responses or
-    // credentials are logged, and nothing is uploaded by the application.
     this.logPending = this.logPending.then(() => appendFile(this.logFile, line, {
       mode: 0o600,
       flag: constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | (constants.O_NOFOLLOW ?? 0),
@@ -74,7 +72,7 @@ export class EngineBroker extends EventEmitter {
         if (this.bootAcknowledged || signal.protocol !== 1 || signal.pid !== child.pid || this.closing || this.startupFailure) return;
         this.bootAcknowledged = true;
         this.log("listener-ready", { pid: child.pid, node: signal.node, loadMs: signal.loadMs, rssBytes: signal.rssBytes });
-        child.send({ type: "initialize", options: { home: this.home, workspace: this.workspace } }, error => {
+        child.send({ type: "initialize", options: { home: this.home, workspace: this.workspace, desktopSessionId: this.desktopSessionId } }, error => {
           if (error) this.fail("No se pudo inicializar el motor: " + safeDiagnostic(error.message));
           else this.log("initialize-sent");
         });
@@ -127,7 +125,7 @@ export class EngineBroker extends EventEmitter {
   }
   request(type: "action" | "query", payload: unknown, requestId: string = randomUUID()): Promise<unknown> {
     if (this.startupFailure) return Promise.reject(new Error(this.startupFailure));
-    if (!this.child?.connected || !this.initialized) return Promise.reject(new Error("El motor no está conectado"));
+    if (this.closing || !this.child?.connected || !this.initialized) return Promise.reject(new Error("El motor no está conectado"));
     if (this.waiting.has(requestId)) return Promise.reject(new Error("ID de solicitud duplicado"));
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
