@@ -14,8 +14,8 @@ using System.Web.Script.Serialization;
 using System.Windows.Automation;
 using System.Windows.Forms;
 
-// CI-only test driver. Never shipped or reachable through the product bridge.
-// Launch paths, output paths and input remain inside the owned test tree/window.
+// CI-only driver, not a product tool. Every operation stays inside its owned
+// tree/window. Final Electron fuses are unchanged; no CDP or renderer eval.
 public static class PerfectV5Probe {
   [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] struct STARTUPINFO {
     public int cb; public string reserved,desktop,title;
@@ -93,18 +93,18 @@ public static class PerfectV5Probe {
   static void Release(PROCESS_INFORMATION child) { CloseHandle(child.thread);CloseHandle(child.process); }
   static int RunInstaller(string executable,string destination,string log,bool uninstall) {
     string[] args=uninstall ? new[]{"/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/LOG="+Owned(log)} : new[]{"/SILENT","/SUPPRESSMSGBOXES","/NORESTART","/LANG=spanish","/DIR="+Owned(destination),"/TASKS=addpath","/LOG="+Owned(log)};
-    // The installer itself is directly under the owned root. Use the already
-    // created tools subdirectory as cwd, without relaxing Owned's path guard.
     string workingDirectory=Owned(Path.Combine(scope,"tools"));
     if(!Directory.Exists(workingDirectory))throw new Exception("Owned installer working directory is missing");
     var child=Launch(executable,args,workingDirectory);
     try { if(WaitForSingleObject(child.process,600000)!=0)throw new Exception("Installer did not exit within ten minutes");uint code;if(!GetExitCodeProcess(child.process,out code))throw new Win32Exception(Marshal.GetLastWin32Error());if(code!=0)throw new Exception("Installer exit "+code);return 0; }
     finally { Release(child); }
   }
+  static Condition Match(string name,ControlType type) {
+    return type==null ? (Condition)new PropertyCondition(AutomationElement.NameProperty,name) : new AndCondition(new PropertyCondition(AutomationElement.NameProperty,name),new PropertyCondition(AutomationElement.ControlTypeProperty,type));
+  }
   static AutomationElement Find(string name,ControlType type=null) {
     if(root==null)return null;
-    var condition=type==null ? (Condition)new PropertyCondition(AutomationElement.NameProperty,name) : new AndCondition(new PropertyCondition(AutomationElement.NameProperty,name),new PropertyCondition(AutomationElement.ControlTypeProperty,type));
-    foreach(AutomationElement e in root.FindAll(TreeScope.Descendants,condition)) {
+    foreach(AutomationElement e in root.FindAll(TreeScope.Descendants,Match(name,type))) {
       try { if(!e.Current.IsOffscreen && e.Current.IsEnabled) return e; } catch(ElementNotAvailableException) {}
     }
     return null;
@@ -113,6 +113,25 @@ public static class PerfectV5Probe {
     var watch=Stopwatch.StartNew();
     while(watch.ElapsedMilliseconds<milliseconds) { var e=Find(name,type);if(e!=null)return e;Thread.Sleep(100); }
     throw new Exception("Accessible control not found: "+name+"; visible="+VisibleText());
+  }
+  // A newly appended team may be below a small display's fold. Scrolling is
+  // real user input, not a DOM mutation or an assertion accepting hidden text.
+  static void ScrollTo(string name,ControlType type=null) {
+    for(int attempt=0;attempt<18;attempt++) {
+      if(Find(name,type)!=null)return;
+      foreach(AutomationElement e in root.FindAll(TreeScope.Descendants,Match(name,type))) {
+        try { object item;if(e.TryGetCurrentPattern(ScrollItemPattern.Pattern,out item))((ScrollItemPattern)item).ScrollIntoView(); }
+        catch(ElementNotAvailableException) {} catch(InvalidOperationException) {}
+      }
+      Thread.Sleep(120);
+      if(Find(name,type)!=null)return;
+      RECT r;if(!GetWindowRect(window,out r))throw new Exception("Lost owned window while scrolling");
+      SetForegroundWindow(window);SetCursorPos(r.Left+(r.Right-r.Left)/2,r.Top+(r.Bottom-r.Top)*2/3);
+      mouse_event(0x0800,0,0,unchecked((uint)-360),UIntPtr.Zero);
+      Steps.Add(new {operation="mouse-scroll-owned-window",target=name,attempt=attempt+1,at=DateTime.UtcNow.ToString("o")});
+      Thread.Sleep(200);
+    }
+    Wait(name,type,1000);
   }
   static string VisibleText() {
     if(root==null)return "";
@@ -170,7 +189,10 @@ public static class PerfectV5Probe {
       Go("Perfiles y modelos");Click("Cambiar modelo",ControlType.Button);Wait("Modelo exacto",ControlType.Edit);Capture(output,"03-model-form");Thread.Sleep(pause);Click("Cancelar",ControlType.Button);
       Go("Equipos");
       if(scenario=="everyday") {
-        Click("Crear equipo",ControlType.Button);Fill("Identificador (sin espacios)","equipo-v5-qa");Fill("Nombre del equipo","Equipo de prueba V5");Click("Guardar equipo",ControlType.Button);Wait("Equipo de prueba V5");
+        Click("Crear equipo",ControlType.Button);Fill("Identificador (sin espacios)","equipo-v5-qa");Fill("Nombre del equipo","Equipo de prueba V5");Click("Guardar equipo",ControlType.Button);
+        var saved=Stopwatch.StartNew();while(Find("Guardar equipo",ControlType.Button)!=null&&saved.ElapsedMilliseconds<10000)Thread.Sleep(100);
+        if(Find("Guardar equipo",ControlType.Button)!=null)throw new Exception("Team creation did not finish: "+VisibleText());
+        ScrollTo("Equipo de prueba V5");
       }
       Capture(output,"04-teams");Thread.Sleep(pause);
       Go("Estudio de habilidades");Click("Crear habilidad",ControlType.Button);Wait("Identificador de la habilidad",ControlType.Edit);Capture(output,"05-creator-form");Thread.Sleep(pause);Click("Cancelar",ControlType.Button);
