@@ -61,6 +61,16 @@ jobs:
               if info.is_dir():continue
               assert info.file_size<400_000_000
               dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(z.read(info))
+          acceptance=json.loads((root/'acceptance.json').read_text())
+          assert acceptance['sourceCommit']==sha
+          videos=[e for e in acceptance['files'] if e['kind']=='video']
+          assert len(videos)==4
+          for entry in videos:
+            path=(root/entry['path']).resolve()
+            assert path.is_relative_to(root) and path.stat().st_size==entry['bytes']
+            assert hashlib.sha256(path.read_bytes()).hexdigest()==entry['sha256']
+          # These are manifests, not visual observations or permission to publish.
+          print('EXACT_VIDEO_MANIFEST='+json.dumps(videos,ensure_ascii=False))
           with open(os.environ['GITHUB_ENV'],'a') as f:
             f.write('REVIEW_ARTIFACT_ID='+str(artifact['id'])+'\nREVIEW_ARTIFACT_SHA256='+actual+'\n')
             f.write('PERFECT_REVIEW_MODEL_CACHE='+str(pathlib.Path(os.environ['RUNNER_TEMP'])/'visual-model')+'\n')
