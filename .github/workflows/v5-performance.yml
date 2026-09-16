@@ -2,19 +2,11 @@ name: Perfect Desktop V5 performance
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'src/**'
-      - 'package*.json'
-      - 'scripts/desktop/benchmark.mjs'
-      - 'scripts/desktop/build.mjs'
-      - '.github/workflows/v5-performance.yml'
+    paths: ['src/**', 'package*.json', 'scripts/desktop/benchmark.mjs', 'scripts/desktop/build.mjs', 'scripts/desktop/performance-summary.mjs', '.github/workflows/v5-performance.yml']
   workflow_dispatch:
   workflow_call:
 permissions:
   contents: read
-# A running 30-minute measurement is evidence of its own source candidate.
-# Do not destroy it when an unrelated installer fix is pushed. Release calls
-# still run the complete benchmark on the final main SHA.
 concurrency:
   group: v5-performance-${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: false
@@ -43,6 +35,9 @@ jobs:
           node node_modules/playwright/cli.js install ffmpeg
       - name: Full production-bundle benchmark and motion recording
         run: xvfb-run -a -s '-screen 0 1920x1080x24' node scripts/desktop/benchmark.mjs
+      - name: Report process breakdown without altering acceptance metrics
+        if: always()
+        run: node scripts/desktop/performance-summary.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
