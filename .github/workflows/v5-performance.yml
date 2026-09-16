@@ -1,0 +1,43 @@
+name: Perfect Desktop V5 performance
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: v5-performance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  performance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: node --check scripts/desktop/benchmark.mjs
+      - run: npm ci
+      - run: node node_modules/electron/install.js
+      - run: npm run build:desktop
+      - name: Prepare actual display and recorder
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2t64 ffmpeg
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+          node node_modules/playwright/cli.js install ffmpeg
+      - name: Full production-bundle benchmark and motion recording
+        run: xvfb-run -a -s '-screen 0 1920x1080x24' node scripts/desktop/benchmark.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v5-performance-evidence
+          path: test-results/desktop/performance
+          if-no-files-found: error
+          retention-days: 30
