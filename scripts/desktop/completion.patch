@@ -1,0 +1,110 @@
+diff --git a/src/desktop/renderer/ui.tsx b/src/desktop/renderer/ui.tsx
+--- a/src/desktop/renderer/ui.tsx
++++ b/src/desktop/renderer/ui.tsx
+@@ -5,6 +5,7 @@
+ } from "react";
+ import { request } from "./store.js";
++import "./modal-material.css";
+ export type Page = "work" | "agents" | "plan" | "tasks" | "verify" | "files" | "diff" | "artifacts" | "skills" | "teams" | "profiles" | "modes" | "trials" | "integrations" | "settings" | "validation" | "projects" | "cost";
+ export interface Field {
+   name: string;
+diff --git a/src/desktop/renderer/index.tsx b/src/desktop/renderer/index.tsx
+--- a/src/desktop/renderer/index.tsx
++++ b/src/desktop/renderer/index.tsx
+@@ -1,7 +1,8 @@
+ /** @jsxImportSource react */
+ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
++import { StartingWorkspace, useComposerDraft, type ComposerDraftHandle } from "./drafts.js";
+ import type { UserReference } from "../../domain/references.js";
+ import { createRoot } from "react-dom/client";
+ import { connect, useDesktop, request } from "./store.js";
+@@ -75,6 +76,7 @@
+     [previewHidden, setPreviewHidden] = useState(false);
++  const draft = useComposerDraft(state.boot?.workspaceId);
+   const consumed = useRef(new WeakSet<object>()),
+     initialized = useRef(""),
+     noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+@@ -258,7 +260,9 @@
+   const motion = s?.preferences.ui.motion ?? "auto",
+     contrast = s?.preferences.ui.contrast ?? "normal";
+-  let content: ReactNode = (
++  let content: ReactNode = page === "work" && state.boot?.workspaceId ? (
++    <StartingWorkspace draft={draft} />
++  ) : (
+     <Empty title="Conectando al motor local…">
+       No se iniciará trabajo antes de confirmar la conexión.
+     </Empty>
+@@ -271,6 +275,7 @@
+           <Work
+             s={s}
++            draft={draft}
+             connected={state.connected}
+             execute={execute}
+             navigate={navigate}
+@@ -512,6 +517,7 @@
+ function Work({
+   s,
++  draft,
+   connected,
+   execute,
+   navigate,
+@@ -520,6 +526,7 @@
+ }: {
+   s: UiSnapshot;
++  draft: ComposerDraftHandle;
+   connected: boolean;
+   execute: (
+@@ -539,16 +546,15 @@
+   notify: (message: string) => void;
+ }) {
+-  const [value, setValue] = useState(""),
+-    [pending, setPending] = useState(false),
++  const { value, setValue } = draft;
++  const [pending, setPending] = useState(false),
+     [isPublic, setPublic] = useState(false),
+     [attachments, setAttachments] = useState<string[]>([]),
+     [drag, setDrag] = useState(false);
+   const field = useRef<HTMLTextAreaElement>(null);
+   useEffect(() => {
+-    setValue("");
+     setAttachments([]);
+     setPublic(false);
+   }, [s.workspace]);
+   const start = async () => {
+-    if (!value.trim()) return;
++    if (!connected || !value.trim() || pending || s.busy) return;
+     setPending(true);
+@@ -762,6 +768,7 @@
+           <textarea
+             ref={field}
++            maxLength={20000}
+             aria-label="¿Qué querés construir?"
+             placeholder={
+               s.busy
+
+diff --git a/scripts/desktop/windows-smoke.ps1 b/scripts/desktop/windows-smoke.ps1
+--- a/scripts/desktop/windows-smoke.ps1
++++ b/scripts/desktop/windows-smoke.ps1
+@@ -84,10 +84,34 @@
+ function Uninstall([string]$Destination,[string]$Name){
+  $log=Join-Path $testRoot "$Name-uninstall.log"
+- try{Invoke-Probe @('uninstall',(Join-Path $Destination 'unins000.exe'),$log)}finally{if(Test-Path $log){Copy-Item $log (Join-Path $out "$Name-uninstall.log")}}
+- if(([string][Environment]::GetEnvironmentVariable('Path','User')) -ne $beforePath){throw 'Uninstall did not preserve unrelated PATH entries'}
++ try{
++  Invoke-Probe @('uninstall',(Join-Path $Destination 'unins000.exe'),$log)
++  # Inno's first phase exits before its temporary second phase executes
++  # usPostUninstall. Wait for observable cleanup, not a guessed delay or merely
++  # the bootstrapper's exit code. Assertions and expected PATH are unchanged.
++  $watch=[Diagnostics.Stopwatch]::StartNew();$complete=$false
++  do {
++   $pathNow=[string][Environment]::GetEnvironmentVariable('Path','User')
++   $receipt=Get-ItemPropertyValue -LiteralPath 'HKCU:\Software\PerfectHarness' -Name PathAdded -ErrorAction SilentlyContinue
++   $ownedReceipt=$receipt -and ([string]$receipt).Equals((Join-Path $Destination 'bin'),[StringComparison]::OrdinalIgnoreCase)
++   $complete=($pathNow -eq $beforePath) -and -not $ownedReceipt -and -not (Test-Path (Join-Path $Destination 'Perfect.exe')) -and -not (Test-Path (Join-Path $Destination 'unins000.exe'))
++   if(-not $complete){Start-Sleep -Milliseconds 100}
++  } while(-not $complete -and $watch.ElapsedMilliseconds -lt 30000)
++  @{scenario=$Name;postPhaseWaitMs=$watch.ElapsedMilliseconds;completed=$complete;pathRestored=($pathNow -eq $beforePath);ownedReceiptRemaining=[bool]$ownedReceipt;method='Actual registry and installed-file completion after Inno first-phase exit; no timeout-based success'} | ConvertTo-Json | Set-Content (Join-Path $out "$Name-uninstall-completion.json") -Encoding utf8NoBOM
++  if(-not $complete){throw 'Uninstall did not finish owned cleanup and preserve unrelated PATH entries within 30 seconds'}
++ }finally{if(Test-Path $log){Copy-Item $log (Join-Path $out "$Name-uninstall.log")}}
+  $checks.Add("${Name}: uninstall restored exactly the pre-test user PATH")
+ }

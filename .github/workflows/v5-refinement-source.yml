@@ -1,0 +1,62 @@
+name: V5 bounded source refinement (temporary)
+on:
+  push:
+    branches: [feat/perfect-desktop-v5]
+    paths: [scripts/desktop/completion.patch, scripts/desktop/broker-draft.patch, .github/workflows/v5-refinement-source.yml]
+permissions:
+  contents: write
+jobs:
+  refine:
+    if: github.repository == 'vellxw/Perfect-harness' && github.ref == 'refs/heads/feat/perfect-desktop-v5'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - name: Apply exact ordinary patches, never execute replacement text
+        run: |
+          git apply --check --recount scripts/desktop/completion.patch scripts/desktop/broker-draft.patch
+          git apply --recount scripts/desktop/completion.patch scripts/desktop/broker-draft.patch
+          git diff --check
+      - run: npm ci
+      - run: node node_modules/electron/install.js
+      - run: npm run typecheck && npm run lint && npm run check:config && npm run build:desktop
+      - run: npm test
+      - name: Prepare isolated actual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2t64
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+          node node_modules/playwright/cli.js install ffmpeg
+      - run: xvfb-run -a -s '-screen 0 1920x1080x24' node scripts/desktop/startup-draft-e2e.mjs
+      - run: xvfb-run -a -s '-screen 0 1920x1080x24' node scripts/desktop/ui-e2e.mjs
+      - run: xvfb-run -a -s '-screen 0 1920x1080x24' node scripts/desktop/benchmark.mjs --screening
+      - name: Stage only checked source edits without changing branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import pathlib,json,subprocess,base64,os
+          names=subprocess.check_output(['git','diff','--name-only'],text=True).splitlines()
+          expected={'src/desktop/main/broker.ts','src/desktop/renderer/index.tsx','src/desktop/renderer/ui.tsx','scripts/desktop/windows-smoke.ps1'}
+          assert set(names)==expected
+          entries=[]
+          for name in sorted(names):
+            p=pathlib.Path(name);assert p.is_file() and not p.is_symlink()
+            blob=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/vellxw/Perfect-harness/git/blobs','--input','-'],input=json.dumps({'encoding':'base64','content':base64.b64encode(p.read_bytes()).decode()}),text=True))['sha']
+            entries.append({'path':name,'mode':'100644','type':'blob','sha':blob})
+          tree=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/vellxw/Perfect-harness/git/trees','--input','-'],input=json.dumps({'base_tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),'tree':entries}),text=True))['sha']
+          print('CHECKED_TREE='+tree);print('PARENT='+os.environ['GITHUB_SHA'])
+          pathlib.Path('test-results/desktop/refinement.json').write_text(json.dumps({'tree':tree,'parent':os.environ['GITHUB_SHA'],'files':names,'note':'Only a screening milestone; the published source must pass full acceptance again.'},indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v5-refinement-evidence
+          path: test-results/desktop
+          retention-days: 7
