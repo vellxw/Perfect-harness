@@ -5,15 +5,25 @@ const root=await mkdtemp(join(tmpdir(),'perfect-desktop-ui-')),workspace=join(ro
 await writeFile(join(workspace,'README.md'),'# Proyecto de prueba\nArchivo público sintético.\n');
 const app=await electron.launch({args:[resolve('desktop'),'--home',home,'--workspace',workspace],recordVideo:{dir:join(out,'video'),size:{width:1440,height:900}},timeout:30000});
 const page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(String(e)));let success=false;
-const screenshot=async name=>page.screenshot({path:join(out,name+'.png')});
+const screenshot=async name=>{
+ // Preserve real production animation in the recording. A static review frame
+ // must not be taken halfway through a modal fade and mistaken for its material.
+ await page.waitForFunction(()=>document.getAnimations().every(a=>{
+  const timing=a.effect?.getComputedTiming();
+  return !timing || !Number.isFinite(timing.endTime) || (!a.pending && a.playState!=='running');
+ }),undefined,{timeout:3000});
+ await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ await page.waitForFunction(()=>[...document.querySelectorAll('dialog[open]')].every(d=>Number(getComputedStyle(d).opacity)>=0.99),undefined,{timeout:3000});
+ return page.screenshot({path:join(out,name+'.png')});
+};
 const go=async name=>{await page.getByRole('button',{name:'Abrir comandos y navegación'}).click();await page.getByRole('textbox',{name:'Buscar sección'}).fill(name);await page.getByRole('dialog').getByRole('button',{name,exact:true}).click();await page.getByRole('heading',{name,exact:true}).waitFor();};
 try{
  await page.locator('.connection').filter({hasText:'Motor conectado'}).waitFor({timeout:30000});
  await page.getByRole('heading',{name:'¿Qué querés construir?'}).waitFor();await screenshot('home');
  await go('Habilidades');await page.getByRole('switch',{name:'Sistema de habilidades'}).waitFor();
  await page.getByLabel('Modo de habilidades',{exact:true}).selectOption('manual');
- // The count is already zero before the change: wait for the committed mode,
- // not merely a label that can describe the previous automatic snapshot.
+ // Zero selected versions is also true in automatic mode: wait for the
+ // controller acknowledgment and actual visible manual selection first.
  await page.waitForFunction(async()=>{const b=await window.perfect.boot();return b.snapshot?.studio?.config.skills.mode==='manual';});
  await page.waitForFunction(()=>document.querySelector('select[aria-label="Modo de habilidades"]')?.value==='manual');
  await page.getByText('0 versiones seleccionadas',{exact:true}).waitFor();await screenshot('skills-manual-empty');
@@ -38,6 +48,6 @@ try{
  const isolation=await page.evaluate(()=>({node:typeof window.process,require:typeof window.require,keys:Object.keys(window.perfect)}));assert.equal(isolation.node,'undefined');assert.equal(isolation.require,'undefined');
  const boot=await page.evaluate(()=>window.perfect.boot());assert.equal(boot.snapshot.goal.state,'PAUSED');assert.equal(boot.snapshot.goal.mode,'real');assert.equal(boot.snapshot.accounts.reduce((n,a)=>n+a.tokens,0),0);
  assert.deepEqual(errors,[]);success=true;
- await writeFile(join(out,'ui-e2e.json'),JSON.stringify({passed:true,platform:process.platform,node:process.version,sourceCommit:boot.buildId,kind:'real Electron + real core, no provider calls',isolation,errors,checks:['startup','strict-manual-selection','team-create','model-form','modes','creator','evaluation-builder','github-form','files','preferences','safe-goal-pause']},null,2));
-}catch(error){await screenshot('failure').catch(()=>{});const diagnostic={error:String(error),body:await page.locator('body').innerText().catch(()=>''),errors};console.error(JSON.stringify(diagnostic,null,2));await writeFile(join(out,'failure.json'),JSON.stringify(diagnostic,null,2));throw error;}
+ await writeFile(join(out,'ui-e2e.json'),JSON.stringify({passed:true,platform:process.platform,node:process.version,sourceCommit:boot.buildId,kind:'real Electron + real core, no provider calls',capture:'Static screenshots after finite production animations settle. Continuous video retains unmodified timing and motion.',isolation,errors,checks:['startup','strict-manual-selection','team-create','model-form','modes','creator','evaluation-builder','github-form','files','preferences','safe-goal-pause']},null,2));
+}catch(error){await page.screenshot({path:join(out,'failure.png')}).catch(()=>{});const diagnostic={error:String(error),body:await page.locator('body').innerText().catch(()=>''),errors};console.error(JSON.stringify(diagnostic,null,2));await writeFile(join(out,'failure.json'),JSON.stringify(diagnostic,null,2));throw error;}
 finally{await app.close();if(success){const {SqliteStore}=await import('../../dist/adapters/sqlite/store.js');const db=new SqliteStore(join(home,'state.sqlite'));try{assert.ok(db.list('studios').some(s=>s.config.sets.some(t=>t.id==='equipo-prueba')));assert.ok(db.list('studios').some(s=>s.config.skills.mode==='manual'));assert.equal(JSON.parse(await readFile(join(home,'ui.json'),'utf8')).ui.motion,'off');}finally{db.close();}}await rm(root,{recursive:true,force:true,maxRetries:8,retryDelay:250});}
