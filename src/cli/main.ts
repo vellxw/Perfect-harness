@@ -1,3 +1,4 @@
+import { launchDesktop } from "../desktop/platform/launch.js";
 import { registerSkillStudio } from "./skill-studio.js";
 import { registerUnityCommands } from "./unity.js";
 import { registerSkills } from "./skills.js";
@@ -114,6 +115,14 @@ export async function main(
       );
       exitCode = goalExit(finished);
     });
+  program
+    .command("desktop")
+    .description("Abrir Perfect Desktop; no altera los comandos CLI existentes")
+    .action(() =>
+      context(async (ctx) => {
+        await launchDesktop({ home: ctx.home, workspace: ctx.workspace });
+      }),
+    );
   registerSkills(program, context);
   registerSkillStudio(program, context);
   registerUnityCommands(program, context);

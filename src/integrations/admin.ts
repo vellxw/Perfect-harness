@@ -6,18 +6,13 @@ import {
   type DesktopWindowChoice,
   type IntegrationPanelSnapshot,
 } from "./actions.js";
-import { probeIntegration } from "./agent-session.js";
-import { recoverBrowserResources } from "./browser/sandbox.js";
-import { saveCredential } from "./credentials.js";
-import {
-  bindDesktopWindow,
-  listDesktopWindows,
-  revokeDesktopWindow,
-} from "./desktop/session.js";
 import { IntegrationRegistry } from "./registry.js";
 import type { IntegrationOperation } from "./types.js";
 
-/** User-authority surface. Never registered as an agent tool. */
+/** User-authority surface. Never registered as an agent tool.
+ * Merely displaying configured connections must not initialize transports,
+ * browser drivers, credentials or desktop-control modules. Those capabilities
+ * are loaded at the already-authorized action boundary, not at UI startup. */
 export class IntegrationAdmin {
   readonly registry: IntegrationRegistry;
   private windows: DesktopWindowChoice[] = [];
@@ -71,6 +66,7 @@ export class IntegrationAdmin {
     value: string,
   ): Promise<void> {
     const key = this.credentialKey(workspace, id);
+    const { saveCredential } = await import("./credentials.js");
     await saveCredential(this.home, key, value);
     this.registry.event(workspace, "integration.credential_saved", {
       serverId: id,
@@ -117,6 +113,9 @@ export class IntegrationAdmin {
             "Integración configurada para esta carpeta. Conectar no autoriza escrituras ni otras cuentas.",
         };
       case "probe": {
+        signal.throwIfAborted();
+        const { probeIntegration } = await import("./agent-session.js");
+        signal.throwIfAborted();
         const record = await probeIntegration(
           this.home,
           workspace,
@@ -138,8 +137,10 @@ export class IntegrationAdmin {
       case "disable": {
         const record = this.registry.require(workspace, action.id);
         this.registry.setEnabled(workspace, action.id, false);
-        if (record.config.kind === "desktop" && record.config.grant)
+        if (record.config.kind === "desktop" && record.config.grant) {
+          const { revokeDesktopWindow } = await import("./desktop/session.js");
           await revokeDesktopWindow(this.home, record.config.grant);
+        }
         return {
           message:
             "Integración desactivada; las ejecuciones activas recibirán la revocación.",
@@ -169,7 +170,10 @@ export class IntegrationAdmin {
           message:
             "Resultado revisado por el usuario. No se repitió ninguna acción automáticamente.",
         };
-      case "windows":
+      case "windows": {
+        signal.throwIfAborted();
+        const { listDesktopWindows } = await import("./desktop/session.js");
+        signal.throwIfAborted();
         this.windows = (await listDesktopWindows(this.home, signal)).map(
           (w) => ({ ...w, hash: hash(w) }),
         );
@@ -178,7 +182,11 @@ export class IntegrationAdmin {
           message:
             "Ventanas visibles no elevadas. Elegí únicamente una aplicación de prueba autorizada.",
         };
+      }
       case "window": {
+        signal.throwIfAborted();
+        const { bindDesktopWindow } = await import("./desktop/session.js");
+        signal.throwIfAborted();
         const grant = await bindDesktopWindow(
           this.home,
           action.handle,
@@ -201,20 +209,25 @@ export class IntegrationAdmin {
         };
       }
       case "stop-desktop": {
+        // A cancellation never prevents revocation of an existing grant.
         for (const r of this.registry.list(workspace)) {
           if (r.config.kind !== "desktop") continue;
           this.registry.setEnabled(workspace, r.config.id, false);
-          if (r.config.grant)
+          if (r.config.grant) {
+            const { revokeDesktopWindow } = await import("./desktop/session.js");
             await revokeDesktopWindow(this.home, r.config.grant);
+          }
         }
         return { message: "Control de escritorio revocado" };
       }
-      case "recover-browser":
+      case "recover-browser": {
+        const { recoverBrowserResources } = await import("./browser/sandbox.js");
         await recoverBrowserResources(this.registry);
         return {
           message:
             "Recursos de navegador interrumpidos reconciliados. Los procesos vivos ajenos no se modificaron.",
         };
+      }
       case "login":
         throw new Blocked(
           "MCP_SECRET_PROMPT",

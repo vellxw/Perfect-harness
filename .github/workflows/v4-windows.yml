@@ -1,18 +1,16 @@
-name: Perfect V4 Windows distribution
+name: Perfect V5 Windows distribution
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
   workflow_call:
 permissions:
   contents: read
 concurrency:
-  group: v4-windows-${{ github.workflow }}-${{ github.ref }}
+  group: v5-windows-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   windows-package:
     runs-on: windows-2025
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       WINAPP_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
@@ -24,110 +22,87 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '26.4.0'
-      - name: Compile desktop fixtures using resolved Windows paths
+      - name: Parse every PowerShell script
+        shell: pwsh
+        run: |
+          $errorsFound = @()
+          Get-ChildItem scripts -Filter '*.ps1' -Recurse | ForEach-Object {
+            $tokens=$null; $parseErrors=$null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName,[ref]$tokens,[ref]$parseErrors)
+            $errorsFound += @($parseErrors)
+          }
+          if($errorsFound.Count){$errorsFound | Format-List; throw 'Invalid PowerShell source'}
+      - name: Compile native tests; never include test drivers in product payload
         shell: pwsh
         run: |
           $framework=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319'
           $compiler=Join-Path $framework 'csc.exe'
-          $fixtureSource=(Resolve-Path -LiteralPath 'tests/windows/DesktopFixture.cs').Path
-          $launcherSource=(Resolve-Path -LiteralPath 'tests/windows/StartUnelevated.cs').Path
-          # This exact basename is the restricted launcher's existing allowlist.
-          $fixtureExe=Join-Path $env:RUNNER_TEMP 'PerfectDesktopFixture.exe'
-          $launcherExe=Join-Path $env:RUNNER_TEMP 'Perfect.StartUnelevated.exe'
-          & $compiler /nologo /target:winexe /platform:x64 /reference:System.Windows.Forms.dll /reference:System.Drawing.dll "/out:$fixtureExe" $fixtureSource
-          if($LASTEXITCODE -ne 0 -or -not(Test-Path -LiteralPath $fixtureExe -PathType Leaf)){throw 'Desktop fixture did not compile'}
-          & $compiler /nologo /target:exe /platform:x64 "/out:$launcherExe" $launcherSource
-          if($LASTEXITCODE -ne 0 -or -not(Test-Path -LiteralPath $launcherExe -PathType Leaf)){throw 'Fixture launcher did not compile'}
-          "PERFECT_DESKTOP_FIXTURE=$fixtureExe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "PERFECT_DESKTOP_LAUNCHER=$launcherExe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $fixture=Join-Path $env:RUNNER_TEMP 'PerfectDesktopFixture.exe'
+          $launcher=Join-Path $env:RUNNER_TEMP 'Perfect.StartUnelevated.exe'
+          & $compiler /nologo /target:winexe /platform:x64 /reference:System.Windows.Forms.dll /reference:System.Drawing.dll "/out:$fixture" (Resolve-Path tests/windows/DesktopFixture.cs).Path
+          if($LASTEXITCODE -ne 0){throw 'Desktop fixture compilation failed'}
+          & $compiler /nologo /target:exe /platform:x64 "/out:$launcher" (Resolve-Path tests/windows/StartUnelevated.cs).Path
+          if($LASTEXITCODE -ne 0){throw 'Restricted fixture launcher compilation failed'}
+          "PERFECT_DESKTOP_FIXTURE=$fixture" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "PERFECT_DESKTOP_LAUNCHER=$launcher" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          $vswhere=Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          $visualStudio=(& $vswhere -latest -products '*' -property installationPath).Trim()
+          $roslyn=Join-Path $visualStudio 'MSBuild/Current/Bin/Roslyn/csc.exe'
+          if(-not(Test-Path $roslyn)){throw 'Roslyn compiler is unavailable'}
+          $probe=Join-Path $env:RUNNER_TEMP 'PerfectV5Probe.exe'
+          & $roslyn /nologo /target:exe /platform:x64 /langversion:latest /main:PerfectProbeEntry /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Web.Extensions.dll "/reference:$framework/WPF/UIAutomationClient.dll" "/reference:$framework/WPF/UIAutomationTypes.dll" "/reference:$framework/WPF/WindowsBase.dll" "/out:$probe" (Resolve-Path tests/windows/PerfectV5Probe.cs).Path (Resolve-Path tests/windows/PerfectProbeEntry.cs).Path
+          if($LASTEXITCODE -ne 0){throw 'Native V5 production-binary probe did not compile'}
+          "PERFECT_V5_PROBE=$probe" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
       - run: npm ci
-      - name: Exercise real desktop guards before expensive packaging
+      - name: Exercise unchanged Windows integration safety guards
         shell: pwsh
         run: |
           ./scripts/prepare-desktop.ps1
           node --import tsx scripts/desktop-contract-diagnose.mjs
-          if($LASTEXITCODE -ne 0){throw 'Native desktop contract failed'}
-      - name: Prepare pinned Inno Setup 7 with extended path support
-        shell: pwsh
-        run: ./scripts/prepare-installer.ps1
-      - uses: actions/checkout@v4
-        with:
-          ref: '1f3876b481a10c096ec7423541696ecd2a603306'
-          path: previous-version
-          persist-credentials: false
-      - name: Build actual previous installer for upgrade test
+          if($LASTEXITCODE -ne 0){throw 'Native desktop guard contract failed'}
+      - name: Prepare pinned Inno Setup 7 and CI-only video tools
         shell: pwsh
         run: |
-          $log=Join-Path $env:RUNNER_TEMP 'perfect-previous-build.log'
-          $processDirectory=[Environment]::CurrentDirectory
-          Push-Location previous-version
-          try {
-            # The historical preparation script resolves relative paths through .NET.
-            # Preserve its source and reproduce its original standalone checkout environment.
-            [Environment]::CurrentDirectory=$PWD.Path
-            npm ci
-            if($LASTEXITCODE -ne 0){throw 'Previous install failed'}
-            try {
-              ./scripts/package-windows.ps1 *> $log
-              $payload=(Resolve-Path 'release/Perfect-Harness-Windows-x64').Path
-              $output=(Resolve-Path release).Path
-              foreach($name in @('Perfect.CredentialVault.exe','Perfect.DesktopGuard.exe','Perfect.DesktopElementGuard.exe','winapp.exe','libSkiaSharp.dll')){
-                if(-not(Test-Path (Join-Path $payload "assets/windows/desktop/$name") -PathType Leaf)){throw "Historical payload missing native helper: $name"}
-              }
-              & $env:PERFECT_ISCC /Qp "/DPayload=$payload" "/DOutput=$output" build/windows/perfect.iss *>> $log
-              if($LASTEXITCODE -ne 0){throw 'Previous installer compilation failed'}
-            } catch { Get-Content $log -Tail 60; throw }
-            Copy-Item release/Perfect-Harness-Setup-x64.exe "$env:RUNNER_TEMP/Perfect-Previous-0.3.0.exe"
-            Get-Content $log -Tail 5
-          } finally {
-            [Environment]::CurrentDirectory=$processDirectory
-            Pop-Location
-          }
-          Remove-Item previous-version -Recurse -Force
-      - name: Build V4 installer and portable once
+          ./scripts/prepare-installer.ps1
+          ./scripts/desktop/prepare-capture.ps1
+      - name: Download the exact public V4 installer for real in-place upgrade
         shell: pwsh
         run: |
-          $log=Join-Path $env:RUNNER_TEMP 'perfect-v4-build.log'
-          try { ./scripts/package-windows.ps1 -Installer *> $log }
-          catch { Get-Content $log -Tail 60; throw }
-          Get-Content $log -Tail 5
-          foreach($name in @('Perfect.CredentialVault.exe','Perfect.DesktopGuard.exe','Perfect.DesktopElementGuard.exe','winapp.exe','libSkiaSharp.dll')){
-            if(-not(Test-Path "release/Perfect-Harness-Windows-x64/assets/windows/desktop/$name" -PathType Leaf)){throw "V4 payload missing native helper: $name"}
-          }
-      - name: Test actual portable and installed payload plus upgrade
+          $previous=Join-Path $env:RUNNER_TEMP 'Perfect-Previous-0.4.0.exe'
+          Invoke-WebRequest 'https://github.com/vellxw/Perfect-harness/releases/download/v0.4.0/Perfect-Harness-Setup-x64.exe' -OutFile $previous -TimeoutSec 180
+          if((Get-FileHash $previous -Algorithm SHA256).Hash.ToLowerInvariant() -ne '517df7531f9df8b5eb455af56c8d589e978c5fa2595d8f8ecd9bfbedbddbfba3'){throw 'Public V4 binary hash mismatch'}
+          "PERFECT_PREVIOUS_INSTALLER=$previous" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Build V5 Electron installer and portable once
         shell: pwsh
-        run: |
-          ./scripts/smoke-windows.ps1 -Installer
-          ./scripts/smoke-v4-windows.ps1 -PreviousInstaller "$env:RUNNER_TEMP/Perfect-Previous-0.3.0.exe" -Capture
+        run: ./scripts/desktop/package-windows.ps1 -Installer
+      - name: Test distributed bytes with non-admin native input; record actual daily use and upgrade
+        shell: pwsh
+        run: ./scripts/desktop/windows-gate.ps1 -Release release -PreviousInstaller $env:PERFECT_PREVIOUS_INSTALLER
       - uses: actions/upload-artifact@v4
         with:
-          name: Perfect-V4-Windows-Espanol-Instalador
+          name: Perfect-V5-Windows-Installer
           path: |
-            release/*Setup*.exe
+            release/Perfect-Harness-Setup-x64.exe
             release/SHA256SUMS.txt
             release/Perfect-Harness-Windows-x64/build-manifest.json
-            test-results/windows-installation/report.json
-          compression-level: 0
+            test-results/desktop/windows-package/report.json
           if-no-files-found: error
+          compression-level: 0
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: Perfect-V4-Windows-Espanol-Portable
+          name: Perfect-V5-Windows-Portable
           path: |
-            release/*.zip
+            release/Perfect-Harness-Windows-x64.zip
             release/SHA256SUMS.txt
             release/Perfect-Harness-Windows-x64/build-manifest.json
-            test-results/windows-installation/report.json
-          compression-level: 0
+            test-results/desktop/windows-package/report.json
           if-no-files-found: error
+          compression-level: 0
           retention-days: 30
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: Perfect-V4-Windows-Capturas-y-Pruebas
-          path: |
-            test-results/windows-installed
-            test-results/windows-installation
-            test-results/desktop
-          if-no-files-found: warn
+          name: Perfect-V5-Windows-Evidence
+          path: test-results/desktop
           retention-days: 30

@@ -1,3 +1,4 @@
+import { readGoalReference } from "../tools/references.js";
 import { policyLease } from "../skills/control.js";
 import {
   evaluationContext,
@@ -182,6 +183,40 @@ export class AgentExecutor {
           truncated: content.length > this.config.limits.maxToolTextChars,
         };
       },
+      ...(goal.references?.length
+        ? {
+            readReference: async (referenceId: string, offset: number) => {
+              signal.throwIfAborted();
+              const { reference, bytes } = await readGoalReference(
+                goal,
+                referenceId,
+              );
+              if (reference.kind === "image") {
+                if (!definition.capabilities.includes("image"))
+                  throw new Blocked(
+                    "REFERENCE_VISION_REQUIRED",
+                    "El perfil no admite imágenes",
+                  );
+                return {
+                  name: reference.name,
+                  sha256: reference.sha256,
+                  mimeType: reference.mimeType,
+                  data: bytes.toString("base64"),
+                };
+              }
+              const text = bytes.toString("utf8");
+              return {
+                name: reference.name,
+                sha256: reference.sha256,
+                mimeType: reference.mimeType,
+                text: text.slice(offset, offset + 16000),
+                ...(offset + 16000 < text.length
+                  ? { nextOffset: offset + 16000 }
+                  : {}),
+              };
+            },
+          }
+        : {}),
       ...(definition.capabilities.includes("image")
         ? {
             readImage: async (path: string) => {

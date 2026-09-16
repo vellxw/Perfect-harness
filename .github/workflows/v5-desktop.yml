@@ -1,0 +1,61 @@
+name: Perfect Desktop V5
+on:
+  workflow_call:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: v5-desktop-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: npm ci
+      - run: node node_modules/electron/install.js
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run check:config
+      - run: npm run build:desktop
+      - run: node --test scripts/desktop/release-policy.test.mjs scripts/desktop/publish-release.test.mjs
+      - name: Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2t64
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+      - run: node node_modules/playwright/cli.js install ffmpeg
+      - name: Startup draft with the actual core temporarily suspended
+        if: runner.os == 'Linux'
+        run: xvfb-run -a -s '-screen 0 1920x1080x24' node scripts/desktop/startup-draft-e2e.mjs
+      - name: Electron Linux user journeys
+        if: runner.os == 'Linux'
+        run: xvfb-run -a -s '-screen 0 1920x1080x24' node scripts/desktop/ui-e2e.mjs
+      - name: Electron Windows user journeys
+        if: runner.os == 'Windows'
+        run: node scripts/desktop/ui-e2e.mjs
+      - name: Profile actual animation and recorder overhead without weakening motion settings
+        if: runner.os == 'Linux'
+        run: xvfb-run -a -s '-screen 0 1920x1080x24' node scripts/desktop/motion-profile.mjs
+      - name: Require responsive production motion without injected CSS
+        if: runner.os == 'Linux'
+        run: node scripts/desktop/motion-acceptance.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v5-desktop-${{ matrix.os }}
+          path: test-results/desktop
+          retention-days: 30

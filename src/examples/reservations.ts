@@ -240,7 +240,12 @@ export class ReservationDemoRuntime implements AgentRuntime {
         } else if (role === "frontend") {
           this.frontendRuns++;
           await write("public/index.html", frontendHtml);
-          await write("public/style.css", frontendCss(this.frontendRuns === 1));
+          await write(
+            "public/style.css",
+            frontendCss(
+              this.frontendRuns === 1 && request.context.failures.length === 0,
+            ),
+          );
           await write("public/app.js", frontendJs);
         } else throw new Error(`Unsupported scripted role: ${role}`);
         result = {

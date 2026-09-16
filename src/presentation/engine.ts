@@ -1,3 +1,5 @@
+import { createDesktopDemo } from "../desktop/engine/demo.js";
+import { ReservationDemoRuntime } from "../examples/reservations.js";
 import { draftInstruction } from "../skills/creator.js";
 import { StudioAdmin } from "../skills/admin.js";
 import { studioId } from "../skills/registry.js";
@@ -199,7 +201,9 @@ export class PresentationEngine {
     const config = goalConfig(goal),
       orchestrator = new Orchestrator(
         this.store,
-        new PiRuntime(this.home, config),
+        goal.mode === "mock" && goal.demonstration === "reservation-v4"
+          ? new ReservationDemoRuntime()
+          : new PiRuntime(this.home, config),
         new PreparedDockerRunner(
           config,
           this.store,
@@ -375,6 +379,19 @@ export class PresentationEngine {
           }
           break;
         }
+        case "demo-reservations": {
+          this.idle();
+          const goal = await createDesktopDemo(
+            this.home,
+            await ctx.config(),
+            this.store,
+          );
+          this.workspace = goal.source;
+          this.start(goal);
+          message =
+            "DEMOSTRACIÓN: providers simulados, archivos, tests y reparaciones reales. El fixture existente no es una recomendación de backend nuevo.";
+          break;
+        }
         case "goal": {
           this.idle();
           const goal = await createGoal(
@@ -384,6 +401,7 @@ export class PresentationEngine {
               home: this.home,
               config: await ctx.config(),
               privacy: action.public ? "public" : "private",
+              referenceIds: action.referenceIds,
             },
             this.store,
           );

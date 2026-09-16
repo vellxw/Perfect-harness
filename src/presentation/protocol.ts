@@ -168,6 +168,12 @@ const goalId = z.string().min(1).max(96);
 export const UiActionSchema = z.discriminatedUnion("type", [
   z
     .object({
+      type: z.literal("demo-reservations"),
+      confirmation: z.literal("DEMOSTRAR"),
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal("create-skill-brief"),
       brief: DraftBriefSchema,
       confirmation: z.literal("CREAR"),
@@ -188,6 +194,7 @@ export const UiActionSchema = z.discriminatedUnion("type", [
       type: z.literal("goal"),
       description: z.string().trim().min(1).max(100000),
       public: z.boolean().default(false),
+      referenceIds: z.array(z.string().uuid()).max(8).optional(),
     })
     .strict(),
   z.object({ type: z.literal("select"), goalId }).strict(),

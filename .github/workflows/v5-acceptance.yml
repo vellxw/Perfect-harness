@@ -1,0 +1,63 @@
+name: Perfect V5 complete acceptance
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: v5-complete-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  core:
+    uses: ./.github/workflows/v4-checks.yml
+  blender:
+    uses: ./.github/workflows/v4-blender.yml
+  terminal:
+    uses: ./.github/workflows/v4-ui.yml
+  desktop:
+    uses: ./.github/workflows/v5-desktop.yml
+  goal-loop:
+    uses: ./.github/workflows/v5-goal-loop.yml
+  performance:
+    uses: ./.github/workflows/v5-performance.yml
+  windows:
+    uses: ./.github/workflows/v4-windows.yml
+  acceptance:
+    needs: [core, blender, terminal, desktop, goal-loop, performance, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - run: node --test scripts/desktop/release-policy.test.mjs scripts/desktop/publish-release.test.mjs
+      - uses: actions/download-artifact@v4
+        with:
+          path: candidate-artifacts
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Verify source, binaries, recordings and prepare independent visual review
+        env:
+          PERFECT_GATE_RESULTS: '{"core":"${{ needs.core.result }}","blender":"${{ needs.blender.result }}","terminal":"${{ needs.terminal.result }}","desktop":"${{ needs.desktop.result }}","goal-loop":"${{ needs.goal-loop.result }}","performance":"${{ needs.performance.result }}","windows":"${{ needs.windows.result }}"}'
+        run: node scripts/desktop/assemble-acceptance.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Perfect-V5-Acceptance-Evidence
+          path: test-results/desktop/final
+          if-no-files-found: error
+          retention-days: 30
+      - name: State the remaining publication boundary
+        run: echo 'Automated candidate assembled. No tag, merge or release was created. A real visual review of these exact bytes is required before promotion.'
+  visual-observations:
+    needs: [acceptance]
+    uses: ./.github/workflows/v5-visual-assist.yml
+    with:
+      acceptance_run_id: ${{ format('{0}', github.run_id) }}
+      source_sha: ${{ github.event.pull_request.head.sha || github.sha }}

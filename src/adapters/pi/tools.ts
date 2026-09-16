@@ -231,5 +231,53 @@ export function buildTools(
         },
       ),
     );
+  if (request.services.readReference)
+    tools.push({
+      name: "read_user_reference",
+      label: "Referencia aprobada",
+      description:
+        "Leer una referencia del objetivo por ID, sin cambiar su hash ni convertirla en evidencia de verificación.",
+      parameters: Type.Object({
+        id: Type.String(),
+        offset: Type.Optional(Type.Integer({ minimum: 0, maximum: 300000 })),
+      }),
+      execute: async (_id, args) => {
+        guard();
+        request.signal.throwIfAborted();
+        request.services.skillGuard?.();
+        const a = z
+          .object({
+            id: z.string().uuid(),
+            offset: z.number().int().min(0).max(300000).default(0),
+          })
+          .strict()
+          .parse(args);
+        const result = await request.services.readReference!(a.id, a.offset);
+        return result.data
+          ? {
+              content: [
+                {
+                  type: "text" as const,
+                  text: JSON.stringify({
+                    name: result.name,
+                    sha256: result.sha256,
+                  }),
+                },
+                {
+                  type: "image" as const,
+                  data: result.data,
+                  mimeType: result.mimeType,
+                },
+              ],
+              details: { referenceId: a.id },
+            }
+          : {
+              content: [
+                { type: "text" as const, text: JSON.stringify(result) },
+              ],
+              details: { referenceId: a.id },
+            };
+      },
+    });
   return tools;
 }

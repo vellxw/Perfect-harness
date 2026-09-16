@@ -1,0 +1,647 @@
+/** @jsxImportSource react */
+import { useState } from "react";
+import type { UiSnapshot } from "../contracts/protocol.js";
+import {
+  useUI,
+  Heading,
+  Empty,
+  Row,
+  Modal,
+  options,
+  splitLines,
+} from "./ui.js";
+interface CaseDraft {
+  id: string;
+  kind: "response" | "code";
+  partition: "development" | "holdout";
+  prompt: string;
+  contains: string;
+  excludes: string;
+  exportName: string;
+  args: string;
+  expected: string;
+}
+const blank = (n: number): CaseDraft => ({
+  id: "caso-" + n,
+  kind: "response",
+  partition: n === 1 ? "development" : "holdout",
+  prompt: "",
+  contains: "",
+  excludes: "",
+  exportName: "solve",
+  args: "[]",
+  expected: "null",
+});
+export function Trials({ s }: { s: UiSnapshot }) {
+  const ui = useUI(),
+    p = s.studio,
+    [builder, setBuilder] = useState(false);
+  if (!p) return <Empty title="Cargá el estudio de habilidades" />;
+  const create = () =>
+    ui.form({
+      title: "Crear una habilidad",
+      description:
+        "Produce un borrador y pruebas dentro de una goal privada. No se activa ni se aprueba automáticamente.",
+      submit: "Crear borrador",
+      phrase: "CREAR",
+      fields: [
+        {
+          name: "name",
+          label: "Identificador de la habilidad",
+          required: true,
+        },
+        {
+          name: "team",
+          label: "Equipo destinatario",
+          type: "select",
+          value: p.config.sets[0]?.id,
+          options: p.config.sets.map((t) => ({ value: t.id, label: t.name })),
+        },
+        {
+          name: "problem",
+          label: "Problema concreto que resuelve",
+          type: "textarea",
+          required: true,
+        },
+        {
+          name: "when",
+          label: "Cuándo utilizarla",
+          type: "textarea",
+          required: true,
+        },
+        {
+          name: "avoid",
+          label: "Cuándo NO utilizarla",
+          type: "textarea",
+          required: true,
+        },
+        {
+          name: "inputs",
+          label: "Información de entrada",
+          type: "textarea",
+          required: true,
+        },
+        {
+          name: "output",
+          label: "Resultado que debe producir",
+          type: "textarea",
+          required: true,
+        },
+        {
+          name: "checks",
+          label: "Cómo comprobar su utilidad",
+          type: "textarea",
+          required: true,
+        },
+        {
+          name: "license",
+          label: "Licencia de tu contenido",
+          type: "select",
+          value: "Proprietary-local",
+          options: options([
+            "Proprietary-local",
+            "MIT",
+            "Apache-2.0",
+            "CC-BY-SA-4.0",
+          ]),
+        },
+      ],
+      onSubmit: async (v) => {
+        await ui.execute({
+          type: "create-skill-brief",
+          brief: v,
+          confirmation: "CREAR",
+        });
+        ui.navigate("work");
+      },
+    });
+  const collect = () =>
+    ui.form({
+      title: "Recopilar borrador verificado",
+      description:
+        "El objetivo debe estar aceptado por el Judge, con candidato intacto y ejecución del perfil autor. Entra en cuarentena.",
+      submit: "Recopilar",
+      phrase: "RECOPILAR",
+      fields: [
+        {
+          name: "goalId",
+          label: "Objetivo del borrador",
+          type: "select",
+          value: s.goal?.id,
+          options: s.recentGoals
+            .filter((g) => g.state === "DONE")
+            .map((g) => ({ value: g.id, label: g.request })),
+        },
+        {
+          name: "folder",
+          label: "Directorio relativo del paquete",
+          required: true,
+        },
+        {
+          name: "team",
+          label: "Equipo",
+          type: "select",
+          value: p.config.sets[0]?.id,
+          options: p.config.sets.map((t) => ({ value: t.id, label: t.name })),
+        },
+        {
+          name: "triggers",
+          label: "Activadores, uno por línea",
+          type: "textarea",
+        },
+        {
+          name: "license",
+          label: "Licencia",
+          type: "select",
+          value: "Proprietary-local",
+          options: options([
+            "Proprietary-local",
+            "MIT",
+            "Apache-2.0",
+            "CC-BY-SA-4.0",
+          ]),
+        },
+      ],
+      onSubmit: async (v) => {
+        await ui.execute(
+          {
+            type: "studio",
+            action: {
+              command: "collect-draft",
+              goalId: v.goalId,
+              folder: v.folder,
+              setIds: [v.team],
+              license: v.license,
+              triggers: splitLines(v.triggers ?? ""),
+              confirmation: "RECOPILAR",
+            },
+          },
+          true,
+        );
+      },
+    });
+  return (
+    <>
+      <Heading
+        title="Estudio de habilidades"
+        description="De un borrador a una versión evaluada, sin autoaprobación."
+      >
+        <button onClick={collect}>Recopilar borrador</button>
+        <button onClick={() => setBuilder(true)}>Nueva comparación A/B</button>
+        <button className="primary" onClick={create}>
+          Crear habilidad
+        </button>
+      </Heading>
+      <div className="workflow-strip">
+        <span>01 · Definir</span>
+        <span>02 · Crear</span>
+        <span>03 · Revisar</span>
+        <span>04 · Comparar</span>
+        <span>05 · Aprobar</span>
+      </div>
+      <p className="explanation">
+        Las comparaciones utilizan sesiones y carpetas independientes. Los casos
+        reservados no se utilizan para mejorar repetidamente la misma habilidad.
+        Un empate no prueba mejora y dos fallos no son un resultado aprobado.
+      </p>
+      {p.trials?.length ? (
+        p.trials.map((t) => (
+          <section className="trial-card" key={t.trialId}>
+            <Row
+              title={`${t.profileId} · ${t.partition === "holdout" ? "Casos reservados" : "Desarrollo"}`}
+              detail={`${t.requests}/${t.budget.maxRequests} solicitudes · ${t.tokens}/${t.budget.maxTokens} tokens · ${t.mode}`}
+              status={t.status}
+            >
+              <button
+                onClick={() =>
+                  void ui.execute(
+                    {
+                      type: "studio",
+                      action: { command: "trial-report", id: t.trialId },
+                    },
+                    true,
+                  )
+                }
+              >
+                Informe
+              </button>
+              {["proposed", "interrupted"].includes(t.status) && (
+                <button
+                  onClick={() =>
+                    ui.confirm(
+                      "Autorizar evaluación A/B",
+                      `Contrato: ${t.specHash}\nMáximo ${t.budget.maxRequests} solicitudes y ${t.budget.maxTokens} tokens. Revisá los paquetes primero. Consume cuota real; no activa la skill para producción.`,
+                      "EVALUAR",
+                      async () => {
+                        const inspections = p.skills
+                          .filter((skill) =>
+                            [t.releaseId, t.baselineReleaseId].includes(
+                              skill.releaseId,
+                            ),
+                          )
+                          .flatMap((skill) =>
+                            skill.inspectionId ? [skill.inspectionId] : [],
+                          );
+                        await ui.execute({
+                          type: "studio",
+                          action: {
+                            command: "trial-authorize",
+                            id: t.trialId,
+                            specHash: t.specHash,
+                            inspectionIds: inspections,
+                            confirmation: "EVALUAR",
+                          },
+                        });
+                      },
+                    )
+                  }
+                >
+                  Autorizar
+                </button>
+              )}
+              {t.status === "authorized" && (
+                <button
+                  className="primary"
+                  onClick={() =>
+                    ui.confirm(
+                      "Ejecutar comparación autorizada",
+                      "Esta acción realiza las inferencias y pruebas del contrato. Las cuentas personales deben estar conectadas. No se cambia de modelo si falla el proveedor.",
+                      "EJECUTAR",
+                      async () => {
+                        await ui.execute({
+                          type: "studio",
+                          action: {
+                            command: "trial-run",
+                            id: t.trialId,
+                            confirmation: "EJECUTAR",
+                          },
+                        });
+                      },
+                    )
+                  }
+                >
+                  Ejecutar
+                </button>
+              )}
+              {t.status === "running" && (
+                <button
+                  onClick={() =>
+                    void ui.execute({
+                      type: "studio",
+                      action: { command: "trial-cancel", id: t.trialId },
+                    })
+                  }
+                >
+                  Cancelar
+                </button>
+              )}
+            </Row>
+            {t.pairs.map((pair) => (
+              <div
+                className="pair-result"
+                key={pair.caseId + "-" + pair.repetition}
+              >
+                <span>
+                  {pair.caseId} · repetición {pair.repetition + 1}
+                </span>
+                <strong>
+                  {(
+                    {
+                      improved: "Mejora observada",
+                      regression: "Regresión",
+                      both_pass: "Ambas cumplen",
+                      both_fail: "Ambas fallan",
+                      incomplete: "Incompleta",
+                    } as Record<string, string>
+                  )[pair.verdict] ?? pair.verdict}
+                </strong>
+                <span>
+                  Calidad candidata:{" "}
+                  {pair.qualityPassed ? "cumple" : "no comprobada o fallida"}
+                </span>
+              </div>
+            ))}
+            {t.failure && <p className="error">{t.failure}</p>}
+            <p className="muted">{t.claims}</p>
+          </section>
+        ))
+      ) : (
+        <Empty title="Todavía no hay comparaciones">
+          Crear un contrato no consume inferencias. Autorizar y ejecutar son
+          decisiones posteriores.
+        </Empty>
+      )}
+      {builder && <TrialBuilder s={s} onClose={() => setBuilder(false)} />}
+    </>
+  );
+}
+function TrialBuilder({ s, onClose }: { s: UiSnapshot; onClose: () => void }) {
+  const ui = useUI(),
+    p = s.studio!,
+    [releaseId, setRelease] = useState(p.skills[0]?.releaseId ?? ""),
+    [baseline, setBaseline] = useState(""),
+    [profileId, setProfile] = useState(
+      p.config.profiles.find((p) => p.id === "general")?.id ??
+        p.config.profiles[0]!.id,
+    ),
+    [partition, setPartition] = useState("development"),
+    [cases, setCases] = useState<CaseDraft[]>([blank(1), blank(2)]),
+    [maxTokens, setMaxTokens] = useState("96000"),
+    [maxRequests, setMaxRequests] = useState("16"),
+    [repetitions, setRepetitions] = useState("1"),
+    [publicData, setPublic] = useState(false),
+    [error, setError] = useState(""),
+    [pending, setPending] = useState(false);
+  const change = (i: number, key: keyof CaseDraft, value: string) =>
+    setCases((c) =>
+      c.map((item, index) => (index === i ? { ...item, [key]: value } : item)),
+    );
+  return (
+    <Modal
+      title="Contrato de evaluación A/B"
+      onClose={() => {
+        if (!pending) onClose();
+      }}
+      wide
+    >
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setPending(true);
+          setError("");
+          try {
+            const spec = {
+              releaseId,
+              baselineReleaseId: baseline || undefined,
+              profileId,
+              partition,
+              repetitions: Number(repetitions),
+              publicData,
+              resources: [],
+              maxTokens: Number(maxTokens),
+              maxRequests: Number(maxRequests),
+              timeoutMs: 600000,
+              cases: cases.map((c) =>
+                c.kind === "response"
+                  ? {
+                      id: c.id,
+                      kind: c.kind,
+                      partition: c.partition,
+                      prompt: c.prompt,
+                      contains: splitLines(c.contains),
+                      excludes: splitLines(c.excludes),
+                    }
+                  : {
+                      id: c.id,
+                      kind: c.kind,
+                      partition: c.partition,
+                      prompt: c.prompt,
+                      exportName: c.exportName,
+                      examples: [
+                        {
+                          args: JSON.parse(c.args),
+                          expected: JSON.parse(c.expected),
+                        },
+                      ],
+                    },
+              ),
+            };
+            await ui.execute(
+              { type: "studio", action: { command: "trial-propose", spec } },
+              true,
+            );
+            onClose();
+          } catch (e) {
+            setError(e instanceof Error ? e.message : "Contrato inválido");
+          } finally {
+            setPending(false);
+          }
+        }}
+      >
+        <div className="modal-body">
+          <p className="explanation">
+            Se comparan la misma ruta, herramientas y entradas. Los
+            verificadores se ejecutan fuera del control del agente. No se
+            ejecutará nada al guardar.
+          </p>
+          <div className="form-grid">
+            <label className="field">
+              <span>Skill candidata</span>
+              <select
+                value={releaseId}
+                onChange={(e) => setRelease(e.target.value)}
+              >
+                {p.skills.map((r) => (
+                  <option key={r.releaseId} value={r.releaseId}>
+                    {r.name} · {r.hash.slice(0, 8)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Referencia A</span>
+              <select
+                value={baseline}
+                onChange={(e) => setBaseline(e.target.value)}
+              >
+                <option value="">Sin skill</option>
+                {p.skills
+                  .filter((r) => r.releaseId !== releaseId)
+                  .map((r) => (
+                    <option key={r.releaseId} value={r.releaseId}>
+                      {r.name} · {r.hash.slice(0, 8)}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Perfil y modelo</span>
+              <select
+                value={profileId}
+                onChange={(e) => setProfile(e.target.value)}
+              >
+                {p.config.profiles
+                  .filter((p) => p.enabled)
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} · {a.binding.model}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Partición a ejecutar</span>
+              <select
+                value={partition}
+                onChange={(e) => setPartition(e.target.value)}
+              >
+                <option value="development">Desarrollo</option>
+                <option value="holdout">Reservada</option>
+              </select>
+            </label>
+          </div>
+          {cases.map((c, i) => (
+            <fieldset key={i} className="case-editor">
+              <legend>Caso {i + 1}</legend>
+              <div className="form-grid">
+                <label className="field">
+                  <span>Identificador</span>
+                  <input
+                    required
+                    value={c.id}
+                    onChange={(e) => change(i, "id", e.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>Partición</span>
+                  <select
+                    value={c.partition}
+                    onChange={(e) => change(i, "partition", e.target.value)}
+                  >
+                    <option value="development">Desarrollo</option>
+                    <option value="holdout">Reservada</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Tipo de prueba</span>
+                  <select
+                    value={c.kind}
+                    onChange={(e) => change(i, "kind", e.target.value)}
+                  >
+                    <option value="response">Respuesta</option>
+                    <option value="code">Código ejecutado en sandbox</option>
+                  </select>
+                </label>
+              </div>
+              <label className="field">
+                <span>Solicitud al agente</span>
+                <textarea
+                  required
+                  value={c.prompt}
+                  onChange={(e) => change(i, "prompt", e.target.value)}
+                  rows={3}
+                />
+              </label>
+              {c.kind === "response" ? (
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Debe incluir, una expresión por línea</span>
+                    <textarea
+                      value={c.contains}
+                      onChange={(e) => change(i, "contains", e.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>No debe incluir</span>
+                    <textarea
+                      value={c.excludes}
+                      onChange={(e) => change(i, "excludes", e.target.value)}
+                    />
+                  </label>
+                </div>
+              ) : (
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Función exportada</span>
+                    <input
+                      required
+                      value={c.exportName}
+                      onChange={(e) => change(i, "exportName", e.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Argumentos JSON</span>
+                    <input
+                      required
+                      value={c.args}
+                      onChange={(e) => change(i, "args", e.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Resultado esperado JSON</span>
+                    <input
+                      required
+                      value={c.expected}
+                      onChange={(e) => change(i, "expected", e.target.value)}
+                    />
+                  </label>
+                </div>
+              )}
+              {cases.length > 2 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCases((c) => c.filter((_c, index) => index !== i))
+                  }
+                >
+                  Quitar caso
+                </button>
+              )}
+            </fieldset>
+          ))}
+          <button
+            type="button"
+            disabled={cases.length >= 12}
+            onClick={() => setCases((c) => [...c, blank(c.length + 1)])}
+          >
+            Añadir caso
+          </button>
+          <div className="form-grid">
+            <label className="field">
+              <span>Máximo de tokens</span>
+              <input
+                type="number"
+                min="8000"
+                max="500000"
+                value={maxTokens}
+                onChange={(e) => setMaxTokens(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>Máximo de solicitudes</span>
+              <input
+                type="number"
+                min="2"
+                max="48"
+                value={maxRequests}
+                onChange={(e) => setMaxRequests(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>Repeticiones</span>
+              <input
+                type="number"
+                min="1"
+                max="3"
+                value={repetitions}
+                onChange={(e) => setRepetitions(e.target.value)}
+              />
+            </label>
+          </div>
+          <label className="check-field">
+            <input
+              type="checkbox"
+              checked={publicData}
+              onChange={(e) => setPublic(e.target.checked)}
+            />
+            Declaro públicos estos datos para permitir su uso con rutas
+            Contributor cuando estén autorizadas.
+          </label>
+          {error && (
+            <p role="alert" className="error">
+              {error}
+            </p>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button type="button" disabled={pending} onClick={onClose}>
+            Cancelar
+          </button>
+          <button className="primary" disabled={pending} type="submit">
+            Guardar contrato (sin ejecutar)
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}

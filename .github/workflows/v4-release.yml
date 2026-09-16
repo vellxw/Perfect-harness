@@ -1,13 +1,12 @@
-name: Perfect V4 release
+name: Perfect V4 historical regression
+# V4 is immutable. This workflow is read-only and cannot publish on main.
+# V5 publication must use its own complete acceptance and binary gates.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
-# Different candidates can validate independently; publication is serialized below.
 concurrency:
-  group: perfect-release-${{ github.sha }}
+  group: perfect-v4-regression-${{ github.sha }}
   cancel-in-progress: false
 jobs:
   checks:
@@ -18,30 +17,3 @@ jobs:
     uses: ./.github/workflows/v4-ui.yml
   windows:
     uses: ./.github/workflows/v4-windows.yml
-  publish:
-    if: github.ref == 'refs/heads/main'
-    needs: [checks, blender, ui, windows]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    concurrency:
-      group: perfect-publish-main
-      cancel-in-progress: false
-    permissions:
-      contents: write
-      actions: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - uses: actions/download-artifact@v4
-        with:
-          path: downloaded
-      - name: Publish only the tested binary bytes from the current main candidate
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          current=$(gh api "repos/$REPOSITORY/git/ref/heads/main" --jq '.object.sha')
-          test "$current" = "$GITHUB_SHA" || { echo 'Superseded candidate: no release published'; exit 1; }
-          python3 scripts/publish-release.py

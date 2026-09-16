@@ -1,0 +1,7 @@
+/* A dim backdrop separates the dialog without re-filtering the complete window
+   on every animation frame. The panel retains its own glass material, highlight
+   and shadow. Keep opacity/transform motion and reduced-motion settings intact. */
+dialog.modal::backdrop {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}

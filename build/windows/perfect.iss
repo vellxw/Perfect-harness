@@ -31,62 +31,115 @@ ChangesEnvironment=yes
 CloseApplications=yes
 RestartApplications=no
 ShowLanguageDialog=no
-
 [Languages]
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
-
 [Tasks]
 Name: desktopicon; Description: "Crear un acceso directo en el escritorio"; Flags: unchecked
-Name: addpath; Description: "Añadir Perfect al PATH del usuario"; Flags: checkedonce
+Name: addpath; Description: "Añadir el comando perfect al PATH del usuario"; Flags: checkedonce
 [Files]
 Source: "{#Payload}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Dirs]
 Name: "{userdocs}\Perfect Projects\Workspace"; Flags: uninsneveruninstall
 [Icons]
-Name: "{group}\Perfect Harness"; Filename: "{app}\Perfect.exe"; Parameters: "--window"; WorkingDir: "{userdocs}\Perfect Projects\Workspace"
-Name: "{autodesktop}\Perfect Harness"; Filename: "{app}\Perfect.exe"; Parameters: "--window"; WorkingDir: "{userdocs}\Perfect Projects\Workspace"; Tasks: desktopicon
+Name: "{group}\Perfect Harness"; Filename: "{app}\Perfect.exe"; WorkingDir: "{userdocs}\Perfect Projects\Workspace"
+Name: "{autodesktop}\Perfect Harness"; Filename: "{app}\Perfect.exe"; WorkingDir: "{userdocs}\Perfect Projects\Workspace"; Tasks: desktopicon
 [Run]
-Filename: "{app}\Perfect.exe"; Parameters: "--install-profile"; Flags: runhidden waituntilterminated
-Filename: "{app}\Perfect.exe"; Parameters: "--window"; Description: "Abrir Perfect Harness"; WorkingDir: "{userdocs}\Perfect Projects\Workspace"; Flags: postinstall nowait skipifsilent
-[UninstallRun]
-Filename: "{app}\Perfect.exe"; Parameters: "--remove-profile"; Flags: runhidden waituntilterminated; RunOnceId: "PerfectTerminalProfile"
+Filename: "{app}\Perfect.exe"; Description: "Abrir Perfect Harness"; WorkingDir: "{userdocs}\Perfect Projects\Workspace"; Flags: postinstall nowait skipifsilent
 [Code]
+const OwnKey = 'Software\PerfectHarness';
 function HasPath(Value, Entry: String): Boolean;
 begin
   Result := Pos(';' + Lowercase(Entry) + ';', ';' + Lowercase(Value) + ';') > 0;
 end;
-procedure CurStepChanged(CurStep: TSetupStep);
-var Value, Entry: String;
+function RemoveExactPath(Value, Entry: String): String;
+var Wrapped, Needle: String; P: Integer;
 begin
-  if (CurStep = ssPostInstall) and WizardIsTaskSelected('addpath') then begin
-    Entry := ExpandConstant('{app}');
-    RegQueryStringValue(HKCU, 'Environment', 'Path', Value);
-    if not HasPath(Value, Entry) then begin
-      if Value = '' then Value := Entry else Value := Value + ';' + Entry;
-      if RegWriteExpandStringValue(HKCU, 'Environment', 'Path', Value) then
-        RegWriteStringValue(HKCU, 'Software\PerfectHarness', 'PathAdded', Entry);
+  Wrapped := ';' + Value + ';'; Needle := ';' + Lowercase(Entry) + ';';
+  P := Pos(Needle, Lowercase(Wrapped));
+  while P > 0 do begin
+    Delete(Wrapped, P, Length(Needle) - 1);
+    P := Pos(Needle, Lowercase(Wrapped));
+  end;
+  if Length(Wrapped) <= 1 then Result := ''
+  else Result := Copy(Wrapped, 2, Length(Wrapped) - 2);
+end;
+procedure ForgetPathReceipt;
+begin
+  RegDeleteValue(HKCU, OwnKey, 'PathAdded');
+  RegDeleteValue(HKCU, OwnKey, 'PathBeforeOwn');
+  RegDeleteValue(HKCU, OwnKey, 'PathAfterOwn');
+  RegDeleteValue(HKCU, OwnKey, 'PathOriginallyPresent');
+  RegDeleteKeyIfEmpty(HKCU, OwnKey);
+end;
+procedure RemoveOwnedTerminalFragment;
+var Filename, Content, EscapedExecutable: String; Lines: TArrayOfString; I: Integer;
+begin
+  Filename := ExpandConstant('{localappdata}\Microsoft\Windows Terminal\Fragments\PerfectHarness\PerfectHarness.json');
+  EscapedExecutable := ExpandConstant('{app}\Perfect.exe');
+  StringChangeEx(EscapedExecutable, '\', '\\', True);
+  if LoadStringsFromFile(Filename, Lines) then begin
+    Content := '';
+    for I := 0 to GetArrayLength(Lines) - 1 do
+      Content := Content + Lines[I] + #13#10;
+    if Pos(Lowercase(EscapedExecutable), Lowercase(Content)) > 0 then
+      DeleteFile(Filename);
+  end;
+end;
+procedure CurStepChanged(CurStep: TSetupStep);
+var Value, BeforeValue, AfterValue, Entry, Stored, OldEntry: String; Present: Cardinal;
+begin
+  if CurStep = ssPostInstall then begin
+    Entry := ExpandConstant('{app}\bin'); OldEntry := ExpandConstant('{app}');
+    Value := '';
+    if RegQueryStringValue(HKCU, 'Environment', 'Path', Value) then Present := 1 else Present := 0;
+    { V4 recorded its own root entry. Only that entry is migrated. }
+    if RegQueryStringValue(HKCU, OwnKey, 'PathAdded', Stored) and
+       (CompareText(Stored, OldEntry) = 0) then begin
+      Value := RemoveExactPath(Value, OldEntry);
+      if not RegWriteExpandStringValue(HKCU, 'Environment', 'Path', Value) then
+        RaiseException('No se pudo migrar el PATH propio de Perfect.');
+      ForgetPathReceipt;
     end;
+    if WizardIsTaskSelected('addpath') and not HasPath(Value, Entry) then begin
+      BeforeValue := Value;
+      if Value = '' then AfterValue := Entry else AfterValue := Value + ';' + Entry;
+      { Keep the exact original representation, including empty path segments.
+        On unchanged PATH uninstall restores this receipt. If another application
+        edits PATH later, only Perfect's own entry is removed instead. }
+      if not RegWriteStringValue(HKCU, OwnKey, 'PathBeforeOwn', BeforeValue) or
+         not RegWriteStringValue(HKCU, OwnKey, 'PathAfterOwn', AfterValue) or
+         not RegWriteDWordValue(HKCU, OwnKey, 'PathOriginallyPresent', Present) then
+        RaiseException('No se pudo conservar el PATH anterior del usuario.');
+      if not RegWriteExpandStringValue(HKCU, 'Environment', 'Path', AfterValue) then
+        RaiseException('No se pudo registrar el comando perfect en el PATH del usuario.');
+      if not RegWriteStringValue(HKCU, OwnKey, 'PathAdded', Entry) then begin
+        RegWriteExpandStringValue(HKCU, 'Environment', 'Path', BeforeValue);
+        ForgetPathReceipt;
+        RaiseException('No se pudo registrar la propiedad del cambio PATH.');
+      end;
+    end;
+    RemoveOwnedTerminalFragment;
   end;
 end;
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
-var Value, Entry, Stored, Item, Updated: String; P: Integer;
+var Value, Entry, Stored, BeforeValue, AfterValue: String; Present: Cardinal; Restored: Boolean;
 begin
   if CurUninstallStep = usPostUninstall then begin
-    Entry := ExpandConstant('{app}');
-    if RegQueryStringValue(HKCU, 'Software\PerfectHarness', 'PathAdded', Stored) and (CompareText(Stored, Entry) = 0) then begin
-      RegQueryStringValue(HKCU, 'Environment', 'Path', Value);
-      Updated := '';
-      while Value <> '' do begin
-        P := Pos(';', Value);
-        if P = 0 then begin Item := Value; Value := ''; end
-        else begin Item := Copy(Value, 1, P - 1); Delete(Value, 1, P); end;
-        if CompareText(Item, Entry) <> 0 then begin
-          if Updated = '' then Updated := Item else Updated := Updated + ';' + Item;
-        end;
-      end;
-      RegWriteExpandStringValue(HKCU, 'Environment', 'Path', Updated);
-      RegDeleteValue(HKCU, 'Software\PerfectHarness', 'PathAdded');
-      RegDeleteKeyIfEmpty(HKCU, 'Software\PerfectHarness');
+    Entry := ExpandConstant('{app}\bin');
+    if RegQueryStringValue(HKCU, OwnKey, 'PathAdded', Stored) and
+       (CompareText(Stored, Entry) = 0) then begin
+      Value := ''; RegQueryStringValue(HKCU, 'Environment', 'Path', Value);
+      if RegQueryStringValue(HKCU, OwnKey, 'PathBeforeOwn', BeforeValue) and
+         RegQueryStringValue(HKCU, OwnKey, 'PathAfterOwn', AfterValue) and
+         RegQueryDWordValue(HKCU, OwnKey, 'PathOriginallyPresent', Present) and
+         (Value = AfterValue) then begin
+        if Present = 0 then Restored := RegDeleteValue(HKCU, 'Environment', 'Path')
+        else Restored := RegWriteExpandStringValue(HKCU, 'Environment', 'Path', BeforeValue);
+      end else
+        Restored := RegWriteExpandStringValue(HKCU, 'Environment', 'Path', RemoveExactPath(Value, Entry));
+      if not Restored then
+        RaiseException('No se pudo retirar el PATH propio; se conserva el registro para recuperación.');
+      ForgetPathReceipt;
     end;
   end;
 end;

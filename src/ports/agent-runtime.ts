@@ -9,6 +9,17 @@ import type {
   Usage,
 } from "../domain/model.js";
 export interface AgentServices {
+  readReference?(
+    id: string,
+    offset: number,
+  ): Promise<{
+    name: string;
+    sha256: string;
+    mimeType: string;
+    text?: string;
+    nextOffset?: number;
+    data?: string;
+  }>;
   skillGuard?(): void;
   skills?: {
     run?(id: string, resource: string, args: string[]): Promise<unknown>;
