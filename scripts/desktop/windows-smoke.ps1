@@ -84,8 +84,21 @@ function Install([string]$Setup,[string]$Destination,[string]$Name){
 }
 function Uninstall([string]$Destination,[string]$Name){
  $log=Join-Path $testRoot "$Name-uninstall.log"
- try{Invoke-Probe @('uninstall',(Join-Path $Destination 'unins000.exe'),$log)}finally{if(Test-Path $log){Copy-Item $log (Join-Path $out "$Name-uninstall.log")}}
- if(([string][Environment]::GetEnvironmentVariable('Path','User')) -ne $beforePath){throw 'Uninstall did not preserve unrelated PATH entries'}
+ try{
+  Invoke-Probe @('uninstall',(Join-Path $Destination 'unins000.exe'),$log)
+  # Inno first phase exits before its temporary second phase executes
+  # usPostUninstall. Await observable cleanup; expected PATH is unchanged.
+  $watch=[Diagnostics.Stopwatch]::StartNew();$complete=$false
+  do {
+   $pathNow=[string][Environment]::GetEnvironmentVariable('Path','User')
+   $receipt=Get-ItemPropertyValue -LiteralPath 'HKCU:\Software\PerfectHarness' -Name PathAdded -ErrorAction SilentlyContinue
+   $ownedReceipt=$receipt -and ([string]$receipt).Equals((Join-Path $Destination 'bin'),[StringComparison]::OrdinalIgnoreCase)
+   $complete=($pathNow -eq $beforePath) -and -not $ownedReceipt -and -not (Test-Path (Join-Path $Destination 'Perfect.exe')) -and -not (Test-Path (Join-Path $Destination 'unins000.exe'))
+   if(-not $complete){Start-Sleep -Milliseconds 100}
+  } while(-not $complete -and $watch.ElapsedMilliseconds -lt 30000)
+  @{scenario=$Name;postPhaseWaitMs=$watch.ElapsedMilliseconds;completed=$complete;pathRestored=($pathNow -eq $beforePath);ownedReceiptRemaining=[bool]$ownedReceipt;method='Actual registry and installed-file completion after Inno first-phase exit; no timeout-based success'} | ConvertTo-Json | Set-Content (Join-Path $out "$Name-uninstall-completion.json") -Encoding utf8NoBOM
+  if(-not $complete){throw 'Uninstall did not finish owned cleanup and preserve unrelated PATH entries within 30 seconds'}
+ }finally{if(Test-Path $log){Copy-Item $log (Join-Path $out "$Name-uninstall.log")}}
  $checks.Add("${Name}: uninstall restored exactly the pre-test user PATH")
 }
 try {

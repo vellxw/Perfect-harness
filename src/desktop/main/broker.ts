@@ -34,6 +34,9 @@ export class EngineBroker extends EventEmitter {
   }>();
   constructor(readonly node: string, readonly worker: string, readonly home: string, readonly workspace: string, readonly desktopSessionId: string = randomUUID()) {
     super();
+    // Main already canonicalized and authorized this folder. Drafts can use its
+    // identity before the core is ready, without inventing a domain snapshot.
+    this.workspaceId = createHash("sha256").update(workspace).digest("hex").slice(0, 24);
     this.logFile = join(home, `desktop-startup-${randomUUID()}.jsonl`);
   }
   private log(stage: string, data: Record<string, unknown> = {}): void {

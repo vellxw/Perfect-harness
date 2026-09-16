@@ -1,5 +1,6 @@
 /** @jsxImportSource react */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { StartingWorkspace, useComposerDraft, type ComposerDraftHandle } from "./drafts.js";
 import type { UserReference } from "../../domain/references.js";
 import { createRoot } from "react-dom/client";
 import { connect, useDesktop, request } from "./store.js";
@@ -65,6 +66,7 @@ function App() {
     [notification, setNotification] = useState(""),
     [auth, setAuth] = useState<Extract<UiMessage, { type: "auth" }>>(),
     [previewHidden, setPreviewHidden] = useState(false);
+  const draft = useComposerDraft(state.boot?.workspaceId);
   const consumed = useRef(new WeakSet<object>()),
     initialized = useRef(""),
     noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -226,7 +228,9 @@ function App() {
   );
   const motion = s?.preferences.ui.motion ?? "auto",
     contrast = s?.preferences.ui.contrast ?? "normal";
-  let content: ReactNode = (
+  let content: ReactNode = page === "work" && state.boot?.workspaceId ? (
+    <StartingWorkspace draft={draft} />
+  ) : (
     <Empty title="Conectando al motor local…">
       No se iniciará trabajo antes de confirmar la conexión.
     </Empty>
@@ -237,6 +241,7 @@ function App() {
         content = (
           <Work
             s={s}
+            draft={draft}
             connected={state.connected}
             execute={execute}
             navigate={navigate}
@@ -508,6 +513,7 @@ function App() {
 }
 function Work({
   s,
+  draft,
   connected,
   execute,
   navigate,
@@ -515,6 +521,7 @@ function Work({
   notify,
 }: {
   s: UiSnapshot;
+  draft: ComposerDraftHandle;
   connected: boolean;
   execute: (
     action: Record<string, unknown>,
@@ -529,19 +536,18 @@ function Work({
   ) => void;
   notify: (message: string) => void;
 }) {
-  const [value, setValue] = useState(""),
-    [pending, setPending] = useState(false),
+  const { value, setValue } = draft;
+  const [pending, setPending] = useState(false),
     [isPublic, setPublic] = useState(false),
     [attachments, setAttachments] = useState<string[]>([]),
     [drag, setDrag] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
-    setValue("");
     setAttachments([]);
     setPublic(false);
   }, [s.workspace]);
   const start = async () => {
-    if (!value.trim()) return;
+    if (!connected || !value.trim() || pending || s.busy) return;
     setPending(true);
     try {
       let referenceIds: string[] = [];
@@ -761,6 +767,7 @@ function Work({
         >
           <textarea
             ref={field}
+            maxLength={20000}
             aria-label="¿Qué querés construir?"
             placeholder={
               s.busy

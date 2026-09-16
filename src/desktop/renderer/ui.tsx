@@ -4,6 +4,7 @@ import {
   type ReactNode, type CSSProperties,
 } from "react";
 import { request } from "./store.js";
+import "./modal-material.css";
 export type Page = "work" | "agents" | "plan" | "tasks" | "verify" | "files" | "diff" | "artifacts" | "skills" | "teams" | "profiles" | "modes" | "trials" | "integrations" | "settings" | "validation" | "projects" | "cost";
 export interface Field {
   name: string;
