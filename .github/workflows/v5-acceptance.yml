@@ -10,8 +10,6 @@ permissions:
   actions: read
 concurrency:
   group: v5-complete-${{ github.ref }}
-  # A superseded PR build cannot certify the latest source; main candidates
-  # remain serialized so publication never races an unfinished acceptance run.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   core:
@@ -57,3 +55,9 @@ jobs:
           retention-days: 30
       - name: State the remaining publication boundary
         run: echo 'Automated candidate assembled. No tag, merge or release was created. A real visual review of these exact bytes is required before promotion.'
+  visual-observations:
+    needs: [acceptance]
+    uses: ./.github/workflows/v5-visual-assist.yml
+    with:
+      acceptance_run_id: ${{ format('{0}', github.run_id) }}
+      source_sha: ${{ github.event.pull_request.head.sha || github.sha }}

@@ -1,0 +1,92 @@
+name: Perfect V5 local visual observations
+# Developer-only auxiliary review. It cannot merge, approve or publish a release.
+on:
+  workflow_call:
+    inputs:
+      acceptance_run_id:
+        required: true
+        type: string
+      source_sha:
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  observations:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      HF_HUB_DISABLE_IMPLICIT_TOKEN: '1'
+      DO_NOT_TRACK: '1'
+      TOKENIZERS_PARALLELISM: 'false'
+      PERFECT_REVIEW_MODEL_CACHE: ${{ runner.temp }}/visual-model
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.10'
+      - name: Download the exact acceptance artifact and verify its digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEW_RUN: ${{ inputs.acceptance_run_id }}
+          REVIEW_SHA: ${{ inputs.source_sha }}
+        run: |
+          python - <<'PY'
+          import hashlib,json,os,pathlib,subprocess,zipfile
+          run=os.environ['REVIEW_RUN'];sha=os.environ['REVIEW_SHA']
+          assert run.isdigit() and len(sha)==40
+          prefix='repos/vellxw/Perfect-harness/actions/'
+          meta=json.loads(subprocess.check_output(['gh','api',prefix+'runs/'+run]))
+          assert meta['head_sha']==sha and meta['head_repository']['full_name']=='vellxw/Perfect-harness'
+          assert meta['path']=='.github/workflows/v5-acceptance.yml'
+          artifacts=json.loads(subprocess.check_output(['gh','api',prefix+'runs/'+run+'/artifacts']))['artifacts']
+          selected=[a for a in artifacts if a['name']=='Perfect-V5-Acceptance-Evidence' and not a['expired']]
+          assert len(selected)==1
+          artifact=selected[0];assert artifact['size_in_bytes']<500_000_000
+          archive=pathlib.Path(os.environ['RUNNER_TEMP'])/'visual-evidence.zip'
+          with archive.open('wb') as f:
+            subprocess.run(['gh','api',prefix+'artifacts/'+str(artifact['id'])+'/zip'],stdout=f,check=True)
+          actual=hashlib.sha256(archive.read_bytes()).hexdigest()
+          assert artifact['digest']=='sha256:'+actual
+          root=pathlib.Path('visual-evidence').resolve();root.mkdir()
+          with zipfile.ZipFile(archive) as z:
+            assert len(z.infolist())<1000 and sum(i.file_size for i in z.infolist())<1_000_000_000
+            for info in z.infolist():
+              dest=(root/info.filename).resolve()
+              assert dest.is_relative_to(root) and (info.external_attr>>16)&0o170000 !=0o120000
+              if info.is_dir():continue
+              assert info.file_size<400_000_000
+              dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(z.read(info))
+          with open(os.environ['GITHUB_ENV'],'a') as f:
+            f.write('REVIEW_ARTIFACT_ID='+str(artifact['id'])+'\nREVIEW_ARTIFACT_SHA256='+actual+'\n')
+          print(json.dumps({'sourceCommit':sha,'artifactId':artifact['id'],'sha256':actual}))
+          PY
+      - name: Install pinned CPU-only review runtime, not product dependencies
+        run: |
+          python -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.10.0 torchvision==0.25.0
+          python -m pip install --no-cache-dir transformers==4.57.6 accelerate==1.12.0 Pillow==12.1.1
+          python -m pip check
+          python -m py_compile scripts/desktop/visual-assist.py
+          df -h .
+      - name: Inspect actual pixels with local model; no account, paid API or automatic approval
+        env:
+          REVIEW_SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          mkdir -p test-results/desktop/visual-assist
+          python -m pip freeze > test-results/desktop/visual-assist/runtime-freeze.txt
+          python -u scripts/desktop/visual-assist.py visual-evidence \
+            --output test-results/desktop/visual-assist \
+            --source-sha "$REVIEW_SOURCE_SHA" --reviewer-sha "$(git rev-parse HEAD)" \
+            --artifact-id "$REVIEW_ARTIFACT_ID" --artifact-sha256 "$REVIEW_ARTIFACT_SHA256"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Perfect-V5-Visual-Observations
+          path: test-results/desktop/visual-assist
+          if-no-files-found: error
+          retention-days: 30
