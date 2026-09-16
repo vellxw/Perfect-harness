@@ -10,7 +10,9 @@ permissions:
   actions: read
 concurrency:
   group: v5-complete-${{ github.ref }}
-  cancel-in-progress: false
+  # A superseded PR build cannot certify the latest source; main candidates
+  # remain serialized so publication never races an unfinished acceptance run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   core:
     uses: ./.github/workflows/v4-checks.yml
@@ -38,7 +40,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '26.4.0'
-      - run: node --test scripts/desktop/release-policy.test.mjs
+      - run: node --test scripts/desktop/release-policy.test.mjs scripts/desktop/publish-release.test.mjs
       - uses: actions/download-artifact@v4
         with:
           path: candidate-artifacts

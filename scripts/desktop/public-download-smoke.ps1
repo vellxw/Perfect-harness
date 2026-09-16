@@ -7,6 +7,7 @@ if($report.status -ne 'PUBLISHED_AND_PUBLIC_HASH_VERIFIED' -or $report.sourceCom
 $root=Join-Path $env:RUNNER_TEMP ('Perfect Public Smoke ñ '+[Guid]::NewGuid())
 $out=[IO.Path]::GetFullPath('test-results/desktop/public-smoke')
 New-Item -ItemType Directory $root,$out,(Join-Path $root 'home'),(Join-Path $root 'workspace'),(Join-Path $root 'tools'),(Join-Path $root 'images') -Force | Out-Null
+$oldTestRoot=$env:PERFECT_TEST_ROOT
 $env:PERFECT_TEST_ROOT=$root
 $result=@{status='RUNNING';sourceCommit=$sha;version=$report.version;platform=(Get-CimInstance Win32_OperatingSystem).Caption;personalProviders=$false;personalWindows11=$false;downloadAuthentication='none';checks=@();startedAt=[DateTime]::UtcNow.ToString('o')}
 $oldPath=$env:PATH;$oldNode=$env:NODE_OPTIONS;$oldRunAsNode=$env:ELECTRON_RUN_AS_NODE
@@ -34,21 +35,21 @@ try {
  & (Join-Path $framework 'csc.exe') /nologo /target:exe /platform:x64 "/out:$nodeProbe" (Resolve-Path tests/windows/RestrictedNodeProbe.cs).Path
  if($LASTEXITCODE -ne 0){throw 'Restricted Node test launcher did not compile'}
  Copy-Item scripts/desktop/desktop-cli-check.mjs (Join-Path $root 'tools/desktop-cli-check.mjs')
- $work=Join-Path $root 'workspace';$home=Join-Path $root 'home'
+ $work=Join-Path $root 'workspace';$dataHome=Join-Path $root 'home'
  '# Public download smoke: synthetic project, no providers' | Set-Content (Join-Path $work 'README.md') -Encoding utf8NoBOM
  $env:PATH="$env:WINDIR\System32;$env:WINDIR";$env:NODE_OPTIONS=$null;$env:ELECTRON_RUN_AS_NODE=$null
  $cliResult=Join-Path $root 'cli-result.json'
- & $nodeProbe (Join-Path $payload 'resources/engine/runtime/node.exe') (Join-Path $root 'tools/desktop-cli-check.mjs') $payload $home $work $cliResult
+ & $nodeProbe (Join-Path $payload 'resources/engine/runtime/node.exe') (Join-Path $root 'tools/desktop-cli-check.mjs') $payload $dataHome $work $cliResult
  if($LASTEXITCODE -ne 0 -or -not (Test-Path $cliResult)){throw 'Public downloaded CLI did not run with bundled Node'}
  if(-not (Get-Content $cliResult -Raw | ConvertFrom-Json).passed){throw 'Public CLI result failed'}
- & $probe journey (Join-Path $payload 'Perfect.exe') $home $work (Join-Path $root 'images') smoke
+ & $probe journey (Join-Path $payload 'Perfect.exe') $dataHome $work (Join-Path $root 'images') smoke
  if($LASTEXITCODE -ne 0){throw 'Final hardened public GUI failed its native mouse/keyboard smoke'}
  Copy-Item $cliResult (Join-Path $out 'cli-result.json')
  $result.checks+=@{name='Native final public binary';status='PASS';method='Actual hardened Electron GUI and bundled CLI, restricted standard-user token, no CDP or global Node'}
  $result.status='PASS'
 } catch {$result.status='FAIL';$result.error=$_.Exception.Message;throw}
 finally {
- $env:PATH=$oldPath;$env:NODE_OPTIONS=$oldNode;$env:ELECTRON_RUN_AS_NODE=$oldRunAsNode
+ $env:PATH=$oldPath;$env:NODE_OPTIONS=$oldNode;$env:ELECTRON_RUN_AS_NODE=$oldRunAsNode;$env:PERFECT_TEST_ROOT=$oldTestRoot
  if(Test-Path (Join-Path $root 'images')){Copy-Item (Join-Path $root 'images') (Join-Path $out 'images') -Recurse -Force}
  $result.finishedAt=[DateTime]::UtcNow.ToString('o')
  $result | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $out 'result.json') -Encoding utf8NoBOM
