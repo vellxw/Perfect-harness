@@ -114,8 +114,6 @@ public static class PerfectV5Probe {
     while(watch.ElapsedMilliseconds<milliseconds) { var e=Find(name,type);if(e!=null)return e;Thread.Sleep(100); }
     throw new Exception("Accessible control not found: "+name+"; visible="+VisibleText());
   }
-  // A newly appended team may be below a small display's fold. Scrolling is
-  // real user input, not a DOM mutation or an assertion accepting hidden text.
   static void ScrollTo(string name,ControlType type=null) {
     for(int attempt=0;attempt<18;attempt++) {
       if(Find(name,type)!=null)return;
@@ -148,10 +146,35 @@ public static class PerfectV5Probe {
     Steps.Add(new {operation="mouse-click",name=name,at=DateTime.UtcNow.ToString("o")});
   }
   static void Fill(string name,string value) {
-    Click(name,ControlType.Edit);Clipboard.SetText(value);SendKeys.SendWait("^a");SendKeys.SendWait("^v");Thread.Sleep(200);
-    object pattern;var field=Wait(name,ControlType.Edit);
-    if(field.TryGetCurrentPattern(ValuePattern.Pattern,out pattern)&&((ValuePattern)pattern).Current.Value!=value)throw new Exception("Input did not reflect literal pasted text: "+name);
-    Steps.Add(new {operation="literal-input",name=name,characters=value.Length});
+    Click(name,ControlType.Edit);
+    // A physical click and asynchronous Chromium UIA update are different events.
+    // Confirm focus before sending keys; send the paste exactly once and await
+    // its committed value instead of guessing a 200 ms accessibility delay.
+    var focus=Stopwatch.StartNew();
+    while(true) {
+      var current=Find(name,ControlType.Edit);
+      if(current!=null&&current.Current.HasKeyboardFocus)break;
+      if(focus.ElapsedMilliseconds>=3000)throw new Exception("Owned input never acquired keyboard focus: "+name);
+      Thread.Sleep(40);
+    }
+    Clipboard.SetText(value);
+    if(!Clipboard.ContainsText()||Clipboard.GetText()!=value)throw new Exception("Synthetic clipboard contents changed before input");
+    var watch=Stopwatch.StartNew();
+    SendKeys.SendWait("^a");SendKeys.SendWait("^v");
+    string observed=null;
+    while(watch.ElapsedMilliseconds<3000) {
+      var field=Find(name,ControlType.Edit);object pattern;
+      if(field!=null&&field.TryGetCurrentPattern(ValuePattern.Pattern,out pattern)) {
+        observed=((ValuePattern)pattern).Current.Value;
+        if(observed==value) {
+          Steps.Add(new {operation="literal-input",name=name,characters=value.Length,accessibilityCommitMs=watch.ElapsedMilliseconds,focusWaitMs=focus.ElapsedMilliseconds,pasteAttempts=1});
+          return;
+        }
+      }
+      Thread.Sleep(40);
+    }
+    Steps.Add(new {operation="literal-input-failed",name=name,expected=value,observed=observed,accessibilityWaitMs=watch.ElapsedMilliseconds,pasteAttempts=1});
+    throw new Exception("Input did not reflect the single literal paste: "+name+"; expected="+value+"; observed="+observed);
   }
   static void Go(string name) {
     Click("Abrir comandos y navegación",ControlType.Button);Fill("Buscar sección",name);Click(name,ControlType.Button);

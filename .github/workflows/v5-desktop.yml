@@ -44,6 +44,9 @@ jobs:
       - name: Electron Windows user journeys
         if: runner.os == 'Windows'
         run: node scripts/desktop/ui-e2e.mjs
+      - name: Profile actual animation and recorder overhead without weakening motion settings
+        if: runner.os == 'Linux'
+        run: xvfb-run -a -s '-screen 0 1920x1080x24' node scripts/desktop/motion-profile.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
