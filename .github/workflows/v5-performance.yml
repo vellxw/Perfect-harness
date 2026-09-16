@@ -2,13 +2,22 @@ name: Perfect Desktop V5 performance
 on:
   pull_request:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'package*.json'
+      - 'scripts/desktop/benchmark.mjs'
+      - 'scripts/desktop/build.mjs'
+      - '.github/workflows/v5-performance.yml'
   workflow_dispatch:
   workflow_call:
 permissions:
   contents: read
+# A running 30-minute measurement is evidence of its own source candidate.
+# Do not destroy it when an unrelated installer fix is pushed. Release calls
+# still run the complete benchmark on the final main SHA.
 concurrency:
-  group: v5-performance-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: v5-performance-${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: false
 jobs:
   performance:
     runs-on: ubuntu-24.04
