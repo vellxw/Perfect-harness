@@ -21,7 +21,6 @@ jobs:
       HF_HUB_DISABLE_IMPLICIT_TOKEN: '1'
       DO_NOT_TRACK: '1'
       TOKENIZERS_PARALLELISM: 'false'
-      PERFECT_REVIEW_MODEL_CACHE: ${{ runner.temp }}/visual-model
     steps:
       - uses: actions/checkout@v4
         with:
@@ -64,6 +63,7 @@ jobs:
               dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(z.read(info))
           with open(os.environ['GITHUB_ENV'],'a') as f:
             f.write('REVIEW_ARTIFACT_ID='+str(artifact['id'])+'\nREVIEW_ARTIFACT_SHA256='+actual+'\n')
+            f.write('PERFECT_REVIEW_MODEL_CACHE='+str(pathlib.Path(os.environ['RUNNER_TEMP'])/'visual-model')+'\n')
           print(json.dumps({'sourceCommit':sha,'artifactId':artifact['id'],'sha256':actual}))
           PY
       - name: Install pinned CPU-only review runtime, not product dependencies
