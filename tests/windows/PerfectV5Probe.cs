@@ -15,7 +15,7 @@ using System.Windows.Automation;
 using System.Windows.Forms;
 
 // CI-only test driver. Never shipped or reachable through the product bridge.
-// All launch paths, output paths and mouse input are confined to the owned test tree/window.
+// Launch paths, output paths and input remain inside the owned test tree/window.
 public static class PerfectV5Probe {
   [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] struct STARTUPINFO {
     public int cb; public string reserved,desktop,title;
@@ -93,7 +93,11 @@ public static class PerfectV5Probe {
   static void Release(PROCESS_INFORMATION child) { CloseHandle(child.thread);CloseHandle(child.process); }
   static int RunInstaller(string executable,string destination,string log,bool uninstall) {
     string[] args=uninstall ? new[]{"/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/LOG="+Owned(log)} : new[]{"/SILENT","/SUPPRESSMSGBOXES","/NORESTART","/LANG=spanish","/DIR="+Owned(destination),"/TASKS=addpath","/LOG="+Owned(log)};
-    var child=Launch(executable,args,Path.GetDirectoryName(executable));
+    // The installer itself is directly under the owned root. Use the already
+    // created tools subdirectory as cwd, without relaxing Owned's path guard.
+    string workingDirectory=Owned(Path.Combine(scope,"tools"));
+    if(!Directory.Exists(workingDirectory))throw new Exception("Owned installer working directory is missing");
+    var child=Launch(executable,args,workingDirectory);
     try { if(WaitForSingleObject(child.process,600000)!=0)throw new Exception("Installer did not exit within ten minutes");uint code;if(!GetExitCodeProcess(child.process,out code))throw new Win32Exception(Marshal.GetLastWin32Error());if(code!=0)throw new Exception("Installer exit "+code);return 0; }
     finally { Release(child); }
   }

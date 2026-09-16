@@ -1,9 +1,10 @@
 import { _electron as electron } from 'playwright';
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir, cpus, totalmem, release } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
+import {sampleTree} from './process-memory.mjs';
 
 const screening = process.argv.includes('--screening');
 const directory = await mkdtemp(join(tmpdir(), 'perfect-v5-benchmark-'));
@@ -11,17 +12,19 @@ const output = resolve(process.env.PERFECT_ARTIFACT_DIR ?? 'test-results/desktop
 await mkdir(output, { recursive: true });
 const identity = JSON.parse(await readFile('desktop/build-info.json', 'utf8'));
 const report = {
-  schemaVersion: 1, ...identity, status: 'RUNNING', mode: screening ? 'SCREENING_NOT_ACCEPTANCE' : 'FULL',
+  schemaVersion: 2, ...identity, status: 'RUNNING', mode: screening ? 'SCREENING_NOT_ACCEPTANCE' : 'FULL',
   environment: { os: process.platform, kernel: release(), cpu: cpus()[0]?.model, logicalProcessors: cpus().length, ramBytes: totalmem(), node: process.version, ci: Boolean(process.env.CI) },
   method: {
-    startup: 'External monotonic clock BEFORE Electron spawn to visible enabled composer; motor-ready also reported. Fresh vs reused profile; OS disk cache is NOT flushed.',
+    startup: 'External monotonic clock BEFORE Electron spawn to visible enabled composer; motor-ready also reported. Every warm sample reopens an already used home from the last cold sample. OS disk cache is NOT flushed.',
     input: 'Actual keyboard event to second requestAnimationFrame after committed controlled textarea value. Transport time not counted as UI latency.',
     click: 'Actual pointer click to second animation frame containing requested visible palette.',
-    rss: 'Linux /proc VmRSS sum over whole Electron descendant tree INCLUDING separate Node engine. Shared pages may be double counted; samples retained.',
+    rss: 'Raw Linux VmRSS sum across every Electron descendant INCLUDING Node; retained as a separate diagnostic, not represented as unique physical allocation.',
+    memory: 'Acceptance uses smaps_rollup Pss + SwapPss summed over the SAME complete process tree: shared pages are counted proportionately and swap cannot hide consumption. Private bytes and raw RSS retained per PID. Missing data blocks measurement.',
+    correction: 'The previous raw-RSS 450 MiB comparison double-counted Chromium pages; its FAIL is retained below, not relabeled an optimization. Its first warm sample was actually a first-ever profile launch. See docs/desktop/measurement-corrections.md.',
     cpu: 'Process-tree delta CPU ticks / CLK_TCK / elapsed wall seconds, as percent of ONE logical core, not divided by processor count.',
     stress: '20,000 SQLite events across four concurrent synthetic streams, 500 task specs. No model inference or fabricated accepted goal.',
     limitations: 'Virtual Linux display, not personal Windows 11 or GPU. Ten starts per class are a small sample. Native final Windows payload is tested separately.',
-  }, launches: [], inputMs: [], clickMs: [], idle: [], soak: [], checks: [], errors: [], stages: [],
+  }, launches: [], inputMs: [], clickMs: [], idle: [], soak: [], checks: [], legacyComparisons: [], errors: [], stages: [],
 };
 let app, page, db, engineHome, workspace, fixtureGoal;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -57,21 +60,8 @@ async function navigate(name) {
   await page.getByRole('textbox', { name: 'Buscar sección' }).waitFor({ state: 'hidden' });
 }
 async function processSample() {
-  if (process.platform !== 'linux') throw Error('Do not substitute renderer-only metrics for Linux process-tree accounting.');
-  const rootPid = app.process().pid, rows = [];
-  for (const name of await readdir('/proc')) {
-    if (!/^\d+$/.test(name)) continue;
-    try {
-      const raw = await readFile('/proc/' + name + '/stat', 'utf8'), end = raw.lastIndexOf(')'), fields = raw.slice(end + 2).trim().split(/\s+/);
-      const status = await readFile('/proc/' + name + '/status', 'utf8');
-      rows.push({ pid: Number(name), ppid: Number(fields[1]), startTicks: Number(fields[19]), cpuTicks: Number(fields[11]) + Number(fields[12]), rssBytes: Number(/VmRSS:\s+(\d+)/.exec(status)?.[1] ?? 0) * 1024, name: raw.slice(raw.indexOf('(') + 1, end) });
-    } catch { /* A process may terminate during enumeration; the live engine is asserted. */ }
-  }
-  const included = new Set([rootPid]);
-  for (let pass = 0; pass < 10; pass++) for (const row of rows) if (included.has(row.ppid)) included.add(row.pid);
-  const processes = rows.filter(row => included.has(row.pid)), metrics = await action('metrics');
-  assert.ok(metrics.engine?.pid && included.has(metrics.engine.pid), 'Engine omitted from memory/CPU accounting');
-  return { at: performance.now(), rssBytes: processes.reduce((n, p) => n + p.rssBytes, 0), processes, enginePid: metrics.engine.pid };
+  const metrics = await action('metrics');
+  return sampleTree(app.process().pid, metrics.engine?.pid);
 }
 function cpuBetween(a, b) {
   const previous = new Map(a.processes.map(p => [p.pid + '/' + p.startTicks, p]));
@@ -81,13 +71,15 @@ function cpuBetween(a, b) {
 function budgets() {
   const measured = [
     ['Cold process startup p95 (fresh profile)', percentile(report.launches.filter(x => x.kind === 'fresh-user-data').map(x => x.interactiveMs), .95), 2000, 'ms'],
-    ['Warm process startup p95 (reused profile)', percentile(report.launches.filter(x => x.kind === 'reused-user-data').map(x => x.interactiveMs), .95), 1000, 'ms'],
+    ['Warm process startup p95 (actually reused profile)', percentile(report.launches.filter(x => x.kind === 'reused-user-data').map(x => x.interactiveMs), .95), 1000, 'ms'],
     ['Input to committed visible value p95', percentile(report.inputMs, .95), 50, 'ms'],
     ['Click to visible palette p95', percentile(report.clickMs, .95), 100, 'ms'],
-    ['Idle process tree memory p95', percentile(report.idle.map(x => x.rssBytes / 1048576), .95), 450, 'MiB'],
+    ['Idle attributable process-tree memory p95 (PSS plus swap)', percentile(report.idle.map(x => x.chargedBytes / 1048576), .95), 450, 'MiB'],
     ['Idle CPU mean', report.idle.length ? report.idle.reduce((n, v) => n + v.cpuPercentOfOneCore, 0) / report.idle.length : null, 1, '% of one logical core'],
   ];
   report.checks = measured.map(([name, observed, limit, unit]) => ({ name, observed, limit, unit, status: Number.isFinite(observed) ? observed <= limit ? 'PASS' : 'FAIL' : 'NOT_TESTED' }));
+  const rawRss = percentile(report.idle.map(x => x.rssBytes / 1048576), .95);
+  report.legacyComparisons = [{name:'Previous raw RSS sum comparison (shared pages counted per process)',observed:rawRss,limit:450,unit:'MiB',status:rawRss===null?'NOT_TESTED':rawRss<=450?'PASS':'FAIL',interpretation:'Method corrected, not an optimization or a claim raw RSS dropped below 450 MiB.'}];
 }
 async function inputProbe(count) {
   await page.getByRole('button', { name: 'Inicio de Perfect' }).click();
@@ -136,8 +128,6 @@ async function seedStress() {
   await page.waitForFunction(id => window.perfect.boot().then(b => b.snapshot.goal?.id === id && b.snapshot.tasks.length === 500), fixtureGoal.id);
   const artifact = join(fixtureGoal.root, 'artifacts', 'captura-real-de-la-prueba.png');
   await mkdir(join(fixtureGoal.root, 'artifacts'), { recursive: true }); await page.screenshot({ path: artifact });
-  // Use the existing Evidence contract, not raw SHA256. A different encoding
-  // was correctly rejected by readEvidence in the initial benchmark fixture.
   const digest = hash((await readFile(artifact)).toString('base64'));
   db.put('evidence', { id: 'perf-image', goalId: fixtureGoal.id, kind: 'screenshot', producer: 'controller', artifactRef: artifact, contentHash: digest, revision: fixtureGoal.candidateRevision, environmentHash: hash({ test: 'performance' }), criteriaIds: [], capturedAt: new Date().toISOString(), validity: 'valid' }, 'evidence.created');
   await action('action', { type: 'refresh' });
@@ -175,12 +165,15 @@ async function mediaCycles(count) {
 }
 try {
   report.environment.clockTicks = Number(execFileSync('getconf', ['CLK_TCK'], { encoding: 'utf8' }).trim()); assert.ok(report.environment.clockTicks > 0);
-  const rounds = screening ? 2 : 10, reused = join(directory, 'reused-home');
+  const rounds = screening ? 2 : 10;
+  // Every reused-profile sample actually reopens the last cold-profile launch.
+  // Do not discard a slow first-ever launch and relabel it as warmed-up.
+  const reused = join(directory, 'cold-' + (rounds - 1));
   workspace = join(directory, 'project'); await mkdir(workspace); await writeFile(join(workspace, 'README.md'), '# Proyecto sintético de rendimiento\n');
   await stage('startup');
   for (const kind of ['fresh-user-data', 'reused-user-data']) for (let i = 0; i < rounds; i++) {
     const home = kind === 'fresh-user-data' ? join(directory, 'cold-' + i) : reused; await mkdir(home, { recursive: true });
-    report.launches.push({ kind, ...await launch(home, workspace) }); await close(); await sleep(150); budgets(); await save();
+    report.launches.push({ kind, profile:kind==='fresh-user-data'?'cold-'+i:'cold-'+(rounds-1),previouslyOpened:kind==='reused-user-data',...await launch(home, workspace) }); await close(); await sleep(150); budgets(); await save();
   }
   engineHome = reused; await launch(engineHome, workspace);
   report.environment.display = await page.evaluate(() => ({ width: screen.width, height: screen.height, viewport: [innerWidth, innerHeight], devicePixelRatio }));
@@ -192,13 +185,13 @@ try {
     await sleep(5000); const sample = await processSample(); report.idle.push({ ...sample, cpuPercentOfOneCore: cpuBetween(previous, sample) }); previous = sample;
     if (i % 12 === 0) { console.log('Idle samples:', i + 1); budgets(); await save(); }
   }
-  report.idleDurationMs = performance.now() - idleStart; budgets(); console.log('Measured budgets:', JSON.stringify(report.checks)); await save();
+  report.idleDurationMs = performance.now() - idleStart; budgets(); console.log('Measured budgets:', JSON.stringify(report.checks)); console.log('Legacy raw RSS comparison:',JSON.stringify(report.legacyComparisons)); await save();
   await close(); await launch(engineHome, workspace, true); await stage('stress-and-recording'); await seedStress();
   const motionStart = performance.now();
   await page.evaluate(() => { window.__perfectFrames = []; let before = performance.now(); const sample = time => { window.__perfectFrames.push(time - before); before = time; if (window.__perfectFrames.length < 5000) requestAnimationFrame(sample); }; requestAnimationFrame(sample); });
   await streamStress(screening ? 800 : 20000);
   const before = await processSample(); await mediaCycles(screening ? 3 : 50); await sleep(1000); const after = await processSample();
-  report.mediaMemory = { before: before.rssBytes, after: after.rssBytes, delta: after.rssBytes - before.rssBytes };
+  report.mediaMemory = { rawRssBefore:before.rssBytes,rawRssAfter:after.rssBytes,pssPlusSwapBefore:before.chargedBytes,pssPlusSwapAfter:after.chargedBytes,delta:after.chargedBytes-before.chargedBytes };
   for (const [width, height] of [[900, 600], [1280, 720], [1440, 900], [1920, 1080]]) {
     await app.evaluate(({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setContentSize(...size), [width, height]);
     await navigate('Habilidades'); await sleep(250); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2), false, 'Document overflow at ' + width);
@@ -209,8 +202,8 @@ try {
   await close(); budgets(); await save();
   if (screening) report.status = 'SCREENING_NOT_ACCEPTANCE';
   else {
-    const failed = report.checks.filter(c => c.status !== 'PASS');
-    if (failed.length) throw Error('Performance budgets not met; soak NOT claimed: ' + failed.map(f => f.name + '=' + f.observed).join('; '));
+    // Complete the stability experiment even when an earlier performance budget
+    // fails. The final result still fails; an unexecuted soak is never claimed.
     await stage('soak-thirty-minutes'); await launch(engineHome, workspace); const start = performance.now();
     while (performance.now() - start < 1800000) {
       await navigate('Habilidades'); await sleep(1000); await navigate('Tareas'); if (report.soak.length % 10 === 0) await mediaCycles(1);
@@ -219,14 +212,17 @@ try {
     }
     report.soakDurationMs = performance.now() - start; assert.ok(report.soakDurationMs >= 1800000);
     await action('restart-engine'); await page.locator('.connection').filter({ hasText: 'Motor conectado' }).waitFor(); assert.equal((await boot()).snapshot.goal.id, fixtureGoal.id);
-    report.checks.push({ name: '30-minute session and engine recovery', status: 'PASS' }); assert.deepEqual(report.errors, []); report.status = 'PASS';
+    report.checks.push({ name: '30-minute session and engine recovery', status: 'PASS' }); assert.deepEqual(report.errors, []);
+    const failed = report.checks.filter(c => c.status !== 'PASS');
+    if (failed.length) throw Error('Performance budgets not met: ' + failed.map(f => f.name + '=' + f.observed).join('; '));
+    report.status = 'PASS';
   }
 } catch (error) {
   report.status = 'FAIL'; report.error = String(error);
   if (page && app) { await page.screenshot({ path: join(output, 'failure.png') }).catch(() => {}); report.visibleFailure = await page.locator('body').innerText().catch(() => ''); }
   await save(); throw error;
 } finally {
-  await close().catch(e => { report.closeError = String(e); report.status = 'FAIL'; }); db?.close(); report.finishedAt = new Date().toISOString(); await save();
-  console.log(JSON.stringify({ status: report.status, mode: report.mode, checks: report.checks, launches: report.launches, stress: report.stress, mediaCycles: report.mediaCycles, error: report.error, visibleFailure: report.visibleFailure }, null, 2));
+  await close().catch(e => { report.closeError = String(e); report.status = 'FAIL';process.exitCode=1; }); db?.close(); report.finishedAt = new Date().toISOString(); await save();
+  console.log(JSON.stringify({ status: report.status, mode: report.mode, checks: report.checks, legacyComparisons:report.legacyComparisons,launches: report.launches, stress: report.stress, mediaCycles: report.mediaCycles, error: report.error, visibleFailure: report.visibleFailure }, null, 2));
   await rm(directory, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
 }
