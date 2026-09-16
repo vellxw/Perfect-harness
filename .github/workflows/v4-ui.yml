@@ -1,7 +1,5 @@
-name: Perfect V4 UI evidence
+name: Perfect terminal regressions
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
   workflow_call:
 permissions:

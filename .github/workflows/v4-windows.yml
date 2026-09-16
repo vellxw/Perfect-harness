@@ -1,7 +1,5 @@
 name: Perfect V5 Windows distribution
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
   workflow_call:
 permissions:

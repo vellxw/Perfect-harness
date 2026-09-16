@@ -1,8 +1,5 @@
 name: Perfect Desktop V5 performance
 on:
-  pull_request:
-    branches: [main]
-    paths: ['src/**', 'package*.json', 'scripts/desktop/benchmark.mjs', 'scripts/desktop/build.mjs', 'scripts/desktop/performance-summary.mjs', '.github/workflows/v5-performance.yml']
   workflow_dispatch:
   workflow_call:
 permissions:

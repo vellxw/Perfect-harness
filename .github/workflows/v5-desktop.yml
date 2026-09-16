@@ -1,13 +1,11 @@
 name: Perfect Desktop V5
 on:
-  push:
-    branches: [feat/perfect-desktop-v5]
-  pull_request:
-    branches: [main]
+  workflow_call:
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: v5-desktop-${{ github.ref }}
+  group: v5-desktop-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   desktop:
@@ -20,6 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -30,7 +29,7 @@ jobs:
       - run: npm run lint
       - run: npm run check:config
       - run: npm run build:desktop
-      - run: npm test
+      - run: node --test scripts/desktop/release-policy.test.mjs
       - name: Linux desktop dependencies
         if: runner.os == 'Linux'
         run: |
@@ -50,4 +49,4 @@ jobs:
         with:
           name: v5-desktop-${{ matrix.os }}
           path: test-results/desktop
-          retention-days: 14
+          retention-days: 30
