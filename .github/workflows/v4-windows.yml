@@ -52,7 +52,7 @@ jobs:
           $roslyn=Join-Path $visualStudio 'MSBuild/Current/Bin/Roslyn/csc.exe'
           if(-not(Test-Path $roslyn)){throw 'Roslyn compiler is unavailable'}
           $probe=Join-Path $env:RUNNER_TEMP 'PerfectV5Probe.exe'
-          & $roslyn /nologo /target:exe /platform:x64 /langversion:latest /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Web.Extensions.dll "/reference:$framework/WPF/UIAutomationClient.dll" "/reference:$framework/WPF/UIAutomationTypes.dll" "/reference:$framework/WPF/WindowsBase.dll" "/out:$probe" (Resolve-Path tests/windows/PerfectV5Probe.cs).Path
+          & $roslyn /nologo /target:exe /platform:x64 /langversion:latest /main:PerfectProbeEntry /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Web.Extensions.dll "/reference:$framework/WPF/UIAutomationClient.dll" "/reference:$framework/WPF/UIAutomationTypes.dll" "/reference:$framework/WPF/WindowsBase.dll" "/out:$probe" (Resolve-Path tests/windows/PerfectV5Probe.cs).Path (Resolve-Path tests/windows/PerfectProbeEntry.cs).Path
           if($LASTEXITCODE -ne 0){throw 'Native V5 production-binary probe did not compile'}
           "PERFECT_V5_PROBE=$probe" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
       - run: npm ci
