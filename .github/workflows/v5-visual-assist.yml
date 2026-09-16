@@ -1,5 +1,5 @@
 name: Perfect V5 local visual observations
-# Developer-only auxiliary review. It cannot merge, approve or publish a release.
+# Bounded parallel observations, never an owner approval or release decision.
 on:
   workflow_call:
     inputs:
@@ -14,8 +14,13 @@ permissions:
   actions: read
 jobs:
   observations:
+    strategy:
+      fail-fast: false
+      max-parallel: 7
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6]
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 60
     env:
       HF_HUB_DISABLE_TELEMETRY: '1'
       HF_HUB_DISABLE_IMPLICIT_TOKEN: '1'
@@ -29,7 +34,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12.10'
-      - name: Download the exact acceptance artifact and verify its digest
+      - name: Check complete disjoint coverage before inference
+        run: python scripts/desktop/visual_review_batches_test.py
+      - name: Download exact acceptance artifact and verify its digest
         env:
           GH_TOKEN: ${{ github.token }}
           REVIEW_RUN: ${{ inputs.acceptance_run_id }}
@@ -69,8 +76,6 @@ jobs:
             path=(root/entry['path']).resolve()
             assert path.is_relative_to(root) and path.stat().st_size==entry['bytes']
             assert hashlib.sha256(path.read_bytes()).hexdigest()==entry['sha256']
-          # These are manifests, not visual observations or permission to publish.
-          print('EXACT_VIDEO_MANIFEST='+json.dumps(videos,ensure_ascii=False))
           with open(os.environ['GITHUB_ENV'],'a') as f:
             f.write('REVIEW_ARTIFACT_ID='+str(artifact['id'])+'\nREVIEW_ARTIFACT_SHA256='+actual+'\n')
             f.write('PERFECT_REVIEW_MODEL_CACHE='+str(pathlib.Path(os.environ['RUNNER_TEMP'])/'visual-model')+'\n')
@@ -82,19 +87,59 @@ jobs:
           python -m pip install --no-cache-dir transformers==4.57.6 accelerate==1.12.0 Pillow==12.1.1
           python -m pip check
           python -m py_compile scripts/desktop/visual-assist.py
-          df -h .
-      - name: Inspect actual pixels with local model; no account, paid API or automatic approval
+      - name: Inspect assigned actual pixels without reducing coverage or image quality
         env:
           REVIEW_SOURCE_SHA: ${{ inputs.source_sha }}
+          REVIEW_SHARD: ${{ matrix.shard }}
         run: |
           mkdir -p test-results/desktop/visual-assist
           python -m pip freeze > test-results/desktop/visual-assist/runtime-freeze.txt
           python -u scripts/desktop/visual-assist.py visual-evidence \
             --output test-results/desktop/visual-assist \
             --source-sha "$REVIEW_SOURCE_SHA" --reviewer-sha "$(git rev-parse HEAD)" \
-            --artifact-id "$REVIEW_ARTIFACT_ID" --artifact-sha256 "$REVIEW_ARTIFACT_SHA256"
+            --artifact-id "$REVIEW_ARTIFACT_ID" --artifact-sha256 "$REVIEW_ARTIFACT_SHA256" \
+            --shard-index "$REVIEW_SHARD" --shard-count 7
       - uses: actions/upload-artifact@v4
         if: always()
+        with:
+          name: Perfect-V5-Visual-Observations-part-${{ matrix.shard }}
+          path: test-results/desktop/visual-assist
+          if-no-files-found: error
+          retention-days: 30
+  complete-coverage:
+    needs: observations
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Perfect-V5-Visual-Observations-part-*
+          path: visual-parts
+      - name: Reject partial or stale observations and assemble the same full selection
+        env:
+          REVIEW_SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          python - <<'PY'
+          import json,os,pathlib,sys
+          sys.path.insert(0,'scripts/desktop')
+          from visual_review_batches import merge_reports
+          paths=sorted(pathlib.Path('visual-parts').glob('*/visual-observations.json'))
+          assert len(paths)==7
+          selections=[json.loads((p.parent/'selection.json').read_text()) for p in paths]
+          assert all(s==selections[0] for s in selections)
+          result=merge_reports([json.loads(p.read_text()) for p in paths],selections[0])
+          assert result['sourceCommit']==os.environ['REVIEW_SOURCE_SHA']
+          assert result['coverage']['expected']>=28 and result['coverage']['observed']==result['coverage']['expected']
+          out=pathlib.Path('test-results/desktop/visual-assist');out.mkdir(parents=True)
+          (out/'visual-observations.json').write_text(json.dumps(result,ensure_ascii=False,indent=2))
+          print(json.dumps(result['coverage']))
+          print('Complete auxiliary observations. Explicit direct visual review remains mandatory before release.')
+          PY
+      - uses: actions/upload-artifact@v4
         with:
           name: Perfect-V5-Visual-Observations
           path: test-results/desktop/visual-assist

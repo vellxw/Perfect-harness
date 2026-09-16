@@ -12,6 +12,10 @@ try{
  await page.getByRole('heading',{name:'¿Qué querés construir?'}).waitFor();await screenshot('home');
  await go('Habilidades');await page.getByRole('switch',{name:'Sistema de habilidades'}).waitFor();
  await page.getByLabel('Modo de habilidades',{exact:true}).selectOption('manual');
+ // The count is already zero before the change: wait for the committed mode,
+ // not merely a label that can describe the previous automatic snapshot.
+ await page.waitForFunction(async()=>{const b=await window.perfect.boot();return b.snapshot?.studio?.config.skills.mode==='manual';});
+ await page.waitForFunction(()=>document.querySelector('select[aria-label="Modo de habilidades"]')?.value==='manual');
  await page.getByText('0 versiones seleccionadas',{exact:true}).waitFor();await screenshot('skills-manual-empty');
  await page.getByLabel('Buscar habilidad').fill('postgres');
  await page.getByRole('button',{name:'Seleccionar',exact:true}).click();
@@ -34,6 +38,6 @@ try{
  const isolation=await page.evaluate(()=>({node:typeof window.process,require:typeof window.require,keys:Object.keys(window.perfect)}));assert.equal(isolation.node,'undefined');assert.equal(isolation.require,'undefined');
  const boot=await page.evaluate(()=>window.perfect.boot());assert.equal(boot.snapshot.goal.state,'PAUSED');assert.equal(boot.snapshot.goal.mode,'real');assert.equal(boot.snapshot.accounts.reduce((n,a)=>n+a.tokens,0),0);
  assert.deepEqual(errors,[]);success=true;
- await writeFile(join(out,'ui-e2e.json'),JSON.stringify({passed:true,platform:process.platform,node:process.version,sourceCommit:process.env.GITHUB_SHA,kind:'real Electron + real core, no provider calls',isolation,errors,checks:['startup','strict-manual-selection','team-create','model-form','modes','creator','evaluation-builder','github-form','files','preferences','safe-goal-pause']},null,2));
+ await writeFile(join(out,'ui-e2e.json'),JSON.stringify({passed:true,platform:process.platform,node:process.version,sourceCommit:boot.buildId,kind:'real Electron + real core, no provider calls',isolation,errors,checks:['startup','strict-manual-selection','team-create','model-form','modes','creator','evaluation-builder','github-form','files','preferences','safe-goal-pause']},null,2));
 }catch(error){await screenshot('failure').catch(()=>{});const diagnostic={error:String(error),body:await page.locator('body').innerText().catch(()=>''),errors};console.error(JSON.stringify(diagnostic,null,2));await writeFile(join(out,'failure.json'),JSON.stringify(diagnostic,null,2));throw error;}
-finally{await app.close();if(success){const {SqliteStore}=await import('../../dist/adapters/sqlite/store.js');const db=new SqliteStore(join(home,'state.sqlite'));try{assert.ok(db.list('studios').some(s=>s.config.sets.some(t=>t.id==='equipo-prueba')));assert.equal(JSON.parse(await readFile(join(home,'ui.json'),'utf8')).ui.motion,'off');}finally{db.close();}}await rm(root,{recursive:true,force:true,maxRetries:8,retryDelay:250});}
+finally{await app.close();if(success){const {SqliteStore}=await import('../../dist/adapters/sqlite/store.js');const db=new SqliteStore(join(home,'state.sqlite'));try{assert.ok(db.list('studios').some(s=>s.config.sets.some(t=>t.id==='equipo-prueba')));assert.ok(db.list('studios').some(s=>s.config.skills.mode==='manual'));assert.equal(JSON.parse(await readFile(join(home,'ui.json'),'utf8')).ui.motion,'off');}finally{db.close();}}await rm(root,{recursive:true,force:true,maxRetries:8,retryDelay:250});}
