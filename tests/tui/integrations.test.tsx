@@ -12,13 +12,13 @@ for (const columns of [80, 120, 160]) {
       assert.match(frame, /Integraciones/);
       assert.match(frame, /GitHub oficial/);
       assert.match(frame, /navegador interactivo/);
-      // Escape is decoded asynchronously by the terminal input parser. A fixed
-      // 60 ms sleep raced its escape-sequence timeout on a loaded Windows runner.
-      // Send the input ONCE and await the required visible result, never repeat
-      // the key or weaken the navigation/zero-actions assertions.
+      // mount now waits for the real React keyboard subscription, not only
+      // a frame. Send exactly one terminal sequence. Waiting longer after a
+      // key sent before useEffect cannot recover that lost input.
       ui.mockInput.pressKey("ESCAPE");
       const deadline = performance.now() + 1000;
       do { await ui.flush(); } while (!/Pedile a Perfect/.test(ui.captureCharFrame()) && performance.now() < deadline);
+      assert.deepEqual(ui.decodedKeys, ["escape"], "The terminal parser must deliver Escape exactly once");
       assert.match(ui.captureCharFrame(), /Pedile a Perfect/);
       assert.equal(ui.actions.length, 0);
     } finally { await ui.dispose(); }
