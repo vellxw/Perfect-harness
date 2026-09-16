@@ -5,13 +5,14 @@ import { execFileSync } from 'node:child_process';
 
 const output = resolve('desktop');
 const pkg = JSON.parse(await readFile('package.json', 'utf8'));
-// GITHUB_SHA can be the synthetic merge SHA while checkout uses PR HEAD.
-// Both engine and Desktop provenance describe the actual checked-out source.
+// GITHUB_SHA may identify a synthetic PR merge; provenance uses actual checkout.
 const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 if (!/^[a-f0-9]{40}$/.test(sourceCommit)) throw Error('Invalid source commit');
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
-await build({ entryPoints: ['src/desktop/main/index.ts'], bundle: true, platform: 'node', format: 'cjs', target: 'node24', outfile: join(output, 'main.cjs'), external: ['electron'], logLevel: 'info' });
+// The bootstrap handles V4's retained --remove-profile uninstall hook before
+// loading the existing main entry, so no hidden GUI/worker blocks an upgrade's uninstall.
+await build({ entryPoints: ['src/desktop/main/bootstrap.ts'], bundle: true, platform: 'node', format: 'cjs', target: 'node24', outfile: join(output, 'main.cjs'), external: ['electron'], logLevel: 'info' });
 await build({ entryPoints: ['src/desktop/preload/index.ts'], bundle: true, platform: 'node', format: 'cjs', target: 'node24', outfile: join(output, 'preload.cjs'), external: ['electron'], logLevel: 'info' });
 const renderer = await build({
   entryPoints: { renderer: 'src/desktop/renderer/index.tsx' }, bundle: true,
